@@ -1,36 +1,106 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ---------------------------------------------------------------------------
+# humani-t
+#
+# Layout this file covers:
+#   apps/        Vite + React (web), Tauri (desktop, V2)
+#   packages/    shared TS packages
+#   services/api Python + uv + FastAPI
+#   crates/      Rust (V2)
+#
+# Note: patterns are intentionally NOT anchored with a leading slash, so they
+# match at every depth of the monorepo (e.g. apps/web/node_modules).
+# ---------------------------------------------------------------------------
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
+# --- Secrets and local environment -----------------------------------------
+.env
+.env.*
+!.env.example
 *.pem
+*.key
+secrets.json
 
-# debug
+# --- Node / pnpm ------------------------------------------------------------
+node_modules/
+.pnpm-store/
+.pnp
+.pnp.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# local env files
-.env*.local
-.env
+# Lockfiles are committed on purpose. Do not ignore:
+#   pnpm-lock.yaml, services/api/uv.lock, Cargo.lock
 
-# vercel
-.vercel
-
-# typescript
+# --- Build output -----------------------------------------------------------
+dist/
+build/
+out/
+.turbo/
 *.tsbuildinfo
-next-env.d.ts
+
+# --- Test and coverage ------------------------------------------------------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# --- Python / uv ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.Python
+*.egg-info/
+.eggs/
+
+# Python tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Databases (V2 local-first uses SQLite) ---------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# --- Rust / Tauri (V2) ------------------------------------------------------
+target/
+**/gen/schemas/
+
+# --- Editors and IDEs -------------------------------------------------------
+.idea/
+*.swp
+*.swo
+*~
+
+# VS Code: ignore personal settings, keep the ones the team shares
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# --- Operating system -------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- Local scratch ----------------------------------------------------------
+*.local
+.cache/
+tmp/
