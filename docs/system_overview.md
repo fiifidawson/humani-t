@@ -102,6 +102,10 @@ FileStorageProvider
 
 # Part 1 — Create the Monorepo Structure
 
+> **Superseded.** The layout below is an early sketch. The canonical
+> structure is [`repo_structure.md`](./repo_structure.md), which uses
+> `services/api/` instead of `backend/` and adds `crates/`.
+
 This is the first implementation step.
 
 Recommended initial structure:
