@@ -31,7 +31,7 @@ class SearchService:
     """Depends on the Protocol, never on a concrete provider.
 
     It cannot tell whether it is talking to an in-memory corpus or to OpenAlex,
-    which is exactly the property that makes the V2 migration a swap.
+    which is exactly the property that lets tests run against the fake.
     """
 
     def __init__(self, provider: PaperSearchProvider) -> None:

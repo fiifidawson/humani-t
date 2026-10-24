@@ -21,7 +21,7 @@ def test_health_returns_ok(client):
 
 
 def test_health_is_versioned(client):
-    """Unversioned paths must not work. V2 will serve the same contract."""
+    """Unversioned paths must not work: clients pin to /api/v1."""
     assert client.get("/health").status_code == 404
 
 

@@ -1,8 +1,8 @@
 """Which concrete implementations the routes get.
 
 This is the seam made operational. Every provider choice in the system is made
-here and nowhere else, so swapping the fake for OpenAlex — or Postgres for
-SQLite in V2 — is an edit to this file alone.
+here and nowhere else, so swapping the fake for OpenAlex — or one LLM provider
+for another — is an edit to this file alone.
 
 If you ever find yourself importing a concrete provider inside a route, the
 architecture has sprung a leak. Import it here instead.
