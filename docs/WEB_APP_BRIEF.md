@@ -68,13 +68,13 @@ These are already enforced by the pipeline. The web app must not weaken them.
 
 ### Access and isolation
 
-6. **Every user signs in** (the organisation's single sign-on, with multi-factor authentication).
+6. **Every user signs in with multi-factor authentication.** Built-in accounts use passkeys or an authenticator app; organisations can instead connect their own single sign-on (OIDC).
 7. **Each project belongs to its owner and the people they share it with.** Every request checks this. Projects never share an index (today each run has its own index collection).
 8. **Roles:** owner, reviewer (can relabel and ask), viewer (read-only exports). Only owners upload documents or delete a project.
 
 ### Secrets and outside services
 
-9. **API keys stay on the server.** The browser never sees them. Use a secrets manager, not files.
+9. **API keys stay on the server.** The browser never sees them. Secrets reach the server as Docker secrets or from a secrets manager, never from files in the repository or the image.
 10. **Outbound calls are limited** to the paper sources, PDF hosts and the LLM provider. PDF links come from paper metadata, so block internal addresses (to prevent server-side request forgery) and cap download sizes.
 11. **LLM provider terms:** use a provider account that does not train on our data.
 
