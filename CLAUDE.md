@@ -63,13 +63,24 @@ provider class anywhere else is the architecture leaking — put it there instea
 ## Commands
 
 ```bash
+# once: local secrets + services/api/.env, then the dev database
+python scripts/dev_secrets.py
+docker compose up -d postgres
+
 cd services/api
-uv run uvicorn app.main:app --reload --port 8731   # http://127.0.0.1:8731/docs
-uv run pytest                                      # all tests
+uv run --env-file .env alembic upgrade head        # migrate (schema-owner role)
+uv run --env-file .env uvicorn app.main:app --reload --port 8731   # /docs
+uv run pytest                                      # all tests (Postgres ones skip)
+TEST_DATABASE_URL=… uv run pytest                  # include the Postgres contract
 uv run pytest tests/test_domain.py -v              # one file
-uv run ruff check .                                # lint
-uv run ruff format .                               # format
+uv run ruff check . && uv run ruff format .        # lint, format
+uv run pyright                                     # types
+uv run lint-imports                                # layering rules
+uv run python -m app.cli generate-kek              # operator commands
 ```
+
+Settings never read `.env` on their own; `--env-file` loads it explicitly, so
+the test suite cannot pick up a developer's database by accident.
 
 Port 8731 rather than 8000: `mkdocs serve` for `docs-site/` holds 8000, and
 on Windows both can bind it without an error — uvicorn reports healthy while the
@@ -111,7 +122,7 @@ Pydantic appears in exactly two boundary modules, both reading untrusted input:
 - `app/api/schemas` — HTTP. JSON is validated into a schema, then converted
   through `to_domain()` into a plain dataclass.
 - `app/settings.py` — the environment and secret files. Only the composition
-  root (`main.py`, `api/dependencies.py`, `cli.py`, `worker.py`) imports
+  root (`main.py`, `api/dependencies.py`, `cli.py`, `migrations/env.py`) imports
   `Settings`; it hands lower layers frozen domain policy objects instead.
 
 Domain objects validate themselves in `__post_init__` and are valid by
@@ -254,7 +265,7 @@ gets masked — is enforced by the API, because the browser is not trusted.
 ## Before saying it is done
 
 ```bash
-cd services/api && uv run pytest && uv run ruff check . && uv run ruff format .
+cd services/api && uv run pytest --cov && uv run ruff check . \n  && uv run ruff format --check . && uv run pyright && uv run lint-imports
 ```
 
 Then:

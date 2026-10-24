@@ -193,6 +193,10 @@ class HealthOut(BaseModel):
     status: str = "ok"
 
 
+class ReadyOut(BaseModel):
+    status: str = "ready"
+
+
 class InfoOut(BaseModel):
     """What this process is and which implementations are wired into it."""
 

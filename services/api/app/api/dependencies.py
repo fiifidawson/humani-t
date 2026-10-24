@@ -10,32 +10,72 @@ architecture has sprung a leak. Import it here instead.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
+from app.application.encryption import ScopeEncryption
 from app.application.search_service import SearchService
+from app.crypto.aesgcm import AesGcmCipher
+from app.crypto.local_key import LocalKeyProvider, generate_kek
 from app.search.base import PaperSearchProvider
 from app.search.fake import FakePaperSearchProvider
+from app.settings import Settings
+from app.storage.base import StorageProvider
+from app.storage.memory import MemoryStorage
+from app.storage.postgres.storage import PostgresStorage
 
 API_PREFIX = "/api/v1"
 
 
-@lru_cache(maxsize=1)
-def _search_provider_singleton() -> FakePaperSearchProvider:
-    """One instance per process. Providers hold connection pools and caches."""
-    return FakePaperSearchProvider()
+@dataclass(frozen=True, slots=True)
+class Providers:
+    """Everything built once per process. Providers hold pools and caches."""
+
+    storage: StorageProvider
+    search: PaperSearchProvider
+    encryption: ScopeEncryption
 
 
-def get_search_provider() -> PaperSearchProvider:
-    """THE switch.
+def build_providers(settings: Settings) -> Providers:
+    """THE switch: the one function that turns configuration into implementations."""
+    if settings.database_url is None:
+        storage: StorageProvider = MemoryStorage()
+    else:
+        storage = PostgresStorage.from_url(settings.database_url.get_secret_value())
 
-    Session 3 changes this one return statement to an OpenAlexProvider and
-    nothing above this line moves. That is the whole claim the architecture
-    makes, expressed in one function.
-    """
-    return _search_provider_singleton()
+    if settings.key_encryption_keys is None:
+        # Only reachable with in-memory storage (Settings enforces it): the data
+        # dies with the process, so a key that dies with it loses nothing.
+        keys = LocalKeyProvider.from_config(f"1:{generate_kek()}")
+    else:
+        keys = LocalKeyProvider.from_config(settings.key_encryption_keys.get_secret_value())
+
+    return Providers(
+        storage=storage,
+        search=FakePaperSearchProvider(),
+        encryption=ScopeEncryption(keys, AesGcmCipher()),
+    )
+
+
+def get_providers(request: Request) -> Providers:
+    providers: Providers = request.app.state.providers
+    return providers
+
+
+ProvidersDep = Annotated[Providers, Depends(get_providers)]
+
+
+def get_storage(providers: ProvidersDep) -> StorageProvider:
+    return providers.storage
+
+
+StorageDep = Annotated[StorageProvider, Depends(get_storage)]
+
+
+def get_search_provider(providers: ProvidersDep) -> PaperSearchProvider:
+    return providers.search
 
 
 SearchProviderDep = Annotated[PaperSearchProvider, Depends(get_search_provider)]

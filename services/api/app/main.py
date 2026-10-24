@@ -1,19 +1,27 @@
 """Composition root for the humani-t API.
 
-Assembles routers and nothing else. The decision about *which* implementations
-are used lives in `app/api/dependencies.py`; this module only wires URLs.
+Assembles the application and nothing else. The decision about *which*
+implementations are used lives in `app/api/dependencies.py`; this module wires
+them to middleware, error handlers and URLs.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, FastAPI
 
-from app.api.dependencies import API_PREFIX
+from app.api.dependencies import API_PREFIX, build_providers
+from app.api.errors import install_error_handlers
+from app.api.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.api.routes import search, system, vocabulary
 from app.api.routes.system import API_NAME, API_VERSION
+from app.observability import configure_logging
+from app.settings import Settings, get_settings
 
 TAGS_METADATA = [
-    {"name": "system", "description": "Liveness and what is wired into this process."},
+    {"name": "system", "description": "Liveness, readiness and what is wired in."},
     {
         "name": "vocabulary",
         "description": (
@@ -31,18 +39,55 @@ TAGS_METADATA = [
     },
 ]
 
-app = FastAPI(
-    title=API_NAME,
-    version=API_VERSION,
-    description="Privacy-preserving evidence synthesis for humanitarian decisions.",
-    openapi_tags=TAGS_METADATA,
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
+_DOCS_PATHS = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
 
-v1 = APIRouter(prefix=API_PREFIX)
-v1.include_router(system.router)
-v1.include_router(vocabulary.router)
-v1.include_router(search.router)
 
-app.include_router(v1)
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+    configure_logging(settings.log_level, as_json=settings.is_production)
+
+    # Built eagerly, not in the lifespan: engines connect lazily, and tests that
+    # never enter the lifespan still get a fully wired app.
+    providers = build_providers(settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        await providers.storage.close()
+
+    app = FastAPI(
+        title=API_NAME,
+        version=API_VERSION,
+        description="Privacy-preserving evidence synthesis for humanitarian decisions.",
+        openapi_tags=TAGS_METADATA,
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
+        lifespan=lifespan,
+    )
+    app.state.providers = providers
+    _install(app, settings)
+    return app
+
+
+def _install(app: FastAPI, settings: Settings) -> None:
+    install_error_handlers(app)
+
+    # Starlette runs the last-added middleware first, so the request id is
+    # bound before anything else can log.
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        csp_exempt=_DOCS_PATHS if settings.docs_enabled else (),
+    )
+    app.add_middleware(RequestIdMiddleware)
+
+    v1 = APIRouter(prefix=API_PREFIX)
+    v1.include_router(system.router)
+    if settings.docs_enabled:
+        v1.include_router(system.info_router)
+    v1.include_router(vocabulary.router)
+    v1.include_router(search.router)
+    app.include_router(v1)
+
+
+app = create_app()

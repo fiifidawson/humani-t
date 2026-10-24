@@ -26,7 +26,8 @@ endpoints and payloads below do not change.
 | Method | Path | Tag | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | system | Liveness |
-| `GET` | `/api/v1/info` | system | Which implementations are wired in |
+| `GET` | `/api/v1/ready` | system | Readiness: can this process serve requests |
+| `GET` | `/api/v1/info` | system | Which implementations are wired in (not in production) |
 | `GET` | `/api/v1/sources` | search | Repositories this process can reach |
 | `POST` | `/api/v1/vocabulary/compile` | vocabulary | Vocabulary to Boolean query |
 | `POST` | `/api/v1/search` | search | Compile, then search |
@@ -45,9 +46,25 @@ because a failing dependency then looks like a dead process.
 
 ---
 
+### `GET /api/v1/ready`
+
+Answers *can this process serve requests*: the database answers a query. The
+reverse proxy uses it to hold traffic back while the database is down, without
+restarting a process that is itself fine.
+
+```json
+{ "status": "ready" }
+```
+
+`503` with a problem document when a backing service is unreachable.
+
+---
+
 ### `GET /api/v1/info`
 
-Reports which implementations are active behind the interfaces.
+Reports which implementations are active behind the interfaces. **Not mounted
+in production**, and neither are `/docs`, `/redoc` or `/openapi.json`: they map
+the system for anyone who asks.
 
 ```json
 {
@@ -210,11 +227,30 @@ is added, that test is what stops it reaching user-supplied terms.
 
 ---
 
+## Errors
+
+Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem
+document, served as `application/problem+json`:
+
+```json
+{ "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Not Found" }
+```
+
+Validation errors (`422`) add an `errors` list of `{loc, msg, type}`. They never
+echo the submitted value back, because it may be the sensitive text the user was
+sending. Unexpected errors (`500`) say nothing about the cause; quote the
+response's `x-request-id` header when reporting one.
+
+Every response carries security headers (CSP, HSTS, `nosniff`,
+`Cache-Control: no-store`, …) and an `x-request-id`.
+
+---
+
 ## Not here yet
 
 Deliberately absent, in build order:
 
-- **Persistence** — nothing is stored; every request is independent
+- **Persistence of reviews** — only encryption keys are stored so far
 - **Real sources** — arXiv, OpenAlex, Europe PMC, Google Scholar
 - **Screening, synthesis, the privacy gate**
 - **Authentication** — every request is anonymous

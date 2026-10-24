@@ -167,6 +167,7 @@ class TestOpenAPI:
 
         assert set(paths) == {
             "/api/v1/health",
+            "/api/v1/ready",
             "/api/v1/info",
             "/api/v1/sources",
             "/api/v1/vocabulary/compile",
