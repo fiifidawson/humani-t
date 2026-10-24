@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Row, insert, select, text, update
+from sqlalchemy import Row, Table, insert, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
+from app.domain.accounts import Invitation, PasswordReset, User
 from app.domain.audit import AuditEntry, AuditEvent, ChainHead
 from app.domain.encryption import WrappedDataKey
-from app.storage.postgres.tables import audit_chain_head, audit_events, data_keys
+from app.domain.sessions import Session
+from app.storage.postgres.tables import (
+    audit_chain_head,
+    audit_events,
+    data_keys,
+    invitations,
+    password_resets,
+    sessions,
+    users,
+)
 
 
 def _to_data_key(row: Row[Any]) -> WrappedDataKey:
@@ -148,11 +159,102 @@ class PostgresAuditRepository:
         return [_to_audit_event(row) for row in result]
 
 
+class _RecordTable[T]:
+    """Mapping for domain types whose fields match their table's columns one to one.
+
+    Explicit per-type mapping (as for audit events above) is clearer when the
+    shapes differ; when they match, this keeps four repositories from being
+    four copies of the same code.
+    """
+
+    def __init__(self, connection: AsyncConnection, table: Table, record: type[T]) -> None:
+        self._connection = connection
+        self._table = table
+        self._record = record
+
+    def _from_row(self, row: Row[Any]) -> T:
+        return self._record(**row._mapping)
+
+    async def _one(self, **where: object) -> T | None:
+        query = select(self._table).where(
+            *(self._table.c[name] == value for name, value in where.items())
+        )
+        row = (await self._connection.execute(query)).one_or_none()
+        return None if row is None else self._from_row(row)
+
+    async def _many(self, *conditions: Any) -> list[T]:
+        result = await self._connection.execute(select(self._table).where(*conditions))
+        return [self._from_row(row) for row in result]
+
+    async def add(self, record: T) -> None:
+        await self._connection.execute(
+            insert(self._table).values(**dataclasses.asdict(record))  # type: ignore[call-overload]
+        )
+
+    async def save(self, record: T) -> None:
+        values = dataclasses.asdict(record)  # type: ignore[call-overload]
+        result = await self._connection.execute(
+            update(self._table).where(self._table.c.id == values["id"]).values(**values)
+        )
+        if result.rowcount != 1:
+            raise ValueError(f"{self._table.name} row {values['id']} does not exist")
+
+
+class PostgresUserRepository(_RecordTable[User]):
+    def __init__(self, connection: AsyncConnection) -> None:
+        super().__init__(connection, users, User)
+
+    async def get(self, user_id: UUID) -> User | None:
+        return await self._one(id=user_id)
+
+    async def get_by_email(self, email: str) -> User | None:
+        return await self._one(email=email)
+
+
+class PostgresSessionRepository(_RecordTable[Session]):
+    def __init__(self, connection: AsyncConnection) -> None:
+        super().__init__(connection, sessions, Session)
+
+    async def get(self, session_id: UUID) -> Session | None:
+        return await self._one(id=session_id)
+
+    async def get_by_token_hash(self, token_hash: bytes) -> Session | None:
+        return await self._one(token_hash=token_hash)
+
+    async def list_unrevoked_for_user(self, user_id: UUID) -> list[Session]:
+        return await self._many(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
+
+
+class PostgresInvitationRepository(_RecordTable[Invitation]):
+    def __init__(self, connection: AsyncConnection) -> None:
+        super().__init__(connection, invitations, Invitation)
+
+    async def get_by_token_hash(self, token_hash: bytes) -> Invitation | None:
+        return await self._one(token_hash=token_hash)
+
+
+class PostgresPasswordResetRepository(_RecordTable[PasswordReset]):
+    def __init__(self, connection: AsyncConnection) -> None:
+        super().__init__(connection, password_resets, PasswordReset)
+
+    async def get_by_token_hash(self, token_hash: bytes) -> PasswordReset | None:
+        return await self._one(token_hash=token_hash)
+
+    async def list_unused_for_user(self, user_id: UUID) -> list[PasswordReset]:
+        return await self._many(
+            password_resets.c.user_id == user_id, password_resets.c.used_at.is_(None)
+        )
+
+
 class PostgresUnitOfWork:
     def __init__(self, connection: AsyncConnection) -> None:
         self._connection = connection
         self.data_keys = PostgresDataKeyRepository(connection)
         self.audit = PostgresAuditRepository(connection)
+        self.users = PostgresUserRepository(connection)
+        self.sessions = PostgresSessionRepository(connection)
+        self.invitations = PostgresInvitationRepository(connection)
+        self.password_resets = PostgresPasswordResetRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

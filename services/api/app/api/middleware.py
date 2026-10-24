@@ -1,4 +1,4 @@
-"""Response hardening and request correlation, as plain ASGI middleware.
+"""Request filtering, response hardening and request correlation, as plain ASGI middleware.
 
 Plain ASGI rather than Starlette's `BaseHTTPMiddleware`: the latter buffers
 streaming responses and breaks the SSE endpoints the review pipeline needs.
@@ -6,9 +6,11 @@ streaming responses and breaks the SSE endpoints the review pipeline needs.
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from collections.abc import Iterable
+from http import HTTPStatus
 
 import structlog
 from starlette.datastructures import MutableHeaders
@@ -86,3 +88,72 @@ class RequestIdMiddleware:
 
         with structlog.contextvars.bound_contextvars(request_id=request_id):
             await self.app(scope, receive, send_with_id)
+
+
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class CrossSiteRequestMiddleware:
+    """Refuse state-changing requests that a browser reports as coming from elsewhere.
+
+    The first two CSRF layers; the per-session token is the third, checked once
+    the session is known (`api/session.py`):
+
+    - `Sec-Fetch-Site`, when present, must be `same-origin`.
+    - `Origin`, when present, must be exactly the public origin.
+    - A request with a body must be JSON. A cross-site HTML form can only send
+      form encodings or text/plain, and cross-site JSON needs a CORS preflight
+      this API never grants.
+
+    A request with neither header comes from a non-browser client (curl,
+    Postman). Forgery needs a victim's browser, so those pass; anything signed
+    in still needs the session's CSRF token.
+    """
+
+    def __init__(self, app: ASGIApp, public_origin: str) -> None:
+        self.app = app
+        self.public_origin = public_origin.rstrip("/")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in _UNSAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope["headers"]}
+        fetch_site = headers.get("sec-fetch-site")
+        origin = headers.get("origin")
+        if (fetch_site is not None and fetch_site != "same-origin") or (
+            origin is not None and origin.rstrip("/") != self.public_origin
+        ):
+            await _refuse(send, 403, "Cross-site requests are not allowed.")
+            return
+
+        content_type = headers.get("content-type", "").split(";")[0].strip().lower()
+        has_body = headers.get("content-length", "0") != "0" or "transfer-encoding" in headers
+        if has_body and content_type != "application/json":
+            await _refuse(send, 415, "Request bodies must be application/json.")
+            return
+
+        await self.app(scope, receive, send)
+
+
+async def _refuse(send: Send, status: int, detail: str) -> None:
+    body = json.dumps(
+        {
+            "type": "about:blank",
+            "title": HTTPStatus(status).phrase,
+            "status": status,
+            "detail": detail,
+        }
+    ).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/problem+json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})

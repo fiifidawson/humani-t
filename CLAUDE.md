@@ -65,18 +65,19 @@ provider class anywhere else is the architecture leaking — put it there instea
 ```bash
 # once: local secrets + services/api/.env, then the dev database
 python scripts/dev_secrets.py
-docker compose up -d postgres
+docker compose up -d          # postgres, valkey, mailpit (inbox: 127.0.0.1:58025)
 
 cd services/api
 uv run --env-file .env alembic upgrade head        # migrate (schema-owner role)
 uv run --env-file .env uvicorn app.main:app --reload --port 8731   # /docs
 uv run pytest                                      # all tests (Postgres ones skip)
-TEST_DATABASE_URL=… uv run pytest                  # include the Postgres contract
+TEST_DATABASE_URL=… TEST_VALKEY_URL=… uv run pytest   # include Postgres + Valkey
 uv run pytest tests/test_domain.py -v              # one file
 uv run ruff check . && uv run ruff format .        # lint, format
 uv run pyright                                     # types
 uv run lint-imports                                # layering rules
 uv run python -m app.cli generate-kek              # operator commands
+echo '<password>' | uv run --env-file .env python -m app.cli create-admin --email you@example.org --password-stdin
 ```
 
 Settings never read `.env` on their own; `--env-file` loads it explicitly, so

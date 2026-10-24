@@ -20,6 +20,8 @@ def production_settings(**overrides: object) -> Settings:
         # Never connected to: engines connect lazily, and these tests make no queries.
         "database_url": SecretStr("postgresql+asyncpg://app:pw@db.invalid/humani_t"),
         "key_encryption_keys": SecretStr(f"1:{generate_kek()}"),
+        "valkey_url": SecretStr("redis://:pw@valkey.invalid:6379/0"),
+        "smtp_host": "smtp.invalid",
     }
     values.update(overrides)
     return Settings.model_validate(values)
@@ -29,7 +31,9 @@ class TestProductionRequirements:
     def test_complete_production_settings_are_accepted(self):
         assert production_settings().is_production
 
-    @pytest.mark.parametrize("missing", ["database_url", "key_encryption_keys"])
+    @pytest.mark.parametrize(
+        "missing", ["database_url", "key_encryption_keys", "valkey_url", "smtp_host"]
+    )
     def test_missing_backend_is_refused(self, missing):
         with pytest.raises(ValidationError):
             production_settings(**{missing: None})

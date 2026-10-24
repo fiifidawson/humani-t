@@ -172,6 +172,19 @@ class TestOpenAPI:
             "/api/v1/sources",
             "/api/v1/vocabulary/compile",
             "/api/v1/search",
+            "/api/v1/auth/login",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/session",
+            "/api/v1/auth/reauthenticate",
+            "/api/v1/auth/register",
+            "/api/v1/auth/password-reset",
+            "/api/v1/auth/password-reset/confirm",
+            "/api/v1/account/sessions",
+            "/api/v1/account/sessions/{session_id}",
+            "/api/v1/account/sessions/revoke-others",
+            "/api/v1/account/password",
+            "/api/v1/admin/invitations",
+            "/api/v1/admin/users/{user_id}/disable",
         }
 
     def test_request_bodies_carry_a_worked_example(self, client):
@@ -185,4 +198,4 @@ class TestOpenAPI:
         schema = client.get("/openapi.json").json()
         tags = {t["name"] for t in schema["tags"]}
 
-        assert tags == {"system", "vocabulary", "search"}
+        assert tags == {"system", "auth", "account", "admin", "vocabulary", "search"}

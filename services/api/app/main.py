@@ -12,16 +12,30 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from app.api.dependencies import API_PREFIX, build_providers
+from app.api.dependencies import API_PREFIX, Providers, build_providers
 from app.api.errors import install_error_handlers
-from app.api.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
-from app.api.routes import search, system, vocabulary
+from app.api.middleware import (
+    CrossSiteRequestMiddleware,
+    RequestIdMiddleware,
+    SecurityHeadersMiddleware,
+)
+from app.api.routes import account, admin, auth, search, system, vocabulary
 from app.api.routes.system import API_NAME, API_VERSION
 from app.observability import configure_logging
 from app.settings import Settings, get_settings
 
 TAGS_METADATA = [
     {"name": "system", "description": "Liveness, readiness and what is wired in."},
+    {
+        "name": "auth",
+        "description": (
+            "Signing in and out. Sessions are server-side, carried in a `__Host-session` "
+            "cookie; every write also needs the `X-CSRF-Token` header, copied from the "
+            "`__Host-csrf` cookie."
+        ),
+    },
+    {"name": "account", "description": "The signed-in user's own sessions and password."},
+    {"name": "admin", "description": "Invitations and account administration."},
     {
         "name": "vocabulary",
         "description": (
@@ -42,18 +56,22 @@ TAGS_METADATA = [
 _DOCS_PATHS = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, providers: Providers | None = None
+) -> FastAPI:
+    """Build the app. Tests pass `providers` built with a fake clock and hasher."""
     settings = settings or get_settings()
     configure_logging(settings.log_level, as_json=settings.is_production)
 
     # Built eagerly, not in the lifespan: engines connect lazily, and tests that
     # never enter the lifespan still get a fully wired app.
-    providers = build_providers(settings)
+    providers = providers or build_providers(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await providers.storage.close()
+        await providers.rate_limiter.close()
 
     app = FastAPI(
         title=API_NAME,
@@ -73,8 +91,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 def _install(app: FastAPI, settings: Settings) -> None:
     install_error_handlers(app)
 
-    # Starlette runs the last-added middleware first, so the request id is
-    # bound before anything else can log.
+    # Starlette runs the last-added middleware first: the request id is bound
+    # before anything can log, and security headers wrap even the cross-site
+    # refusals, which answer without reaching a route.
+    app.add_middleware(CrossSiteRequestMiddleware, public_origin=settings.public_origin)
     app.add_middleware(
         SecurityHeadersMiddleware,
         csp_exempt=_DOCS_PATHS if settings.docs_enabled else (),
@@ -85,6 +105,9 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(system.router)
     if settings.docs_enabled:
         v1.include_router(system.info_router)
+    v1.include_router(auth.router)
+    v1.include_router(account.router)
+    v1.include_router(admin.router)
     v1.include_router(vocabulary.router)
     v1.include_router(search.router)
     app.include_router(v1)

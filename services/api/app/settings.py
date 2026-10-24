@@ -61,6 +61,23 @@ class Settings(BaseSettings):
             "version encrypts new data keys; older versions still decrypt."
         ),
     )
+    valkey_url: SecretStr | None = Field(
+        default=None,
+        description=(
+            "redis://:password@host:port/0 for rate limits. Unset uses in-process limits."
+        ),
+    )
+    smtp_host: str | None = Field(
+        default=None,
+        description=(
+            "Mail server for sign-in links. Unset keeps mail in memory (development only)."
+        ),
+    )
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_sender: str = "humani-t <no-reply@localhost>"
+    smtp_starttls: bool = True
     log_level: str = "INFO"
 
     @property
@@ -87,7 +104,7 @@ class Settings(BaseSettings):
             return self
         missing = [
             name
-            for name in ("database_url", "key_encryption_keys")
+            for name in ("database_url", "key_encryption_keys", "valkey_url", "smtp_host")
             if getattr(self, name) is None
         ]
         if missing:

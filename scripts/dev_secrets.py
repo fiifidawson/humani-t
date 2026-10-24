@@ -22,7 +22,12 @@ ROOT = Path(__file__).resolve().parent.parent
 SECRETS = ROOT / "secrets"
 API_ENV = ROOT / "services" / "api" / ".env"
 
-_PASSWORDS = ("db_superuser_password", "db_migrator_password", "db_app_password")
+_PASSWORDS = (
+    "db_superuser_password",
+    "db_migrator_password",
+    "db_app_password",
+    "valkey_password",
+)
 _DEV_DB = "127.0.0.1:55432/humani_t"
 
 
@@ -49,6 +54,10 @@ def main() -> None:
         "HUMANI_T_MIGRATION_DATABASE_URL="
         f"postgresql+asyncpg://humani_t_migrator:{values['db_migrator_password']}@{_DEV_DB}\n"
         f"HUMANI_T_KEY_ENCRYPTION_KEYS={kek}\n"
+        f"HUMANI_T_VALKEY_URL=redis://:{values['valkey_password']}@127.0.0.1:56379/0\n"
+        "HUMANI_T_SMTP_HOST=127.0.0.1\n"
+        "HUMANI_T_SMTP_PORT=51025\n"
+        "HUMANI_T_SMTP_STARTTLS=false\n"
     )
     _write_once(API_ENV, env)
 

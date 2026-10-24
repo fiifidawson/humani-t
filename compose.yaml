@@ -1,8 +1,8 @@
 # Development stack. Production services (Caddy, api, worker, migrate) are added
 # in the containers milestone; until then the API runs on the host with uv.
 #
-#   python scripts/dev_secrets.py     # once: writes ./secrets/*
-#   docker compose up -d postgres
+#   python scripts/dev_secrets.py     # once: writes ./secrets/* and services/api/.env
+#   docker compose up -d
 name: humani-t
 
 services:
@@ -28,7 +28,32 @@ services:
       timeout: 3s
       retries: 10
 
+  valkey:
+    image: valkey/valkey:8-alpine
+    # The password is read from the secret at start-up. It is visible to
+    # processes inside this container only, which run nothing else.
+    command: ["sh", "-c", "exec valkey-server --requirepass \"$$(cat /run/secrets/valkey_password)\" --save '' --appendonly no"]
+    secrets:
+      - valkey_password
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$(cat /run/secrets/valkey_password)\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Development only: catches every email the API sends and shows it in a web
+  # inbox at http://127.0.0.1:58025. Nothing is delivered to real addresses.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:51025:1025"
+      - "127.0.0.1:58025:8025"
+
 secrets:
+  valkey_password:
+    file: ./secrets/valkey_password
   db_superuser_password:
     file: ./secrets/db_superuser_password
   db_migrator_password:

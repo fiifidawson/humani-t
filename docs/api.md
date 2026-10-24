@@ -31,6 +31,19 @@ endpoints and payloads below do not change.
 | `GET` | `/api/v1/sources` | search | Repositories this process can reach |
 | `POST` | `/api/v1/vocabulary/compile` | vocabulary | Vocabulary to Boolean query |
 | `POST` | `/api/v1/search` | search | Compile, then search |
+| `POST` | `/api/v1/auth/login` | auth | Sign in; sets the session and CSRF cookies |
+| `POST` | `/api/v1/auth/logout` | auth | End this session |
+| `GET` | `/api/v1/auth/session` | auth | Who is signed in |
+| `POST` | `/api/v1/auth/reauthenticate` | auth | Confirm the password before a sensitive action |
+| `POST` | `/api/v1/auth/register` | auth | Accept an invitation; signs in |
+| `POST` | `/api/v1/auth/password-reset` | auth | Email a reset link (always 202) |
+| `POST` | `/api/v1/auth/password-reset/confirm` | auth | Set a new password from a reset link |
+| `GET` | `/api/v1/account/sessions` | account | Where this account is signed in |
+| `DELETE` | `/api/v1/account/sessions/{id}` | account | Sign out one device |
+| `POST` | `/api/v1/account/sessions/revoke-others` | account | Sign out every other device |
+| `POST` | `/api/v1/account/password` | account | Change the password |
+| `POST` | `/api/v1/admin/invitations` | admin | Invite someone by email |
+| `POST` | `/api/v1/admin/users/{id}/disable` | admin | Disable an account |
 
 ---
 
@@ -227,6 +240,36 @@ is added, that test is what stops it reaching user-supplied terms.
 
 ---
 
+## Authentication
+
+Sessions are server-side. Signing in sets two cookies:
+
+| Cookie | Holds | Readable by scripts | SameSite |
+| --- | --- | --- | --- |
+| `__Host-session` | the session token | no (`HttpOnly`) | `Lax` |
+| `__Host-csrf` | the session's CSRF token | yes | `Strict` |
+
+Every state-changing request made while signed in must send the CSRF token
+back in an `X-CSRF-Token` header, or it is refused with `403`. Requests whose
+`Origin` or `Sec-Fetch-Site` show they come from another site are refused
+before that, as are request bodies that are not `application/json` (`415`).
+
+Sessions end after 1 hour idle or 24 hours in total. Changing the password needs
+a sign-in within the last 15 minutes; otherwise the response is `401` with
+`"reauthentication_required": true`, and `POST /auth/reauthenticate` refreshes it.
+
+Registration is by invitation only. The first administrator is created inside
+the deployment: `python -m app.cli create-admin --email … --password-stdin`.
+
+| Status | Meaning |
+| --- | --- |
+| `401` | not signed in, wrong credentials, or the session has ended |
+| `403` | missing CSRF token, cross-site request, wrong current password, or not an admin |
+| `422` | invalid body, or a password that breaks the policy (`violations` lists why) |
+| `429` | too many attempts; `Retry-After` says when to try again |
+
+---
+
 ## Errors
 
 Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem
@@ -253,6 +296,7 @@ Deliberately absent, in build order:
 - **Persistence of reviews** — only encryption keys are stored so far
 - **Real sources** — arXiv, OpenAlex, Europe PMC, Google Scholar
 - **Screening, synthesis, the privacy gate**
-- **Authentication** — every request is anonymous
+- **Multi-factor authentication** — passkeys, TOTP and recovery codes (next)
+- **Projects and roles** — owner, reviewer, viewer
 
 See [`dependencies.md`](./dependencies.md) for the sequence.
