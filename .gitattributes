@@ -1,0 +1,16 @@
+# Store text with LF line endings in the repository, whatever the contributor's OS.
+# Without this, Windows checkouts commit CRLF and every diff turns into noise.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF to run.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Generated or binary files: never diff or merge line by line.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+uv.lock linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
