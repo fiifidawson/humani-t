@@ -1,8 +1,8 @@
 """Operator commands: `uv run python -m app.cli <command>`.
 
 These are the actions that must never be reachable over HTTP — creating key
-material and re-encrypting it — so they run inside the deployment, by someone
-with shell access to it.
+material, re-encrypting it, checking the audit log — so they run inside the
+deployment, by someone with shell access to it.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import asyncio
 import sys
 
 from app.api.dependencies import build_providers
+from app.application.audit import SYSTEM
 from app.crypto.local_key import generate_kek
 from app.settings import get_settings
 
@@ -28,6 +29,13 @@ async def _rewrap() -> int:
     try:
         async with providers.storage.unit_of_work() as uow:
             moved = await providers.encryption.rewrap_all(uow)
+            await providers.audit.record(
+                uow,
+                SYSTEM,
+                "keys.rewrapped",
+                "kek",
+                str(providers.encryption.current_kek_version),
+            )
             await uow.commit()
     finally:
         await providers.storage.close()
@@ -39,6 +47,27 @@ def _rewrap_keys(_: argparse.Namespace) -> int:
     return asyncio.run(_rewrap())
 
 
+async def _verify() -> int:
+    providers = build_providers(get_settings())
+    try:
+        async with providers.storage.unit_of_work() as uow:
+            report = await providers.audit.verify(uow)
+    finally:
+        await providers.storage.close()
+    if report.is_intact:
+        print(f"audit chain intact: {report.events_checked} event(s)")
+        return 0
+    print(
+        f"AUDIT CHAIN BROKEN at sequence {report.first_broken_sequence}: {report.reason}",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def _verify_audit(_: argparse.Namespace) -> int:
+    return asyncio.run(_verify())
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -48,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser(
         "rewrap-keys", help="Re-encrypt every data key under the newest KEK version."
     ).set_defaults(handler=_rewrap_keys)
+    commands.add_parser(
+        "verify-audit", help="Check the audit log's hash chain; exit 1 if it was tampered with."
+    ).set_defaults(handler=_verify_audit)
 
     args = parser.parse_args(argv)
     return args.handler(args)

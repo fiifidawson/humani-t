@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Row, insert, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
+from app.domain.audit import AuditEntry, AuditEvent, ChainHead
 from app.domain.encryption import WrappedDataKey
-from app.storage.postgres.tables import data_keys
+from app.storage.postgres.tables import audit_chain_head, audit_events, data_keys
 
 
-def _to_data_key(row: Row[tuple[UUID, int, bytes | None, object, object]]) -> WrappedDataKey:
+def _to_data_key(row: Row[Any]) -> WrappedDataKey:
     return WrappedDataKey(
         scope_id=row.scope_id,
         kek_version=row.kek_version,
@@ -66,10 +68,91 @@ class PostgresDataKeyRepository:
         return [_to_data_key(row) for row in result]
 
 
+def _to_audit_event(row: Row[Any]) -> AuditEvent:
+    return AuditEvent(
+        entry=AuditEntry(
+            id=row.id,
+            occurred_at=row.occurred_at,
+            action=row.action,
+            actor_id=row.actor_id,
+            target_type=row.target_type,
+            target_id=row.target_id,
+            scope_id=row.scope_id,
+            request_id=row.request_id,
+            details_sealed=row.details_sealed,
+        ),
+        sequence=row.sequence,
+        previous_hash=row.previous_hash,
+        hash=row.hash,
+    )
+
+
+class PostgresAuditRepository:
+    def __init__(self, connection: AsyncConnection) -> None:
+        self._connection = connection
+
+    async def lock_head(self) -> ChainHead:
+        result = await self._connection.execute(
+            select(audit_chain_head.c.sequence, audit_chain_head.c.hash)
+            .where(audit_chain_head.c.id == 1)
+            .with_for_update()
+        )
+        row = result.one()
+        return ChainHead(row.sequence, row.hash)
+
+    async def append(self, event: AuditEvent) -> None:
+        entry = event.entry
+        await self._connection.execute(
+            insert(audit_events).values(
+                sequence=event.sequence,
+                id=entry.id,
+                occurred_at=entry.occurred_at,
+                action=entry.action,
+                actor_id=entry.actor_id,
+                target_type=entry.target_type,
+                target_id=entry.target_id,
+                scope_id=entry.scope_id,
+                request_id=entry.request_id,
+                details_sealed=entry.details_sealed,
+                previous_hash=event.previous_hash,
+                hash=event.hash,
+            )
+        )
+        # The WHERE re-checks the head the event was chained onto, so an append
+        # without the lock fails loudly instead of forking the chain.
+        result = await self._connection.execute(
+            update(audit_chain_head)
+            .where(
+                audit_chain_head.c.id == 1,
+                audit_chain_head.c.sequence == event.sequence - 1,
+                audit_chain_head.c.hash == event.previous_hash,
+            )
+            .values(sequence=event.sequence, hash=event.hash)
+        )
+        if result.rowcount != 1:
+            raise ValueError("audit event does not extend the current chain head")
+
+    async def head(self) -> ChainHead:
+        result = await self._connection.execute(
+            select(audit_chain_head.c.sequence, audit_chain_head.c.hash).where(
+                audit_chain_head.c.id == 1
+            )
+        )
+        row = result.one()
+        return ChainHead(row.sequence, row.hash)
+
+    async def list_events(self) -> list[AuditEvent]:
+        result = await self._connection.execute(
+            select(audit_events).order_by(audit_events.c.sequence)
+        )
+        return [_to_audit_event(row) for row in result]
+
+
 class PostgresUnitOfWork:
     def __init__(self, connection: AsyncConnection) -> None:
         self._connection = connection
         self.data_keys = PostgresDataKeyRepository(connection)
+        self.audit = PostgresAuditRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

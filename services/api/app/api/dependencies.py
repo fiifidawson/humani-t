@@ -15,6 +15,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
 from app.application.search_service import SearchService
 from app.crypto.aesgcm import AesGcmCipher
@@ -36,6 +37,7 @@ class Providers:
     storage: StorageProvider
     search: PaperSearchProvider
     encryption: ScopeEncryption
+    audit: AuditLog
 
 
 def build_providers(settings: Settings) -> Providers:
@@ -52,10 +54,12 @@ def build_providers(settings: Settings) -> Providers:
     else:
         keys = LocalKeyProvider.from_config(settings.key_encryption_keys.get_secret_value())
 
+    encryption = ScopeEncryption(keys, AesGcmCipher())
     return Providers(
         storage=storage,
         search=FakePaperSearchProvider(),
-        encryption=ScopeEncryption(keys, AesGcmCipher()),
+        encryption=encryption,
+        audit=AuditLog(encryption),
     )
 
 

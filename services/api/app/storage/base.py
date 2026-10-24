@@ -12,6 +12,7 @@ from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.audit import AuditEvent, ChainHead
 from app.domain.encryption import WrappedDataKey
 
 
@@ -29,6 +30,26 @@ class DataKeyRepository(Protocol):
     async def list_live(self) -> list[WrappedDataKey]: ...
 
 
+class AuditRepository(Protocol):
+    async def lock_head(self) -> ChainHead:
+        """Return the chain head and hold it until the transaction ends.
+
+        Appends are serialised through this lock; without it two writers could
+        both chain onto the same event and fork the log.
+        """
+        ...
+
+    async def append(self, event: AuditEvent) -> None:
+        """Insert the event and move the head to it. Requires `lock_head` first."""
+        ...
+
+    async def head(self) -> ChainHead: ...
+
+    async def list_events(self) -> list[AuditEvent]:
+        """All events in sequence order."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One transaction. Nothing is visible to others until `commit`."""
 
@@ -36,6 +57,9 @@ class UnitOfWork(Protocol):
     # they never replace them, and that lets each implementation return its own.
     @property
     def data_keys(self) -> DataKeyRepository: ...
+
+    @property
+    def audit(self) -> AuditRepository: ...
 
     async def commit(self) -> None: ...
 

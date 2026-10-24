@@ -39,6 +39,10 @@ class ScopeEncryption:
         self._cipher = cipher
         self._clock = clock
 
+    @property
+    def current_kek_version(self) -> int:
+        return self._keys.current_version
+
     async def create_scope(self, uow: UnitOfWork, scope_id: UUID) -> None:
         data_key = self._cipher.generate_key()
         await uow.data_keys.add(

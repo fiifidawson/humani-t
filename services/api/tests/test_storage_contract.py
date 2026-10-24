@@ -6,6 +6,7 @@ database as the runtime role. See CONTRIBUTING for how to start one.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -13,8 +14,14 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.application.audit import SYSTEM, AuditLog
+from app.application.encryption import ScopeEncryption
+from app.crypto.aesgcm import AesGcmCipher
+from app.crypto.local_key import LocalKeyProvider
+from app.domain.audit import AuditEntry, AuditEvent
 from app.domain.encryption import WrappedDataKey
 from app.storage.base import StorageProvider
 from app.storage.memory import MemoryStorage
@@ -48,6 +55,8 @@ async def storage(request: pytest.FixtureRequest) -> AsyncIterator[StorageProvid
 
 
 async def _truncate(url: str) -> None:
+    # audit_events cannot be cleaned up — that is the point of it — so the audit
+    # tests below never assume an empty log, only one that grows correctly.
     engine = create_async_engine(url)
     async with engine.begin() as connection:
         await connection.execute(text("DELETE FROM data_keys"))
@@ -108,3 +117,74 @@ class TestDataKeys:
         async with storage.unit_of_work() as uow:
             with pytest.raises(ValueError, match="does not exist"):
                 await uow.data_keys.save(_key())
+
+
+_AUDIT = AuditLog(ScopeEncryption(LocalKeyProvider({1: bytes(32)}), AesGcmCipher()))
+
+
+class TestAuditLog:
+    async def test_appending_moves_the_head_and_keeps_the_chain_intact(self, storage):
+        async with storage.unit_of_work() as uow:
+            before = await uow.audit.head()
+            event = await _AUDIT.record(uow, SYSTEM, "test.appended", "test", "1")
+            await uow.commit()
+
+        async with storage.unit_of_work() as uow:
+            head = await uow.audit.head()
+            events = await uow.audit.list_events()
+            report = await _AUDIT.verify(uow)
+
+        assert head.sequence == before.sequence + 1 == event.sequence
+        assert events[-1] == event
+        assert report.is_intact
+
+    async def test_an_append_that_does_not_extend_the_head_is_refused(self, storage):
+        async with storage.unit_of_work() as uow:
+            head = await uow.audit.lock_head()
+            entry = AuditEntry(
+                id=uuid.uuid4(),
+                occurred_at=NOW,
+                action="test.forked",
+                actor_id=None,
+                target_type="test",
+                target_id="1",
+            )
+            stale = AuditEvent.chain(entry, head.sequence + 1, b"" * 32)
+            with pytest.raises(ValueError, match="chain head"):
+                await uow.audit.append(stale)
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not _DATABASE_URL, reason="TEST_DATABASE_URL not set")
+class TestPostgresAuditGuarantees:
+    async def test_concurrent_writers_never_fork_the_chain(self):
+        assert _DATABASE_URL is not None
+        postgres = PostgresStorage.from_url(_DATABASE_URL)
+
+        async def write(n: int) -> None:
+            async with postgres.unit_of_work() as uow:
+                await _AUDIT.record(uow, SYSTEM, "test.concurrent", "test", str(n))
+                await uow.commit()
+
+        try:
+            await asyncio.gather(*(write(n) for n in range(50)))
+            async with postgres.unit_of_work() as uow:
+                report = await _AUDIT.verify(uow)
+        finally:
+            await postgres.close()
+
+        assert report.is_intact
+
+    @pytest.mark.parametrize(
+        "statement",
+        ["UPDATE audit_events SET action = 'x.y'", "DELETE FROM audit_events"],
+    )
+    async def test_the_app_role_cannot_rewrite_history(self, statement):
+        assert _DATABASE_URL is not None
+        engine = create_async_engine(_DATABASE_URL)
+        try:
+            async with engine.begin() as connection:
+                with pytest.raises(DBAPIError, match="permission denied"):
+                    await connection.execute(text(statement))
+        finally:
+            await engine.dispose()

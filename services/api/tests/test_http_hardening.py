@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
@@ -107,10 +109,9 @@ class TestReadiness:
 
     def test_not_ready_when_storage_does_not(self, settings):
         app = create_app(settings)
-        app.state.providers = app.state.providers.__class__(
+        app.state.providers = dataclasses.replace(
+            app.state.providers,
             storage=_UnreachableStorage(),  # type: ignore[arg-type]
-            search=app.state.providers.search,
-            encryption=app.state.providers.encryption,
         )
 
         assert TestClient(app).get("/api/v1/ready").status_code == 503
