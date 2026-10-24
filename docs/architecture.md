@@ -581,6 +581,42 @@ this is a seam and not a convenience wrapper.
 
 ---
 
+### 5.7 Concurrency and resources
+
+Feature tests send one request at a time; production does not. These rules keep
+the system correct and available under concurrent load, and each has a test in
+`tests/test_concurrency_and_resources.py` or the storage contract suite.
+
+1. **Never hold a database connection across slow work.** Password hashing,
+   email and outbound HTTP happen between transactions, never inside one. A use
+   case is: short read → slow work → short write → side effects.
+2. **Side effects happen after commit.** An email is sent once the change it
+   describes is durable, and never while a lock is held.
+3. **The audit event is the last write in a transaction.** Appending takes the
+   chain-head lock; taking it last keeps it held briefly, and taking it in the
+   same position everywhere rules out deadlocks.
+4. **No blind overwrites of shared records.** A write another request could race
+   with is either conditional (`claim`, `revoke`, `touch`: "only if still
+   unused / unrevoked") and reports whether it won, or version-checked
+   (optimistic locking on `users.version`). A lost update raises
+   `ConcurrentUpdateError`; it is never silently merged.
+5. **Single-use means atomically single-use.** Tokens are spent with one
+   conditional `UPDATE`; of two simultaneous uses, exactly one succeeds.
+6. **Count before the slow check.** Rate limits count an attempt atomically
+   before the password is verified, so parallel attempts cannot all pass a
+   check-then-count gap.
+7. **Bounded pools that fail fast.** Each API process has a fixed-size pool with
+   no overflow and a short wait; when it is exhausted the request gets `503`
+   with `Retry-After`, not a hang. Postgres cancels statements over 15 s and
+   ends transactions left idle over 30 s.
+8. **Bounded memory.** In-process structures expire their entries; request
+   bodies over 1 MiB are refused before being read; ended sessions and spent
+   links are purged (`app.cli purge-expired`, scheduled by the worker).
+9. **Everything opened is closed.** `Providers.close()` releases every pool and
+   client, at shutdown and at the end of every CLI command.
+
+---
+
 ## 6. Dependencies and prior art
 
 humani-t is a rebuild of an existing prototype, not a greenfield project. See

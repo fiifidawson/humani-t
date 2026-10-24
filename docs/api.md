@@ -267,6 +267,10 @@ the deployment: `python -m app.cli create-admin --email … --password-stdin`.
 | `403` | missing CSRF token, cross-site request, wrong current password, or not an admin |
 | `422` | invalid body, or a password that breaks the policy (`violations` lists why) |
 | `429` | too many attempts; `Retry-After` says when to try again |
+| `409` | the record changed while you were editing it; reload and retry |
+| `413` | the request body is over 1 MiB |
+| `502` | an email (an invitation) could not be sent; the action itself was saved |
+| `503` | the service is saturated or the database is unreachable; `Retry-After` says when to retry |
 
 ---
 

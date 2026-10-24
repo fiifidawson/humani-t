@@ -71,7 +71,7 @@ cd services/api
 uv run --env-file .env alembic upgrade head        # migrate (schema-owner role)
 uv run --env-file .env uvicorn app.main:app --reload --port 8731   # /docs
 uv run pytest                                      # all tests (Postgres ones skip)
-TEST_DATABASE_URL=… TEST_VALKEY_URL=… uv run pytest   # include Postgres + Valkey
+TEST_DATABASE_URL=…/humani_t_test TEST_VALKEY_URL=… uv run pytest   # + Postgres, Valkey
 uv run pytest tests/test_domain.py -v              # one file
 uv run ruff check . && uv run ruff format .        # lint, format
 uv run pyright                                     # types
@@ -285,6 +285,9 @@ summary that omits it.
 ## Do not
 
 - Put business logic in `apps/web`.
+- Hold a database connection across hashing, email or HTTP, or overwrite a shared
+  record without a condition or version check (`docs/architecture.md` §5.7).
+- Point tests at the development database: contract tests delete what they write.
 - Let a provider SDK type appear in `domain/` or `application/`.
 - Add a dependency without saying why in the commit message.
 - Use `openai_filter` as the mmore privacy detection engine — it sends
