@@ -1,0 +1,40 @@
+# Development stack. Production services (Caddy, api, worker, migrate) are added
+# in the containers milestone; until then the API runs on the host with uv.
+#
+#   python scripts/dev_secrets.py     # once: writes ./secrets/*
+#   docker compose up -d postgres
+name: humani-t
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: humani_t
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_superuser_password
+    secrets:
+      - db_superuser_password
+      - db_migrator_password
+      - db_app_password
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Loopback only, and not 5432, so a Postgres already on the host is untouched.
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d humani_t"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+secrets:
+  db_superuser_password:
+    file: ./secrets/db_superuser_password
+  db_migrator_password:
+    file: ./secrets/db_migrator_password
+  db_app_password:
+    file: ./secrets/db_app_password
+
+volumes:
+  postgres-data:
