@@ -5,9 +5,8 @@ Excalidraw VS Code extension, or drag it onto <https://excalidraw.com>.
 
 | Diagram | File |
 | --- | --- |
-| System architecture — layers, the ten provider seams, V1 implementations | [`diagrams/01-system-architecture.excalidraw`](./diagrams/01-system-architecture.excalidraw) |
+| System architecture — layers, the provider seams, default implementations | [`diagrams/01-system-architecture.excalidraw`](./diagrams/01-system-architecture.excalidraw) |
 | Review pipeline — question to cited synthesis, including the vocabulary branch | [`diagrams/02-review-pipeline.excalidraw`](./diagrams/02-review-pipeline.excalidraw) |
-| V1 to V2 — what is shared, what is only an implementation swap | [`diagrams/03-v1-to-v2.excalidraw`](./diagrams/03-v1-to-v2.excalidraw) |
 
 ## Editing
 
@@ -45,10 +44,6 @@ application. The purple ones are what make this not a chat app.
 
 **Review pipeline** — the dashed red box between extraction and indexing is
 [open work](./architecture.md), not a component that exists.
-
-**V1 to V2** — the green band is written once. Every row below the divider is one
-Protocol with two implementations. If something lands in the lower half that
-should have been in the upper half, a seam is missing.
 
 ## These are not the source of truth
 
