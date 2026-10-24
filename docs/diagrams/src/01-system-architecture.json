@@ -4,8 +4,8 @@
 {"type":"rectangle","id":"z1","x":60,"y":88,"width":900,"height":110,"backgroundColor":"#dbe4ff","fillStyle":"solid","strokeColor":"#4a9eed","strokeWidth":1,"opacity":30,"roundness":{"type":3}},
 {"type":"text","id":"z1l","x":74,"y":94,"text":"PRESENTATION","fontSize":16,"strokeColor":"#2563eb"},
 {"type":"rectangle","id":"b1","x":100,"y":118,"width":270,"height":64,"backgroundColor":"#a5d8ff","fillStyle":"solid","strokeColor":"#4a9eed","roundness":{"type":3},"label":{"text":"apps/web\nVite + React + TypeScript","fontSize":17}},
-{"type":"rectangle","id":"b2","x":390,"y":118,"width":270,"height":64,"backgroundColor":"#a5d8ff","fillStyle":"solid","strokeColor":"#4a9eed","roundness":{"type":3},"label":{"text":"packages/ui + api-client\nTypeScript","fontSize":17}},
-{"type":"rectangle","id":"b3","x":680,"y":118,"width":240,"height":64,"backgroundColor":"#ffd8a8","fillStyle":"solid","strokeColor":"#f59e0b","strokeStyle":"dashed","roundness":{"type":3},"label":{"text":"apps/desktop\nTauri + Rust (V2)","fontSize":17}},
+{"type":"rectangle","id":"b2","x":390,"y":118,"width":270,"height":64,"backgroundColor":"#a5d8ff","fillStyle":"solid","strokeColor":"#4a9eed","roundness":{"type":3},"label":{"text":"apps/web/src/api\ngenerated OpenAPI types","fontSize":17}},
+{"type":"rectangle","id":"b3","x":680,"y":118,"width":240,"height":64,"backgroundColor":"#a5d8ff","fillStyle":"solid","strokeColor":"#4a9eed","roundness":{"type":3},"label":{"text":"Caddy\nHTTPS · same origin","fontSize":17}},
 {"type":"arrow","id":"ar1","x":510,"y":198,"width":0,"height":24,"points":[[0,0],[0,24]],"strokeColor":"#1e1e1e","endArrowhead":"arrow"},
 {"type":"rectangle","id":"z2","x":60,"y":222,"width":900,"height":70,"backgroundColor":"#e5dbff","fillStyle":"solid","strokeColor":"#8b5cf6","strokeWidth":1,"opacity":30,"roundness":{"type":3}},
 {"type":"text","id":"z2l","x":74,"y":228,"text":"API CONTRACT","fontSize":16,"strokeColor":"#6d28d9"},
@@ -32,8 +32,8 @@
 {"type":"rectangle","id":"p6","x":61,"y":647,"width":170,"height":52,"backgroundColor":"#eebefa","fillStyle":"solid","strokeColor":"#8b5cf6","roundness":{"type":3},"label":{"text":"Sanitization","fontSize":16}},
 {"type":"rectangle","id":"p7","x":243,"y":647,"width":170,"height":52,"backgroundColor":"#c3fae8","fillStyle":"solid","strokeColor":"#22c55e","roundness":{"type":3},"label":{"text":"Storage","fontSize":16}},
 {"type":"rectangle","id":"p8","x":425,"y":647,"width":170,"height":52,"backgroundColor":"#c3fae8","fillStyle":"solid","strokeColor":"#22c55e","roundness":{"type":3},"label":{"text":"FileStorage","fontSize":16}},
-{"type":"rectangle","id":"p9","x":607,"y":647,"width":170,"height":52,"backgroundColor":"#c3fae8","fillStyle":"solid","strokeColor":"#22c55e","roundness":{"type":3},"label":{"text":"Backup","fontSize":16}},
+{"type":"rectangle","id":"p9","x":607,"y":647,"width":170,"height":52,"backgroundColor":"#c3fae8","fillStyle":"solid","strokeColor":"#22c55e","roundness":{"type":3},"label":{"text":"Keys","fontSize":16}},
 {"type":"rectangle","id":"p10","x":789,"y":647,"width":170,"height":52,"backgroundColor":"#c3fae8","fillStyle":"solid","strokeColor":"#22c55e","roundness":{"type":3},"label":{"text":"Tool","fontSize":16}},
 {"type":"text","id":"pn","x":74,"y":712,"text":"Purple seams are specific to evidence synthesis — they do not exist in a generic chat app.","fontSize":15,"strokeColor":"#6d28d9"},
-{"type":"rectangle","id":"imp","x":60,"y":768,"width":900,"height":62,"backgroundColor":"#ffd8a8","fillStyle":"solid","strokeColor":"#f59e0b","strokeWidth":1,"roundness":{"type":3},"opacity":60,"label":{"text":"V1: Ollama / vLLM · Milvus via mmore · arXiv · OpenAlex · Europe PMC · Scholar\nPostgreSQL + Alembic · S3-compatible storage · AutoGen loop · mmore privacy mode","fontSize":15}}
+{"type":"rectangle","id":"imp","x":60,"y":768,"width":900,"height":62,"backgroundColor":"#ffd8a8","fillStyle":"solid","strokeColor":"#f59e0b","strokeWidth":1,"roundness":{"type":3},"opacity":60,"label":{"text":"Defaults: self-hosted model · Milvus via mmore · OpenAlex · Europe PMC · arXiv\nPostgreSQL + Alembic · Valkey · Argon2id + passkeys · AES-256-GCM keys · mmore privacy","fontSize":15}}
 ]}
