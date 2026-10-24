@@ -146,11 +146,14 @@ later feature.
 Revised order for V1:
 
 ```text
-[ ] 1. Health endpoint, running locally
-[ ] 2. Provider interfaces defined (all nine)
-[ ] 3. Fake implementations of each, no external services
-[ ] 4. Vocabulary + BooleanQuery domain types, ported from the prototype
+[x] 1. Health endpoint, running locally
+[ ] 2. Provider interfaces defined (all ten)
+[~] 3. Fake implementations of each, no external services
+        done: PaperSearchProvider
+[x] 4. Vocabulary + BooleanQuery domain types
 [ ] 5. One PaperSearchProvider end to end (OpenAlex - open API, no key)
+        the HTTP surface is built and served by the fake; only
+        api/dependencies.py changes to make it live
 [ ] 6. Persistence: Review, PaperRecord, RunManifest
 [ ] 7. Remaining search providers behind the same interface
 [ ] 8. Deduplication and full-text fetch
