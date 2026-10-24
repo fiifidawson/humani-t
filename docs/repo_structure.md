@@ -1,56 +1,52 @@
 # Repository Structure
 
-This is the canonical layout. It supersedes the sketch in
-[`system_overview.md`](./system_overview.md) Part 1, which placed the Python
-backend at `backend/` and omitted `crates/`.
+This is the canonical layout. Folders marked *(planned)* are added by the
+milestone that first needs them; they are listed so new code has an obvious home.
 
 ```text
 humani-t/
 |
 ├── apps/
-│   ├── web/                  # V1 - Vite + React web application
-│   └── desktop/              # V2 - Tauri shell (placeholder until V2)
-│
-├── packages/
-│   ├── ui/                   # shared React components
-│   ├── api-client/           # AppAPI interface + RemoteAPIClient / LocalAPIClient
-│   ├── schemas/              # OpenAPI spec (source of truth) + generated types
-│   └── config/               # shared tsconfig / lint / runtime config
+│   └── web/                  # Vite + React + strict TypeScript SPA (planned)
+│       └── src/
+│           ├── api/          # generated OpenAPI types + typed client
+│           ├── features/     # auth, projects, account, …
+│           └── components/
 │
 ├── services/
 │   └── api/                  # Python backend (FastAPI)
 │       ├── app/
-│       │   ├── api/          # HTTP routes + dependencies
+│       │   ├── main.py       # composition root: app, middleware, routers
+│       │   ├── api/          # HTTP boundary: routes, schemas, dependencies.py
 │       │   ├── application/  # use cases / services
 │       │   ├── domain/       # entities and rules, no I/O
-│       │   ├── infrastructure/
-│       │   ├── inference/    # InferenceProvider + implementations
-│       │   ├── storage/      # StorageProvider + repositories
-│       │   ├── auth/         # authentication / authorization
-│       │   └── agents/       # ToolProvider + tool implementations
+│       │   ├── search/       # PaperSearchProvider + implementations
+│       │   ├── storage/      # StorageProvider + repositories (planned)
+│       │   ├── crypto/       # KeyProvider + envelope encryption (planned)
+│       │   ├── auth/         # hashers, passkeys, TOTP, OIDC (planned)
+│       │   ├── email/        # EmailProvider (planned)
+│       │   ├── ratelimit/    # RateLimiter (planned)
+│       │   ├── net/          # HttpFetcher, SSRF-guarded (planned)
+│       │   └── inference/    # InferenceProvider (planned)
 │       ├── migrations/       # Alembic
 │       ├── tests/
 │       ├── pyproject.toml
 │       └── uv.lock
 │
-├── crates/
-│   └── desktop-core/         # V2 - Rust/Tauri core
-│
 ├── infrastructure/
-│   ├── docker/
-│   ├── render/
-│   └── ci/
+│   ├── docker/               # Dockerfiles and compose support files
+│   ├── caddy/                # Caddyfile (planned)
+│   └── postgres/             # database role setup (planned)
 │
+├── .github/                  # CI workflows, templates, Dependabot (planned)
 ├── docs/
+│   └── adr/                  # architecture decision records
 ├── scripts/
 │
-├── package.json
+├── package.json              # pnpm workspace root: Biome, shared scripts
 ├── pnpm-workspace.yaml
-├── turbo.json
 ├── biome.json
-├── tsconfig.base.json
-├── pyrightconfig.json
-├── .env.example
+├── .gitattributes
 └── .gitignore
 ```
 
@@ -58,20 +54,19 @@ humani-t/
 
 | Directory | Contains | Never contains |
 | --- | --- | --- |
-| `apps/` | deployable applications | business logic |
-| `packages/` | code shared across apps | server-side logic |
+| `apps/` | deployable frontends | business logic, secrets |
 | `services/` | server-side application logic | UI |
-| `crates/` | native/desktop runtime (V2) | application logic |
 | `infrastructure/` | deployment and runtime config | application code |
+| `docs/` | how and why | generated API types |
 
-`apps/web` is a thin composition of `packages/ui` over `packages/api-client`.
-It must remain replaceable by `apps/desktop` without moving any logic.
+`apps/web` talks to the API only through generated types. Every rule — who may
+see a project, what gets masked — lives in `services/api`, because the browser
+is not trusted.
 
-## Notes on deviations from earlier drafts
+## Notes
 
-- `services/api/` replaces the earlier `backend/` location. The empty `backend/`
-  directory from initial setup is removed.
 - `migrations/` lives inside `services/api/`, not at the repository root, so the
-  Python service stays self-contained and can be packaged as a V2 sidecar.
-- `app/auth/` is carried over from `system_overview.md` Part 5; it was absent
-  from the earlier structure sketch.
+  Python service stays self-contained and builds as one image.
+- There are no shared `packages/`. With a single frontend there is nothing to
+  share, and the generated API types live next to the code that uses them. See
+  [ADR-0001](./adr/0001-web-only-self-hosted.md).
