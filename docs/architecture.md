@@ -300,17 +300,65 @@ Without it, raw text would sit in the index and the database:
 - Raw text stays in a separate store, encrypted with the project's data key, and
   has a retention period.
 
-> **OPEN WORK — masking stage design.**
->
-> Questions to settle before building it:
+#### 3.9.1 Masking is derived, reviewable and re-runnable
+
+Detection misses things (brief rule 5), so the design assumes it will be wrong
+and makes every result checkable and correctable. For each document we store:
+
+```text
+raw text      encrypted with the project's data key; never modified
+mask spans    (start, end, entity type, source) over the raw text, where source is
+              a detector and its version ("presidio@2.3") or a user ("user:<id>")
+masked text   raw text with the spans applied; rebuilt whenever the spans change
+```
+
+Masking is a function of the raw text and the spans, never an edit. That gives:
+
+- **Several detectors, combined.** Pattern rules for structured identifiers
+  (medical record, phone and ID numbers), a local NER model (Presidio or GLiNER)
+  for names and places, and mmore's leakage check as a second pass. A span found
+  by any of them is masked: over-masking costs some quality, under-masking leaks.
+- **Re-runs.** When a detector is upgraded, it runs again over the raw text and
+  only new spans are proposed. Spans added by people are kept, because they point
+  into text that never changes.
+- **Project rules.** "Always mask this term in this project" (`MaskingRule`)
+  applies to every current and future document, such as a list of staff names.
+- **A last check on what leaves.** Immediately before any `InferenceProvider`
+  call, the exact outgoing text is scanned again. A hit stops the call: fail
+  closed.
+- **Provenance.** Every span names what produced it, so "why was this masked, and
+  by what?" has an answer.
+
+**Human review before use.** An uploaded document is not indexed and not sent to
+any model until a person approves its masking. A correction made after text
+reached a model cannot be recalled, so the check must come first. The review
+screen:
+
+- shows the extracted text with masked spans highlighted by type;
+- lists the detector's low-confidence spans first, so review is short;
+- lets the reviewer select missed text and mask it as a chosen type, or turn it
+  into a project rule;
+- lets the owner mark a false positive as "not personal". This is audited and
+  never allowed for structured identifiers. Rule 3 means masking itself cannot be
+  switched off for documents; this is a narrow correction, not an off switch;
+- re-masks and re-indexes only the changed document after a correction.
+
+**Who sees raw text.** Only the document's owner, and only in the review screen.
+Reviewers and viewers see masked text. Each view of raw text writes an
+`AuditEvent`. The screen reviews *extracted text*, not the rendered file: text
+visible only in an image (a scanned signature, a photographed ID) is masked only
+if OCR extracted it, and the screen says so.
+
+> **OPEN WORK — still to settle before building the masking stage.**
 >
 > - **What breaks retrieval?** Masked text embeds differently from raw text.
 >   Masking author names and institutions may degrade search over an academic
 >   corpus in ways that matter.
 > - **How broad for published papers?** The corpus is largely public papers with
->   little PII. The real exposure is the user's own inputs and documents.
+>   little PII; the review gate above applies to the user's own documents. Papers
+>   may need only the narrow entity list and no human review.
 > - **Where does it run?** Reuse mmore's detector and sanitiser agents outside
->   the RAG pipeline, or write a standalone stage in the worker.
+>   the RAG pipeline, or write a standalone stage in the isolated worker.
 
 **The HITL gate shapes the API contract.** A gated request pauses until a human
 approves, which a plain request/response cannot express. See §4.4.
@@ -358,6 +406,8 @@ Review          a question, a Vocabulary, and a set of Criteria
   BooleanQuery  generated from the Vocabulary, compiled per source
   PaperRecord   bibliographic metadata + source + dedup identity
   Document      extracted full text, when openly available
+  MaskSpan      a masked range of a Document's raw text: type and source
+  MaskingRule   a project-wide term that is always masked
   Criterion     an inclusion/exclusion rule
   ScreeningDecision  score, priority, rationale, provenance
   Synthesis     agentic output, grounded in Citations
