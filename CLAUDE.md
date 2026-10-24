@@ -8,19 +8,23 @@ material anywhere it should not go.
 This file is loaded into every session. It is kept short on purpose: everything
 here has to earn its place, or it dilutes the things that matter.
 
-Deeper context lives in [`docs/architecture.md`](docs/architecture.md) (the ten
-provider seams, the domain model) and [`docs/dependencies.md`](docs/dependencies.md)
-(build order, upstream projects). Read those before structural work.
+Deeper context lives in [`docs/architecture.md`](docs/architecture.md) (provider
+seams, the domain model, the security model) and
+[`docs/dependencies.md`](docs/dependencies.md) (build order, upstream projects).
+Decisions that are hard to reverse are in [`docs/adr/`](docs/adr/). Read those
+before structural work.
 
 ---
 
 ## The one rule
 
-> Build V1 so the domain, the API contract and the provider abstractions survive
-> when the backend moves from a server to the user's laptop.
+> humani-t is a self-hosted web application. Data leaves the deployment only to
+> destinations the operator has configured, and only after it has been masked.
 
-Before any implementation decision, ask: *will this still make sense running on
-someone's machine with no network?* If not, introduce the abstraction first.
+Before any implementation decision, ask: *does this send anything — a question,
+a document, a log line, a request — somewhere the operator did not choose?* If
+it might, put it behind a provider seam the operator configures, and default it
+to off or to something we can run ourselves.
 
 There is a second test specific to this project:
 
@@ -102,16 +106,20 @@ Target 3.13. Style is enforced by ruff (`E, F, I, UP, B, SIM, RUF`), line length
 
 ### Pydantic belongs at the boundary, nowhere else
 
-`app/api/schemas.py` is the only place Pydantic appears. Untrusted JSON is
-validated into a schema, then converted through `to_domain()` into a plain
-dataclass.
+Pydantic appears in exactly two boundary modules, both reading untrusted input:
+
+- `app/api/schemas` — HTTP. JSON is validated into a schema, then converted
+  through `to_domain()` into a plain dataclass.
+- `app/settings.py` — the environment and secret files. Only the composition
+  root (`main.py`, `api/dependencies.py`, `cli.py`, `worker.py`) imports
+  `Settings`; it hands lower layers frozen domain policy objects instead.
 
 Domain objects validate themselves in `__post_init__` and are valid by
 construction. Pydantic checks *shape*; the domain checks *meaning*. A domain
 `ValueError` becomes a 422 at the boundary, not deeper.
 
-This is not stylistic. It is what lets the same domain serve a different
-transport in V2 without the wire format leaking inward.
+This is not stylistic. It keeps the wire format and the deployment's
+configuration from leaking into the rules the domain enforces.
 
 ---
 
@@ -225,16 +233,21 @@ user-supplied terms.
 
 Biome formats and lints; tabs, double quotes. `pnpm lint`, `pnpm format`.
 
+TypeScript is type-checked as strictly as Python: `strict`,
+`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. `pnpm typecheck` runs
+in pre-commit and CI. No `any`, no `@ts-ignore`; `@ts-expect-error` only with a
+reason.
+
 API types are **generated**, never hand-written:
 
 ```bash
 pnpm exec openapi-typescript http://127.0.0.1:8731/openapi.json \
-  -o packages/schemas/generated/api.ts
+  -o apps/web/src/api/schema.gen.ts
 ```
 
-A backend contract change should break the frontend build, not its runtime.
-`apps/web` composes `packages/ui` over `packages/api-client` and holds no business
-logic — it must stay replaceable by the V2 Tauri shell.
+A backend contract change should break the frontend type check, not its runtime.
+`apps/web` holds no business logic: every rule — who may see a project, what
+gets masked — is enforced by the API, because the browser is not trusted.
 
 ---
 
