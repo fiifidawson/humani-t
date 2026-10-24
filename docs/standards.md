@@ -1,5 +1,13 @@
 # Standards
 
+This file covers **process**: commit messages, git workflow, and where each tool
+lives.
+
+For **code** standards — layering rules, PEP conventions, typing, comments,
+docstrings, naming, error handling and tests — see [`CLAUDE.md`](../CLAUDE.md) at
+the repository root. It is loaded automatically by coding agents, so it is the
+file that actually steers how code gets written here.
+
 ## Commit Messages
 ### Standard format
 ```bash
