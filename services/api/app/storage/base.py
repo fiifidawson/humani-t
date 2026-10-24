@@ -9,13 +9,14 @@ the in-memory version cannot drift from the real one.
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
 from app.domain.accounts import Invitation, PasswordReset, User
 from app.domain.audit import AuditEvent, ChainHead
 from app.domain.encryption import WrappedDataKey
-from app.domain.sessions import Session
+from app.domain.sessions import Session, SessionPolicy
 
 
 class DataKeyRepository(Protocol):
@@ -52,8 +53,10 @@ class AuditRepository(Protocol):
         ...
 
 
-# `add` and `save` take their record positional-only (`/`): implementations may
-# name the parameter as they like, and no caller can come to depend on the name.
+# Writes that a concurrent request could race with are never blind overwrites.
+# They are either conditional (`claim`, `revoke`: "only if still unused") and
+# report whether they won, or version-checked (`UserRepository.save`). Records
+# are passed positional-only (`/`) so implementations may name them freely.
 class UserRepository(Protocol):
     async def get(self, user_id: UUID) -> User | None: ...
 
@@ -61,9 +64,13 @@ class UserRepository(Protocol):
         """`email` must already be normalised (`normalize_email`)."""
         ...
 
-    async def add(self, user: User, /) -> None: ...
+    async def add(self, user: User, /) -> None:
+        """Raise `EmailTakenError` if the email is already registered."""
+        ...
 
-    async def save(self, user: User, /) -> None: ...
+    async def save(self, user: User, /) -> None:
+        """Store `user` if its `version` is current; otherwise raise `ConcurrentUpdateError`."""
+        ...
 
 
 class SessionRepository(Protocol):
@@ -73,10 +80,30 @@ class SessionRepository(Protocol):
 
     async def add(self, session: Session, /) -> None: ...
 
-    async def save(self, session: Session, /) -> None: ...
+    async def touch(self, session_id: UUID, at: datetime) -> None:
+        """Record activity. Never affects a revoked session."""
+        ...
+
+    async def mark_reauthenticated(self, session_id: UUID, at: datetime) -> bool:
+        """False if the session was revoked meanwhile."""
+        ...
+
+    async def revoke(self, session_id: UUID, at: datetime) -> bool:
+        """False if it was already revoked."""
+        ...
+
+    async def revoke_all_for_user(
+        self, user_id: UUID, at: datetime, *, keep: UUID | None = None
+    ) -> int:
+        """Revoke every live session of the user except `keep`, in one operation."""
+        ...
 
     async def list_unrevoked_for_user(self, user_id: UUID) -> list[Session]:
         """Unrevoked sessions, which may still include expired ones."""
+        ...
+
+    async def delete_ended(self, now: datetime, policy: SessionPolicy) -> int:
+        """Delete revoked and expired sessions; return how many."""
         ...
 
 
@@ -85,17 +112,31 @@ class InvitationRepository(Protocol):
 
     async def add(self, invitation: Invitation, /) -> None: ...
 
-    async def save(self, invitation: Invitation, /) -> None: ...
+    async def claim(self, invitation_id: UUID, at: datetime) -> bool:
+        """Mark accepted if still unaccepted; True only for the one caller that won."""
+        ...
+
+    async def delete_spent(self, now: datetime) -> int:
+        """Delete accepted and expired invitations; return how many."""
+        ...
 
 
 class PasswordResetRepository(Protocol):
     async def get_by_token_hash(self, token_hash: bytes) -> PasswordReset | None: ...
 
-    async def list_unused_for_user(self, user_id: UUID) -> list[PasswordReset]: ...
-
     async def add(self, reset: PasswordReset, /) -> None: ...
 
-    async def save(self, reset: PasswordReset, /) -> None: ...
+    async def claim(self, reset_id: UUID, at: datetime) -> bool:
+        """Mark used if still unused; True only for the one caller that won."""
+        ...
+
+    async def cancel_unused_for_user(self, user_id: UUID, at: datetime) -> int:
+        """Mark every unused link of the user as used, so only a newer one works."""
+        ...
+
+    async def delete_spent(self, now: datetime) -> int:
+        """Delete used and expired links; return how many."""
+        ...
 
 
 class UnitOfWork(Protocol):
@@ -128,7 +169,11 @@ class UnitOfWork(Protocol):
 
 class StorageProvider(Protocol):
     def unit_of_work(self) -> AbstractAsyncContextManager[UnitOfWork]:
-        """Open a transaction. Leaving the block without `commit` rolls it back."""
+        """Open a transaction. Leaving the block without `commit` rolls it back.
+
+        Raises `StorageUnavailableError` when no connection is available in time.
+        Keep the block short: it holds a pooled connection for its whole length.
+        """
         ...
 
     async def is_ready(self) -> bool:

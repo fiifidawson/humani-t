@@ -54,6 +54,21 @@ class Settings(BaseSettings):
             "Kept separate so the running app cannot alter or drop tables."
         ),
     )
+    db_pool_size: int = Field(
+        default=10,
+        ge=1,
+        description="Connections per API process. A hard limit: no overflow beyond it.",
+    )
+    db_pool_timeout_seconds: float = Field(
+        default=5,
+        gt=0,
+        description="How long a request waits for a free connection before a 503.",
+    )
+    db_statement_timeout_ms: int = Field(
+        default=15_000,
+        ge=1000,
+        description="Postgres cancels any single statement that runs longer.",
+    )
     key_encryption_keys: SecretStr | None = Field(
         default=None,
         description=(

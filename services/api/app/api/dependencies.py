@@ -57,50 +57,67 @@ class Providers:
     email: EmailProvider
     rate_limiter: RateLimiter
 
+    async def close(self) -> None:
+        """Release every pool and client: once, at shutdown or at the end of a CLI run."""
+        await self.storage.close()
+        await self.rate_limiter.close()
+
+
+def _storage(settings: Settings) -> StorageProvider:
+    if settings.database_url is None:
+        return MemoryStorage()
+    return PostgresStorage.from_url(
+        settings.database_url.get_secret_value(),
+        pool_size=settings.db_pool_size,
+        pool_timeout_seconds=settings.db_pool_timeout_seconds,
+        statement_timeout_ms=settings.db_statement_timeout_ms,
+    )
+
+
+def _key_provider(settings: Settings) -> LocalKeyProvider:
+    if settings.key_encryption_keys is None:
+        # Only reachable with in-memory storage (Settings enforces it): the data
+        # dies with the process, so a key that dies with it loses nothing.
+        return LocalKeyProvider.from_config(f"1:{generate_kek()}")
+    return LocalKeyProvider.from_config(settings.key_encryption_keys.get_secret_value())
+
+
+def _rate_limiter(settings: Settings, clock: Callable[[], datetime]) -> RateLimiter:
+    if settings.valkey_url is None:
+        return MemoryRateLimiter(clock)
+    return ValkeyRateLimiter.from_url(settings.valkey_url.get_secret_value(), clock)
+
+
+def _email(settings: Settings) -> EmailProvider:
+    if settings.smtp_host is None:
+        return RecordingEmailProvider()
+    return SmtpEmailProvider(
+        settings.smtp_host,
+        settings.smtp_port,
+        settings.smtp_sender,
+        username=settings.smtp_username or None,
+        password=settings.smtp_password.get_secret_value() if settings.smtp_password else None,
+        use_starttls=settings.smtp_starttls,
+    )
+
 
 def build_providers(
     settings: Settings,
     *,
     clock: Callable[[], datetime] = _utc_now,
     password_hasher: PasswordHasher | None = None,
+    storage: StorageProvider | None = None,
+    email: EmailProvider | None = None,
 ) -> Providers:
     """THE switch: the one function that turns configuration into implementations.
 
-    `clock` and `password_hasher` exist for tests: a clock they can move, and a
-    hasher that does not spend 64 MiB per sign-in.
+    The keyword arguments exist for tests: a clock they can move, a hasher that
+    does not spend 64 MiB per sign-in, and instrumented storage and email.
     """
-    if settings.database_url is None:
-        storage: StorageProvider = MemoryStorage()
-    else:
-        storage = PostgresStorage.from_url(settings.database_url.get_secret_value())
-
-    if settings.key_encryption_keys is None:
-        # Only reachable with in-memory storage (Settings enforces it): the data
-        # dies with the process, so a key that dies with it loses nothing.
-        keys = LocalKeyProvider.from_config(f"1:{generate_kek()}")
-    else:
-        keys = LocalKeyProvider.from_config(settings.key_encryption_keys.get_secret_value())
-
-    if settings.valkey_url is None:
-        limiter: RateLimiter = MemoryRateLimiter(clock)
-    else:
-        limiter = ValkeyRateLimiter.from_url(settings.valkey_url.get_secret_value(), clock)
-
-    if settings.smtp_host is None:
-        email: EmailProvider = RecordingEmailProvider()
-    else:
-        email = SmtpEmailProvider(
-            settings.smtp_host,
-            settings.smtp_port,
-            settings.smtp_sender,
-            username=settings.smtp_username or None,
-            password=settings.smtp_password.get_secret_value()
-            if settings.smtp_password
-            else None,
-            use_starttls=settings.smtp_starttls,
-        )
-
-    encryption = ScopeEncryption(keys, AesGcmCipher(), clock)
+    storage = storage or _storage(settings)
+    email = email or _email(settings)
+    limiter = _rate_limiter(settings, clock)
+    encryption = ScopeEncryption(_key_provider(settings), AesGcmCipher(), clock)
     audit = AuditLog(encryption, clock)
     return Providers(
         storage=storage,
@@ -108,6 +125,7 @@ def build_providers(
         encryption=encryption,
         audit=audit,
         accounts=AccountService(
+            storage=storage,
             hasher=password_hasher or Argon2PasswordHasher(),
             email=email,
             limiter=limiter,

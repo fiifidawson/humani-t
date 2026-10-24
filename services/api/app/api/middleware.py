@@ -157,3 +157,55 @@ async def _refuse(send: Send, status: int, detail: str) -> None:
         }
     )
     await send({"type": "http.response.body", "body": body})
+
+
+class _BodyTooLargeError(Exception):
+    pass
+
+
+class BodySizeLimitMiddleware:
+    """Refuse request bodies over `max_bytes` without reading them into memory.
+
+    A declared `Content-Length` over the limit is refused before a byte is read.
+    A body without one (chunked) is counted as it streams, and refused as soon as
+    it passes the limit. The reverse proxy enforces a limit too; this one holds
+    when the app is reached some other way.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        declared = dict(scope["headers"]).get(b"content-length")
+        if declared is not None and declared.isdigit() and int(declared) > self.max_bytes:
+            await _refuse(send, 413, "The request body is too large.")
+            return
+
+        received = 0
+        response_started = False
+
+        async def counting_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise _BodyTooLargeError
+            return message
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, counting_receive, tracking_send)
+        except _BodyTooLargeError:
+            if not response_started:
+                await _refuse(send, 413, "The request body is too large.")

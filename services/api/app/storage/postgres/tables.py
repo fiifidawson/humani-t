@@ -75,6 +75,7 @@ users = Table(
     Column("is_admin", Boolean, nullable=False),
     Column("is_disabled", Boolean, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default="0"),
     CheckConstraint("email = lower(email)", name="email_is_normalised"),
 )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response, status
 
-from app.api.dependencies import AccountsDep, StorageDep
+from app.api.dependencies import AccountsDep
 from app.api.schemas.accounts import (
     AcceptedOut,
     CurrentSessionOut,
@@ -18,12 +18,6 @@ from app.api.schemas.accounts import (
     UserOut,
 )
 from app.api.session import CurrentDep, clear_session_cookies, request_id, set_session_cookies
-from app.api.transaction import transaction
-from app.domain.accounts import (
-    CurrentPasswordIncorrectError,
-    InvalidCredentialsError,
-    ThrottledError,
-)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -39,29 +33,23 @@ async def login(
     payload: LoginIn,
     request: Request,
     response: Response,
-    storage: StorageDep,
     accounts: AccountsDep,
 ) -> SignedInOut:
     """Start a session. The same 401 for a wrong password and an unknown account."""
-    async with transaction(storage, commit_on=(InvalidCredentialsError, ThrottledError)) as uow:
-        signed_in = await accounts.login(
-            uow,
-            email=payload.email,
-            password=payload.password,
-            client_ip=_client_ip(request),
-            user_agent=request.headers.get("user-agent"),
-            request_id=request_id(request),
-        )
+    signed_in = await accounts.login(
+        email=payload.email,
+        password=payload.password,
+        client_ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        request_id=request_id(request),
+    )
     set_session_cookies(response, signed_in)
     return SignedInOut(user=UserOut.from_domain(signed_in.user))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="End this session")
-async def logout(
-    request: Request, current: CurrentDep, storage: StorageDep, accounts: AccountsDep
-) -> Response:
-    async with transaction(storage) as uow:
-        await accounts.logout(uow, current, request_id(request))
+async def logout(request: Request, current: CurrentDep, accounts: AccountsDep) -> Response:
+    await accounts.logout(current, request_id(request))
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     clear_session_cookies(response)
     return response
@@ -84,11 +72,9 @@ async def reauthenticate(
     payload: ReauthenticateIn,
     request: Request,
     current: CurrentDep,
-    storage: StorageDep,
     accounts: AccountsDep,
 ) -> None:
-    async with transaction(storage, commit_on=(CurrentPasswordIncorrectError,)) as uow:
-        await accounts.reauthenticate(uow, current, payload.password, request_id(request))
+    await accounts.reauthenticate(current, payload.password, request_id(request))
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, summary="Accept an invitation")
@@ -96,18 +82,15 @@ async def register(
     payload: RegisterIn,
     request: Request,
     response: Response,
-    storage: StorageDep,
     accounts: AccountsDep,
 ) -> SignedInOut:
-    async with transaction(storage) as uow:
-        signed_in = await accounts.register(
-            uow,
-            token=payload.token,
-            password=payload.password,
-            display_name=payload.display_name,
-            user_agent=request.headers.get("user-agent"),
-            request_id=request_id(request),
-        )
+    signed_in = await accounts.register(
+        token=payload.token,
+        password=payload.password,
+        display_name=payload.display_name,
+        user_agent=request.headers.get("user-agent"),
+        request_id=request_id(request),
+    )
     set_session_cookies(response, signed_in)
     return SignedInOut(user=UserOut.from_domain(signed_in.user))
 
@@ -118,11 +101,10 @@ async def register(
     summary="Email a password reset link",
 )
 async def request_password_reset(
-    payload: PasswordResetIn, request: Request, storage: StorageDep, accounts: AccountsDep
+    payload: PasswordResetIn, request: Request, accounts: AccountsDep
 ) -> AcceptedOut:
     """Always 202 with the same body, whether or not the account exists."""
-    async with transaction(storage) as uow:
-        await accounts.request_password_reset(uow, payload.email, request_id(request))
+    await accounts.request_password_reset(payload.email, request_id(request))
     return AcceptedOut()
 
 
@@ -134,10 +116,8 @@ async def request_password_reset(
 async def confirm_password_reset(
     payload: PasswordResetConfirmIn,
     request: Request,
-    storage: StorageDep,
     accounts: AccountsDep,
 ) -> None:
-    async with transaction(storage) as uow:
-        await accounts.confirm_password_reset(
-            uow, payload.token, payload.new_password, request_id(request)
-        )
+    await accounts.confirm_password_reset(
+        token=payload.token, new_password=payload.new_password, request_id=request_id(request)
+    )

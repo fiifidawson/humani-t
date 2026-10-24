@@ -14,6 +14,7 @@ from uuid import UUID
 
 from app.crypto.base import Cipher, KeyProvider
 from app.domain.encryption import EncryptionContext, UnknownScopeError, WrappedDataKey
+from app.domain.errors import ConcurrentUpdateError
 from app.storage.base import UnitOfWork
 
 
@@ -82,9 +83,12 @@ class ScopeEncryption:
             data_key = self._keys.unwrap(
                 record.require_wrapped(), record.kek_version, record.scope_id
             )
-            await uow.data_keys.save(
-                record.rewrapped(self._keys.wrap(data_key, record.scope_id), current)
-            )
+            try:
+                await uow.data_keys.save(
+                    record.rewrapped(self._keys.wrap(data_key, record.scope_id), current)
+                )
+            except ConcurrentUpdateError:
+                continue  # shredded while we were rewrapping: correct to leave it destroyed
             moved += 1
         return moved
 

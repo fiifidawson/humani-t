@@ -17,7 +17,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Response, status
 
-from app.api.dependencies import AccountsDep, StorageDep
+from app.api.dependencies import AccountsDep
 from app.application.accounts import Current, SignedIn
 
 SESSION_COOKIE = "__Host-session"
@@ -58,18 +58,17 @@ def request_id(request: Request) -> str | None:
     return value if isinstance(value, str) else None
 
 
-async def get_current(request: Request, storage: StorageDep, accounts: AccountsDep) -> Current:
+async def get_current(request: Request, accounts: AccountsDep) -> Current:
     """The signed-in caller; 401 if there is none, 403 if a write lacks its CSRF token.
 
     Authentication runs in its own short transaction, so the idle-timeout
-    extension is saved even if the route itself later fails.
+    extension is saved even if the route itself later fails, and no connection
+    is held while the route does its own work.
     """
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in to continue.")
-    async with storage.unit_of_work() as uow:
-        current = await accounts.authenticate(uow, token)
-        await uow.commit()
+    current = await accounts.authenticate(token)
     if current is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in to continue.")
 

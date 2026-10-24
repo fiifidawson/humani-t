@@ -31,6 +31,9 @@ class User:
     created_at: datetime
     is_admin: bool = False
     is_disabled: bool = False
+    # Optimistic locking: storage refuses to save a copy whose version is not
+    # the stored one, so a stale read can never overwrite a newer write.
+    version: int = 0
 
     def __post_init__(self) -> None:
         if self.email != normalize_email(self.email) or "@" not in self.email:

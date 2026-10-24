@@ -2,13 +2,20 @@
 
 Nothing here is a mock: the clock really moves, the hasher really hashes (just
 cheaply), and requests go through the real middleware, routes and storage.
+
+The `Tracking`/`Observing` wrappers add instruments, not behaviour: they record
+how many transactions are open at the moment something slow happens, so tests
+can prove a database connection is never held across hashing or email.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,8 +23,12 @@ from httpx2 import Response
 
 from app.api.dependencies import Providers, build_providers
 from app.auth.fake import FakePasswordHasher
+from app.domain.notifications import EmailMessage
+from app.email.recording import RecordingEmailProvider
 from app.main import create_app
 from app.settings import Environment, Settings
+from app.storage.base import UnitOfWork
+from app.storage.memory import MemoryStorage
 
 ORIGIN = "https://testserver"
 
@@ -41,6 +52,63 @@ class FakeClock:
         self.now += timedelta(**delta)
 
 
+class TrackingStorage:
+    """In-memory storage that counts the transactions open right now."""
+
+    def __init__(self) -> None:
+        self.inner = MemoryStorage()
+        self.open_units = 0
+
+    @property
+    def state(self) -> Any:
+        return self.inner.state
+
+    @asynccontextmanager
+    async def unit_of_work(self) -> AsyncIterator[UnitOfWork]:
+        self.open_units += 1
+        try:
+            async with self.inner.unit_of_work() as uow:
+                yield uow
+        finally:
+            self.open_units -= 1
+
+    async def is_ready(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        return None
+
+
+class ObservingHasher(FakePasswordHasher):
+    """Records how many transactions were open each time it hashed or verified."""
+
+    def __init__(self, storage: TrackingStorage) -> None:
+        super().__init__()
+        self._storage = storage
+        self.open_units_seen: list[int] = []
+
+    def hash(self, password: str) -> str:
+        self.open_units_seen.append(self._storage.open_units)
+        return super().hash(password)
+
+    def verify(self, stored_hash: str, password: str) -> bool:
+        self.open_units_seen.append(self._storage.open_units)
+        return super().verify(stored_hash, password)
+
+
+class ObservingEmail(RecordingEmailProvider):
+    """Records how many transactions were open each time a message was sent."""
+
+    def __init__(self, storage: TrackingStorage) -> None:
+        super().__init__()
+        self._storage = storage
+        self.open_units_seen: list[int] = []
+
+    async def send(self, message: EmailMessage) -> None:
+        self.open_units_seen.append(self._storage.open_units)
+        await super().send(message)
+
+
 @dataclass
 class AuthHarness:
     """One app, its providers, and a browser-like client pointed at it."""
@@ -48,25 +116,23 @@ class AuthHarness:
     app: FastAPI
     providers: Providers
     clock: FakeClock
-    hasher: FakePasswordHasher
+    hasher: ObservingHasher
+    storage: TrackingStorage
+    email: ObservingEmail
 
     def browser(self) -> TestClient:
         """A new client with its own cookie jar — a separate browser."""
         return TestClient(self.app, base_url=ORIGIN, headers={"Origin": ORIGIN})
 
     def create_user(self, email: str, password: str, *, is_admin: bool = False) -> None:
-        async def create() -> None:
-            async with self.providers.storage.unit_of_work() as uow:
-                await self.providers.accounts.create_user(
-                    uow,
-                    email=email,
-                    password=password,
-                    display_name=email.split("@")[0],
-                    is_admin=is_admin,
-                )
-                await uow.commit()
-
-        asyncio.run(create())
+        asyncio.run(
+            self.providers.accounts.create_user(
+                email=email,
+                password=password,
+                display_name=email.split("@")[0],
+                is_admin=is_admin,
+            )
+        )
 
     @property
     def outbox(self) -> list[object]:
@@ -75,12 +141,18 @@ class AuthHarness:
 
 def make_harness(**settings_overrides: object) -> AuthHarness:
     clock = FakeClock()
-    hasher = FakePasswordHasher()
+    storage = TrackingStorage()
+    hasher = ObservingHasher(storage)
+    email = ObservingEmail(storage)
     values: dict[str, object] = {"environment": Environment.TEST, "public_origin": ORIGIN}
     values.update(settings_overrides)
     settings = Settings.model_validate(values)
-    providers = build_providers(settings, clock=clock, password_hasher=hasher)
-    return AuthHarness(create_app(settings, providers=providers), providers, clock, hasher)
+    providers = build_providers(
+        settings, clock=clock, password_hasher=hasher, storage=storage, email=email
+    )
+    return AuthHarness(
+        create_app(settings, providers=providers), providers, clock, hasher, storage, email
+    )
 
 
 def plant_session_cookie(client: TestClient, value: str) -> None:

@@ -10,7 +10,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -21,8 +21,10 @@ from app.application.audit import SYSTEM, AuditLog
 from app.application.encryption import ScopeEncryption
 from app.crypto.aesgcm import AesGcmCipher
 from app.crypto.local_key import LocalKeyProvider
+from app.domain.accounts import EmailTakenError, PasswordReset, User
 from app.domain.audit import AuditEntry, AuditEvent
 from app.domain.encryption import WrappedDataKey
+from app.domain.errors import ConcurrentUpdateError, StorageUnavailableError
 from app.storage.base import StorageProvider
 from app.storage.memory import MemoryStorage
 from app.storage.postgres.storage import PostgresStorage
@@ -60,6 +62,10 @@ async def _truncate(url: str) -> None:
     engine = create_async_engine(url)
     async with engine.begin() as connection:
         await connection.execute(text("DELETE FROM data_keys"))
+        await connection.execute(text("DELETE FROM password_resets"))
+        await connection.execute(text("DELETE FROM sessions"))
+        await connection.execute(text("DELETE FROM invitations"))
+        await connection.execute(text("DELETE FROM users"))
     await engine.dispose()
 
 
@@ -188,3 +194,134 @@ class TestPostgresAuditGuarantees:
                     await connection.execute(text(statement))
         finally:
             await engine.dispose()
+
+
+class TestRaceSafeWrites:
+    """Writes that other requests may race with are conditional, never blind."""
+
+    async def test_a_token_can_be_claimed_only_once(self, storage):
+        user = _user()
+        reset = _reset(user.id)
+        async with storage.unit_of_work() as uow:
+            await uow.users.add(user)
+            await uow.password_resets.add(reset)
+            await uow.commit()
+
+        async with storage.unit_of_work() as uow:
+            first = await uow.password_resets.claim(reset.id, NOW)
+            await uow.commit()
+        async with storage.unit_of_work() as uow:
+            second = await uow.password_resets.claim(reset.id, NOW)
+
+        assert (first, second) == (True, False)
+
+    async def test_a_duplicate_email_is_reported_as_taken_not_as_a_crash(self, storage):
+        async with storage.unit_of_work() as uow:
+            await uow.users.add(_user("dup@example.org"))
+            await uow.commit()
+
+        async with storage.unit_of_work() as uow:
+            with pytest.raises(EmailTakenError):
+                await uow.users.add(_user("dup@example.org"))
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not _DATABASE_URL, reason="TEST_DATABASE_URL not set")
+class TestPostgresConcurrency:
+    async def test_concurrent_claims_of_one_token_have_exactly_one_winner(self):
+        assert _DATABASE_URL is not None
+        postgres = PostgresStorage.from_url(_DATABASE_URL)
+        user = _user()
+        reset = _reset(user.id)
+        try:
+            async with postgres.unit_of_work() as uow:
+                await uow.users.add(user)
+                await uow.password_resets.add(reset)
+                await uow.commit()
+
+            async def claim() -> bool:
+                async with postgres.unit_of_work() as uow:
+                    won = await uow.password_resets.claim(reset.id, NOW)
+                    await asyncio.sleep(0.05)  # hold the row while the other tries
+                    await uow.commit()
+                    return won
+
+            outcomes = await asyncio.gather(claim(), claim())
+        finally:
+            await postgres.close()
+
+        assert sorted(outcomes) == [False, True]
+
+    async def test_stuck_statements_and_idle_transactions_time_out(self):
+        assert _DATABASE_URL is not None
+        postgres = PostgresStorage.from_url(_DATABASE_URL)
+        try:
+            settings = await postgres.server_settings(
+                "statement_timeout", "idle_in_transaction_session_timeout"
+            )
+        finally:
+            await postgres.close()
+
+        assert all(value not in ("0", "") for value in settings.values())
+
+    async def test_the_pool_is_bounded_and_fails_fast(self):
+        assert _DATABASE_URL is not None
+        postgres = PostgresStorage.from_url(_DATABASE_URL, pool_size=2, pool_timeout_seconds=1)
+        try:
+
+            async def hold() -> None:
+                async with postgres.unit_of_work() as uow:
+                    await uow.audit.head()
+                    await asyncio.sleep(2)
+
+            holders = [asyncio.create_task(hold()) for _ in range(2 + 0)]
+            await asyncio.sleep(0.2)
+            with pytest.raises(StorageUnavailableError):
+                async with postgres.unit_of_work() as uow:
+                    await uow.audit.head()
+            await asyncio.gather(*holders)
+        finally:
+            await postgres.close()
+
+
+def _user(email: str | None = None) -> User:
+    return User(
+        id=uuid.uuid4(),
+        email=email or f"{uuid.uuid4().hex[:12]}@example.org",
+        display_name="Test",
+        password_hash="fake$x",
+        created_at=NOW,
+    )
+
+
+def _reset(user_id: uuid.UUID) -> PasswordReset:
+    return PasswordReset(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        token_hash=uuid.uuid4().bytes * 2,
+        created_at=NOW,
+        expires_at=NOW + timedelta(minutes=30),
+    )
+
+
+class TestShreddingIsFinal:
+    async def test_a_stale_copy_cannot_revive_a_destroyed_key(self, storage):
+        """Key rotation reading a key just before a project is shredded must not undo it."""
+        key = _key()
+        async with storage.unit_of_work() as uow:
+            await uow.data_keys.add(key)
+            await uow.commit()
+        async with storage.unit_of_work() as uow:
+            stale = await uow.data_keys.get(key.scope_id)
+            await uow.data_keys.save(key.destroyed(NOW))
+            await uow.commit()
+        assert stale is not None
+
+        async with storage.unit_of_work() as uow:
+            with pytest.raises(ConcurrentUpdateError):
+                await uow.data_keys.save(stale.rewrapped(b"rewrapped", 2))
+
+        async with storage.unit_of_work() as uow:
+            current = await uow.data_keys.get(key.scope_id)
+        assert current is not None
+        assert current.is_destroyed

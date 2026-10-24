@@ -136,7 +136,7 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = [
     "app.api.routes", "app.api.schemas", "app.api.middleware", "app.api.errors",
-    "app.api.session", "app.api.transaction",
+    "app.api.session",
 ]
 forbidden_modules = [
     "app.search.fake",

@@ -29,6 +29,8 @@ from app.domain.accounts import (
     ReauthenticationRequiredError,
     ThrottledError,
 )
+from app.domain.errors import ConcurrentUpdateError, StorageUnavailableError
+from app.domain.notifications import EmailDeliveryError
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
@@ -94,6 +96,27 @@ async def _account_error(_: Request, exc: Exception) -> JSONResponse:
     return response
 
 
+# Seconds a client should wait before retrying when the database is saturated:
+# long enough for a burst to drain, short enough not to feel broken.
+_STORAGE_RETRY_AFTER_SECONDS = 5
+
+
+async def _storage_unavailable(_: Request, exc: Exception) -> JSONResponse:
+    _log.warning("storage_unavailable", reason=str(exc))
+    response = problem(503, "The service is busy. Try again shortly.")
+    response.headers["Retry-After"] = str(_STORAGE_RETRY_AFTER_SECONDS)
+    return response
+
+
+async def _concurrent_update(_: Request, exc: Exception) -> JSONResponse:
+    return problem(409, "The record changed while you were editing it. Reload and try again.")
+
+
+async def _email_delivery(_: Request, exc: Exception) -> JSONResponse:
+    _log.warning("email_delivery_failed", exc_info=exc)
+    return problem(502, "The email could not be sent. The action was saved; try sending again.")
+
+
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     _log.exception("unhandled_error", path=request.url.path, exc_info=exc)
     return problem(500, "An unexpected error occurred. Quote the request id when reporting it.")
@@ -103,4 +126,7 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(AccountError, _account_error)
+    app.add_exception_handler(StorageUnavailableError, _storage_unavailable)
+    app.add_exception_handler(ConcurrentUpdateError, _concurrent_update)
+    app.add_exception_handler(EmailDeliveryError, _email_delivery)
     app.add_exception_handler(Exception, _unhandled)

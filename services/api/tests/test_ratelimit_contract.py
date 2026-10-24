@@ -99,3 +99,24 @@ class TestRateLimiterContract:
         decisions = await asyncio.gather(*(limiter.hit(key, 10, _WINDOW) for _ in range(50)))
 
         assert sum(d.allowed for d in decisions) == 10
+
+
+class TestMemoryLimiterIsBounded:
+    async def test_checking_a_key_does_not_start_tracking_it(self, clock):
+        limiter = MemoryRateLimiter(clock)
+
+        for n in range(100):
+            await limiter.check(f"login:{n}", 5, _WINDOW)
+
+        assert len(limiter) == 0
+
+    async def test_expired_keys_are_forgotten(self, clock):
+        limiter = MemoryRateLimiter(clock)
+        for n in range(5000):
+            await limiter.hit(f"old:{n}", 5, _WINDOW)
+
+        clock.advance(minutes=16)
+        for n in range(5000):
+            await limiter.hit(f"new:{n}", 5, _WINDOW)
+
+        assert len(limiter) <= 5000

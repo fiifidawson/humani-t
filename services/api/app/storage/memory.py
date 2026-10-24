@@ -10,12 +10,15 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
+from datetime import datetime
 from uuid import UUID
 
-from app.domain.accounts import Invitation, PasswordReset, User
+from app.domain.accounts import EmailTakenError, Invitation, PasswordReset, User
 from app.domain.audit import GENESIS, AuditEvent, ChainHead
 from app.domain.encryption import WrappedDataKey
-from app.domain.sessions import Session
+from app.domain.errors import ConcurrentUpdateError
+from app.domain.sessions import Session, SessionPolicy
 
 
 class _MemoryState:
@@ -46,12 +49,6 @@ def _insert[K, V](table: dict[K, V], key: K, value: V, what: str) -> None:
     table[key] = value
 
 
-def _update[K, V](table: dict[K, V], key: K, value: V, what: str) -> None:
-    if key not in table:
-        raise ValueError(f"{what} {key} does not exist")
-    table[key] = value
-
-
 class MemoryDataKeyRepository:
     def __init__(self, state: _MemoryState) -> None:
         self._state = state
@@ -63,7 +60,12 @@ class MemoryDataKeyRepository:
         _insert(self._state.data_keys, key.scope_id, key, "data key for scope")
 
     async def save(self, key: WrappedDataKey) -> None:
-        _update(self._state.data_keys, key.scope_id, key, "data key for scope")
+        stored = self._state.data_keys.get(key.scope_id)
+        if stored is None:
+            raise ValueError(f"data key for scope {key.scope_id} does not exist")
+        if stored.is_destroyed:
+            raise ConcurrentUpdateError(f"data key for scope {key.scope_id} was destroyed")
+        self._state.data_keys[key.scope_id] = key
 
     async def list_live(self) -> list[WrappedDataKey]:
         return [k for k in self._state.data_keys.values() if not k.is_destroyed]
@@ -100,13 +102,18 @@ class MemoryUserRepository:
     async def get_by_email(self, email: str) -> User | None:
         return next((u for u in self._state.users.values() if u.email == email), None)
 
-    async def add(self, user: User) -> None:
+    async def add(self, user: User, /) -> None:
         if await self.get_by_email(user.email) is not None:
-            raise ValueError("a user with this email already exists")
+            raise EmailTakenError("An account with this email already exists.")
         _insert(self._state.users, user.id, user, "user")
 
-    async def save(self, user: User) -> None:
-        _update(self._state.users, user.id, user, "user")
+    async def save(self, user: User, /) -> None:
+        stored = self._state.users.get(user.id)
+        if stored is None:
+            raise ValueError(f"user {user.id} does not exist")
+        if stored.version != user.version:
+            raise ConcurrentUpdateError(f"user {user.id} changed concurrently")
+        self._state.users[user.id] = replace(user, version=user.version + 1)
 
 
 class MemorySessionRepository:
@@ -121,11 +128,39 @@ class MemorySessionRepository:
             (s for s in self._state.sessions.values() if s.token_hash == token_hash), None
         )
 
-    async def add(self, session: Session) -> None:
+    async def add(self, session: Session, /) -> None:
         _insert(self._state.sessions, session.id, session, "session")
 
-    async def save(self, session: Session) -> None:
-        _update(self._state.sessions, session.id, session, "session")
+    def _live(self, session_id: UUID) -> Session | None:
+        session = self._state.sessions.get(session_id)
+        return session if session is not None and session.revoked_at is None else None
+
+    async def touch(self, session_id: UUID, at: datetime) -> None:
+        session = self._live(session_id)
+        if session is not None:
+            self._state.sessions[session_id] = session.touched(at)
+
+    async def mark_reauthenticated(self, session_id: UUID, at: datetime) -> bool:
+        session = self._live(session_id)
+        if session is None:
+            return False
+        self._state.sessions[session_id] = session.reauthenticated(at)
+        return True
+
+    async def revoke(self, session_id: UUID, at: datetime) -> bool:
+        session = self._live(session_id)
+        if session is None:
+            return False
+        self._state.sessions[session_id] = session.revoked(at)
+        return True
+
+    async def revoke_all_for_user(
+        self, user_id: UUID, at: datetime, *, keep: UUID | None = None
+    ) -> int:
+        targets = [s.id for s in await self.list_unrevoked_for_user(user_id) if s.id != keep]
+        for session_id in targets:
+            await self.revoke(session_id, at)
+        return len(targets)
 
     async def list_unrevoked_for_user(self, user_id: UUID) -> list[Session]:
         return [
@@ -133,6 +168,12 @@ class MemorySessionRepository:
             for s in self._state.sessions.values()
             if s.user_id == user_id and s.revoked_at is None
         ]
+
+    async def delete_ended(self, now: datetime, policy: SessionPolicy) -> int:
+        ended = [s.id for s in self._state.sessions.values() if not s.is_active(now, policy)]
+        for session_id in ended:
+            del self._state.sessions[session_id]
+        return len(ended)
 
 
 class MemoryInvitationRepository:
@@ -144,11 +185,21 @@ class MemoryInvitationRepository:
             (i for i in self._state.invitations.values() if i.token_hash == token_hash), None
         )
 
-    async def add(self, invitation: Invitation) -> None:
+    async def add(self, invitation: Invitation, /) -> None:
         _insert(self._state.invitations, invitation.id, invitation, "invitation")
 
-    async def save(self, invitation: Invitation) -> None:
-        _update(self._state.invitations, invitation.id, invitation, "invitation")
+    async def claim(self, invitation_id: UUID, at: datetime) -> bool:
+        invitation = self._state.invitations.get(invitation_id)
+        if invitation is None or invitation.accepted_at is not None:
+            return False
+        self._state.invitations[invitation_id] = invitation.accepted(at)
+        return True
+
+    async def delete_spent(self, now: datetime) -> int:
+        spent = [i.id for i in self._state.invitations.values() if not i.is_usable(now)]
+        for invitation_id in spent:
+            del self._state.invitations[invitation_id]
+        return len(spent)
 
 
 class MemoryPasswordResetRepository:
@@ -161,18 +212,31 @@ class MemoryPasswordResetRepository:
             None,
         )
 
-    async def list_unused_for_user(self, user_id: UUID) -> list[PasswordReset]:
-        return [
-            r
+    async def add(self, reset: PasswordReset, /) -> None:
+        _insert(self._state.password_resets, reset.id, reset, "password reset")
+
+    async def claim(self, reset_id: UUID, at: datetime) -> bool:
+        reset = self._state.password_resets.get(reset_id)
+        if reset is None or reset.used_at is not None:
+            return False
+        self._state.password_resets[reset_id] = reset.used(at)
+        return True
+
+    async def cancel_unused_for_user(self, user_id: UUID, at: datetime) -> int:
+        unused = [
+            r.id
             for r in self._state.password_resets.values()
             if r.user_id == user_id and r.used_at is None
         ]
+        for reset_id in unused:
+            await self.claim(reset_id, at)
+        return len(unused)
 
-    async def add(self, reset: PasswordReset) -> None:
-        _insert(self._state.password_resets, reset.id, reset, "password reset")
-
-    async def save(self, reset: PasswordReset) -> None:
-        _update(self._state.password_resets, reset.id, reset, "password reset")
+    async def delete_spent(self, now: datetime) -> int:
+        spent = [r.id for r in self._state.password_resets.values() if not r.is_usable(now)]
+        for reset_id in spent:
+            del self._state.password_resets[reset_id]
+        return len(spent)
 
 
 class MemoryUnitOfWork:

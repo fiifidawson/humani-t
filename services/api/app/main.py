@@ -15,6 +15,7 @@ from fastapi import APIRouter, FastAPI
 from app.api.dependencies import API_PREFIX, Providers, build_providers
 from app.api.errors import install_error_handlers
 from app.api.middleware import (
+    BodySizeLimitMiddleware,
     CrossSiteRequestMiddleware,
     RequestIdMiddleware,
     SecurityHeadersMiddleware,
@@ -53,6 +54,9 @@ TAGS_METADATA = [
     },
 ]
 
+# JSON bodies in this API are small; uploads will get their own, larger route.
+_MAX_BODY_BYTES = 1024 * 1024
+
 _DOCS_PATHS = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
 
 
@@ -70,8 +74,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
-        await providers.storage.close()
-        await providers.rate_limiter.close()
+        await providers.close()
 
     app = FastAPI(
         title=API_NAME,
@@ -95,6 +98,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     # before anything can log, and security headers wrap even the cross-site
     # refusals, which answer without reaching a route.
     app.add_middleware(CrossSiteRequestMiddleware, public_origin=settings.public_origin)
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=_MAX_BODY_BYTES)
     app.add_middleware(
         SecurityHeadersMiddleware,
         csp_exempt=_DOCS_PATHS if settings.docs_enabled else (),
