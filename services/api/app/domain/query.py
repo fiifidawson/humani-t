@@ -82,7 +82,7 @@ class BooleanQuery:
         NOT for sending to a repository. Providers compile their own dialect —
         if you find yourself passing this to an HTTP client, a seam has leaked.
         """
-        clauses = []
+        clauses: list[str] = []
         for theme in self.themes:
             terms = " OR ".join(f'"{t}"' for t in theme.terms)
             clauses.append(f"({terms})")

@@ -1,0 +1,60 @@
+# Checks that run on `git commit`. Install once with:
+#   cd services/api && uv run pre-commit install
+#
+# CI runs the same tools, so a hook you skip still fails the pull request.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Run through uv so the hook uses the exact versions in uv.lock.
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --directory services/api ruff format
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --directory services/api ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pyright
+        name: pyright
+        entry: uv run --directory services/api pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: import-linter
+        name: import-linter (layering rules)
+        entry: uv run --directory services/api lint-imports
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: uv-lock
+        name: uv.lock is up to date
+        entry: uv lock --check --directory services/api
+        language: system
+        files: ^services/api/(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      - id: biome
+        name: biome
+        entry: pnpm exec biome check --write --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, ts, tsx, json]
