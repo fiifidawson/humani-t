@@ -68,8 +68,8 @@ before.
 | LitLens visualisations | **Rebuild** in `apps/web`. It was local-file analytics; here it is a UI over the API. |
 | Orchestration scripts | **Do not port.** This is what the application layer replaces. |
 
-This is worth recording as **ADR-0001**, because the vocabulary decision in
-particular is hard to reverse once screening results depend on it.
+This is worth recording as an ADR in [`adr/`](./adr/), because the vocabulary
+decision in particular is hard to reverse once screening results depend on it.
 
 ---
 
@@ -84,11 +84,11 @@ loop.
 
 **What we do not take:** mmore's own FastAPI servers. We consume it as a library
 from inside `services/api`, behind our own interfaces. Running mmore's API
-alongside ours would create a second HTTP boundary with its own contract, which
-breaks the single-API-contract rule that makes V2 possible.
+alongside ours would create a second HTTP boundary with its own contract and its
+own authentication, outside the access checks and audit log this one enforces.
 
-**Where it sits:** implementations only, in `app/storage/` and
-`app/infrastructure/`. mmore types must not appear in `domain/` or `application/`.
+**Where it sits:** implementations only, inside the provider packages that wrap
+it (vector store, sanitisation, extraction). mmore types must not appear in `domain/` or `application/`.
 
 **Open risk — the Boolean search branch.** The Boolean paper search we need is on
 a branch that has not been merged upstream. Options, in order of preference:
@@ -129,8 +129,8 @@ That loop is the right shape for evidence synthesis. The framework underneath it
   team's question to a third-party API contradicts the core privacy commitment.
   Every model call goes through `InferenceProvider`, and the default must be one
   we can run ourselves.
-- **Its Next.js + Chakra frontend.** We are on Vite + React in `apps/web`, and the
-  frontend must stay shareable with the V2 Tauri shell.
+- **Its Next.js + Chakra frontend.** We are on Vite + React in `apps/web`: a
+  static SPA served by Caddy, with no server-side rendering to secure.
 - **Tavily web-search fallback**, unless a user explicitly enables it. A silent
   fallback to live web search is undisclosed egress of the user's question.
 
@@ -138,12 +138,15 @@ That loop is the right shape for evidence synthesis. The framework underneath it
 
 ## 4. What this changes in the build order
 
-The checklist in [`system_overview.md`](./system_overview.md) assumes a chat
-application: chat, then conversations, then files, then RAG at step 16, agents at
-17. For this project that order is inverted — retrieval is the product, not a
-later feature.
+Generic plans for AI applications assume a chat product: chat, then
+conversations, then files, then RAG, then agents. For this project that order is
+inverted — retrieval is the product, not a later feature.
 
-Revised order for V1:
+Security is the other inversion. The data is sensitive from the first upload, so
+accounts, sessions, access control, encryption and audit come before any
+feature that stores user data, not at the end.
+
+Build order:
 
 ```text
 [x] 1. Health endpoint, running locally
@@ -154,28 +157,27 @@ Revised order for V1:
 [ ] 5. One PaperSearchProvider end to end (OpenAlex - open API, no key)
         the HTTP surface is built and served by the fake; only
         api/dependencies.py changes to make it live
-[ ] 6. Persistence: Review, PaperRecord, RunManifest
-[ ] 7. Remaining search providers behind the same interface
-[ ] 8. Deduplication and full-text fetch
-[ ] 9. mmore extraction + indexing behind VectorStoreProvider
-[ ] 10. ScreeningProvider with a real model
-[ ] 11. Human review surface - the auditability requirement
-[ ] 12. Agentic synthesis loop (Planner/Retriever/Critic/Writer)
-[ ] 13. SanitizationProvider - mmore privacy mode at query time
-[ ] 14. LitLens-equivalent analytics
-[ ] 15. Auth, export/delete, privacy controls
-[ ] 16. Dockerise, deploy to Render
-[ ] 17. Freeze the API and domain contracts
+[ ] 6. Quality gates, containers, CI (Docker Compose, self-hosted)
+[ ] 7. Security core: accounts, sessions, MFA, projects and roles,
+        envelope encryption, audit log, SSRF-guarded HTTP
+[ ] 8. Persistence: Review, PaperRecord, RunManifest
+[ ] 9. Remaining search providers behind the same interface
+[ ] 10. Deduplication and full-text fetch
+[ ] 11. Masking stage at ingest + SanitizationProvider at query time
+[ ] 12. mmore extraction + indexing behind VectorStoreProvider
+[ ] 13. ScreeningProvider with a real model
+[ ] 14. Human review surface - the auditability requirement
+[ ] 15. Own documents: uploads, malware scan, isolated worker
+[ ] 16. Agentic synthesis loop (Planner/Retriever/Critic/Writer)
+[ ] 17. LitLens-equivalent analytics, exports, PRISMA report
+[ ] 18. Freeze the API and domain contracts
 
-    OPEN - ingest-time sanitisation. Not scheduled. Investigate first
-    whether the real exposure is the corpus or the user's own inputs.
-    See architecture.md 3.10.
+    OPEN - masking stage design. See architecture.md 3.9.
 ```
 
 Step 5 is the first vertical slice worth aiming at. OpenAlex needs no API key, so
 one provider can be proven end to end before any credential or paid service is
 involved.
 
-Steps 2 and 3 stay early for the reason given in
-[`architecture.md`](./architecture.md) §7: fake implementations prove an interface
-is right while it is still free to change.
+Steps 2 and 3 stay early because fake implementations prove an interface is
+right while it is still free to change.
