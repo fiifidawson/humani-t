@@ -82,7 +82,7 @@ Two practical notes from the call I just made: pass `mailto=` on every request �
 
 **What you'll see:** `/docs` now has a search endpoint. Paste a vocabulary, hit Execute, and real papers come back — titles, DOIs, years, open-access flags.
 
-**Then the moment that matters:** change one line in `dependencies.py` to return `FakePaperSearchProvider` instead. Same endpoint, same response shape, no network. Change it back. **That switch is your architecture working** — everything above `search/` is untouched, and it's the same move that turns PostgreSQL into SQLite in V2.
+**Then the moment that matters:** change one line in `dependencies.py` to return `FakePaperSearchProvider` instead. Same endpoint, same response shape, no network. Change it back. **That switch is your architecture working** — everything above `search/` is untouched, and it's the same move that lets every test run against fakes.
 
 **Done when:** you've flipped between fake and real without editing anything outside `dependencies.py`.
 

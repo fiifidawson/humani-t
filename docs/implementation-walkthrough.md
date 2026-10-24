@@ -188,7 +188,7 @@ first, while the temptation is theoretical.
 
 Nothing in this package may import a database, an HTTP client, an LLM SDK, or
 FastAPI. These types are plain Python and must stay that way — they are the only
-part of the system guaranteed to survive the move from a server to a laptop.
+part of the system that can be tested without a database or a network.
 
 Note the absence of Pydantic. Pydantic models belong at the API boundary, where
 untrusted JSON arrives. Down here, a Concept is already valid or it was never
@@ -1114,7 +1114,7 @@ def test_health_returns_ok(client):
 
 
 def test_health_is_versioned(client):
-    """Unversioned paths must not work. V2 will serve the same contract."""
+    """Unversioned paths must not work: clients pin to /api/v1."""
     assert client.get("/health").status_code == 404
 
 
@@ -1175,7 +1175,7 @@ objects are plain dataclasses; the schemas here translate between untrusted
 request bodies and those dataclasses, and back again.
 
 Keeping the translation explicit is what lets the same domain serve a different
-transport in V2 without the wire format leaking inwards.
+transport without the wire format leaking inwards.
 """
 ```
 
@@ -1448,7 +1448,7 @@ class SearchService:
     """Depends on the Protocol, never on a concrete provider.
 
     It cannot tell whether it is talking to an in-memory corpus or to OpenAlex,
-    which is exactly the property that makes the V2 migration a swap.
+    which is exactly the property that lets tests run against the fake.
     """
 
     def __init__(self, provider: PaperSearchProvider) -> None:
@@ -1483,8 +1483,8 @@ sprung a leak — import it here instead.
 """Which concrete implementations the routes get.
 
 This is the seam made operational. Every provider choice in the system is made
-here and nowhere else, so swapping the fake for OpenAlex — or Postgres for
-SQLite in V2 — is an edit to this file alone.
+here and nowhere else, so swapping the fake for OpenAlex — or one LLM provider
+for another — is an edit to this file alone.
 
 If you ever find yourself importing a concrete provider inside a route, the
 architecture has sprung a leak. Import it here instead.
@@ -2055,4 +2055,4 @@ HTTP  ->  domain  ->  provider interface  ->  fake implementation
 
 Five endpoints, 59 tests, and the network switched off. [Session 3]
 (./implementation-plan.md) swaps the fake for OpenAlex without changing anything
-above `search/` — which is the same move that turns PostgreSQL into SQLite in V2.
+above `search/` — which is the same move that lets every test run against fakes.
