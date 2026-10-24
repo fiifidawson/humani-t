@@ -1,13 +1,8 @@
 # Security controls and the tests that prove them
 
-Every control below is enforced in code **and** has a test that fails if the
-control is removed. A control without a test is listed under *Gaps*, not here.
+Every control below is enforced in code **and** has a test that fails if the control is removed. A control without a test is listed under *Gaps*, not here.
 
-References are to the requirements in [`WEB_APP_BRIEF.md`](../WEB_APP_BRIEF.md)
-("brief rule n"), NIST SP 800-63B rev 4, and OWASP ASVS 5.0 **chapters**
-(V3 Web Frontend, V6 Authentication, V7 Session Management, V8 Authorization,
-V11 Cryptography, V13 Configuration, V16 Logging). This is a map of what is
-built, not a claim of ASVS compliance: that needs an independent assessment.
+References are to the requirements in [`WEB_APP_BRIEF.md`](../WEB_APP_BRIEF.md) ("brief rule n"), NIST SP 800-63B rev 4, and OWASP ASVS 5.0 **chapters** (V3 Web Frontend, V6 Authentication, V7 Session Management, V8 Authorization, V11 Cryptography, V13 Configuration, V16 Logging). This is a map of what is built, not a claim of ASVS compliance: that needs an independent assessment.
 
 Test paths are relative to `services/api/tests/`.
 

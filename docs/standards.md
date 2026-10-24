@@ -1,12 +1,8 @@
 # Standards
 
-This file covers **process**: commit messages, git workflow, and where each tool
-lives.
+This file covers **process**: commit messages, git workflow, and where each tool lives.
 
-For **code** standards — layering rules, PEP conventions, typing, comments,
-docstrings, naming, error handling and tests — see [`CLAUDE.md`](../CLAUDE.md) at
-the repository root. It is loaded automatically by coding agents, so it is the
-file that actually steers how code gets written here.
+For **code** standards — layering rules, PEP conventions, typing, comments, docstrings, naming, error handling and tests — see [`CLAUDE.md`](../CLAUDE.md) at the repository root. It is loaded automatically by coding agents, so it is the file that actually steers how code gets written here.
 
 ## Commit Messages
 ### Standard format
@@ -54,14 +50,11 @@ deps         dependency updates
 adr          architecture decision records
 ```
 
-The body (after a blank line) says *why*. A commit that adds a dependency
-says why that dependency, and not an alternative, in the body.
+The body (after a blank line) says *why*. A commit that adds a dependency says why that dependency, and not an alternative, in the body.
 
 ## Git Commands
 
-`main` is the default branch and is always releasable. Work happens on short-lived
-branches named `<type>/<topic>` (`feat/api-foundation`, `docs/web-only`) and
-lands through a pull request. Remote is `origin`.
+`main` is the default branch and is always releasable. Work happens on short-lived branches named `<type>/<topic>` (`feat/api-foundation`, `docs/web-only`) and lands through a pull request. Remote is `origin`.
 
 ### Daily loop
 | Command | What it does |
@@ -83,9 +76,7 @@ lands through a pull request. Remote is `origin`.
 | `git push -u origin feat/inference-provider` | First push of a new branch; sets upstream |
 | `git branch -d feat/inference-provider` | Delete a local branch that has been merged |
 
-`switch` and `restore` are the modern split of the two unrelated jobs `checkout`
-used to do. Older tutorials say `git checkout <branch>` — still valid, but
-`switch` states the intent.
+`switch` and `restore` are the modern split of the two unrelated jobs `checkout` used to do. Older tutorials say `git checkout <branch>` — still valid, but `switch` states the intent.
 
 ### Inspecting before you commit
 | Command | What it does |
@@ -109,8 +100,7 @@ used to do. Older tutorials say `git checkout <branch>` — still valid, but
 | `git revert <sha>` | New commit that undoes an old one | None — safe on pushed history |
 | `git reflog` | Every position HEAD has held, including before a bad reset | None — this is the recovery lifeline |
 
-Rule of thumb: `revert` for anything already pushed, `reset` only for local
-commits nobody else has pulled.
+Rule of thumb: `revert` for anything already pushed, `reset` only for local commits nobody else has pulled.
 
 ### Syncing
 | Command | What it does |

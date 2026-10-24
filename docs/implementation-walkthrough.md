@@ -1,10 +1,8 @@
 # Implementation Walkthrough — Sessions 1 and 2
 
-Every change, in the order a person would make them. Each step says **why**,
-gives the **file** or **command**, and ends with something you can **check**.
+Every change, in the order a person would make them. Each step says **why**, gives the **file** or **command**, and ends with something you can **check**.
 
-Work through it top to bottom. Do not skip the checks — they are how you find
-out that step 7 broke before you have written step 12.
+Work through it top to bottom. Do not skip the checks — they are how you find out that step 7 broke before you have written step 12.
 
 Time: about three hours if you type it, half an hour if you paste it.
 
@@ -12,8 +10,7 @@ Time: about three hours if you type it, half an hour if you paste it.
 
 ## Before you start
 
-You need: `uv` installed, Python 3.13 pinned, and `services/api/pyproject.toml`
-already holding `fastapi` and `uvicorn[standard]`. Confirm:
+You need: `uv` installed, Python 3.13 pinned, and `services/api/pyproject.toml` already holding `fastapi` and `uvicorn[standard]`. Confirm:
 
 ```bash
 cd services/api
@@ -32,9 +29,7 @@ git switch -c feat/api-foundation v1
 
 ## Step 1 — mark `app/` as a package
 
-**Why.** A directory only becomes an importable Python package when it holds an
-`__init__.py`. Without it, `app.main` does not resolve and `uvicorn` cannot find
-your application. The file stays empty — its existence is the whole point.
+**Why.** A directory only becomes an importable Python package when it holds an `__init__.py`. Without it, `app.main` does not resolve and `uvicorn` cannot find your application. The file stays empty — its existence is the whole point.
 
 ```bash
 cd services/api
@@ -43,10 +38,7 @@ touch app/__init__.py        # PowerShell: New-Item -ItemType File app/__init__.
 
 ## Step 2 — the health endpoint
 
-**Why.** The smallest thing that proves the process runs and can answer HTTP.
-It deliberately touches no database and no provider: it answers *is this process
-up*, not *is the whole system healthy*. Conflating those makes deploys hard to
-debug, because a failing dependency then looks like a dead process.
+**Why.** The smallest thing that proves the process runs and can answer HTTP. It deliberately touches no database and no provider: it answers *is this process up*, not *is the whole system healthy*. Conflating those makes deploys hard to debug, because a failing dependency then looks like a dead process.
 
 **File:** `services/api/app/main.py`
 
@@ -111,18 +103,11 @@ app.include_router(v1)
 uv run uvicorn app.main:app --reload --port 8731
 ```
 
-Reading that command: `app.main` is the module, the `:` separates it from
-`app` — the `FastAPI()` object inside. `--reload` watches the directory and
-restarts on save.
+Reading that command: `app.main` is the module, the `:` separates it from `app` — the `FastAPI()` object inside. `--reload` watches the directory and restarts on save.
 
-> **Port note.** 8000 is the obvious choice and it is what most tutorials use.
-> If you are also running `mkdocs serve` for `docs-site/`, it already holds
-> 8000 — and on Windows both processes can bind it without either reporting an
-> error, so uvicorn will claim to be running while your browser shows the docs
-> site. Using 8731 avoids the collision entirely.
+> **Port note.** 8000 is the obvious choice and it is what most tutorials use. If you are also running `mkdocs serve` for `docs-site/`, it already holds 8000 — and on Windows both processes can bind it without either reporting an error, so uvicorn will claim to be running while your browser shows the docs site. Using 8731 avoids the collision entirely.
 
-**Check.** Open <http://127.0.0.1:8731/docs>. You should see a Swagger page with
-one endpoint. Click it, Try it out, Execute:
+**Check.** Open <http://127.0.0.1:8731/docs>. You should see a Swagger page with one endpoint. Click it, Try it out, Execute:
 
 ```bash
 curl http://127.0.0.1:8731/api/v1/health
@@ -131,8 +116,7 @@ curl http://127.0.0.1:8731/api/v1/health
 
 Session 1 is done. Leave the server running; it reloads as you go.
 
-> `main.py` grows a second endpoint in Step 17, and that is the moment it gets
-> split into routers. Doing it now, with one route, would be ceremony.
+> `main.py` grows a second endpoint in Step 17, and that is the moment it gets split into routers. Doing it now, with one route, would be ceremony.
 
 ---
 
@@ -140,11 +124,7 @@ Session 1 is done. Leave the server running; it reloads as you go.
 
 ## Step 4 — install what the tests need
 
-**Why.** Two dev dependencies, both needed before the first test runs.
-`pytest-asyncio` lets pytest await an `async def` test — the provider interface
-is async, so without it every search test is skipped silently. `httpx2` is what
-FastAPI's `TestClient` runs on; with plain `httpx` it still works but emits a
-deprecation warning on every run.
+**Why.** Two dev dependencies, both needed before the first test runs. `pytest-asyncio` lets pytest await an `async def` test — the provider interface is async, so without it every search test is skipped silently. `httpx2` is what FastAPI's `TestClient` runs on; with plain `httpx` it still works but emits a deprecation warning on every run.
 
 ```bash
 uv add --dev pytest-asyncio httpx2
@@ -154,8 +134,7 @@ uv add --dev pytest-asyncio httpx2
 
 **Why.** Three of these settings are load-bearing:
 
-- `pythonpath = ["."]` puts `services/api/` on `sys.path`, so `from app.domain`
-  resolves. Without it every test fails at import.
+- `pythonpath = ["."]` puts `services/api/` on `sys.path`, so `from app.domain` resolves. Without it every test fails at import.
 - `asyncio_mode = "auto"` means async tests need no `@pytest.mark.asyncio`.
 - `--strict-markers` turns a typo'd marker into an error instead of a silent skip.
 
@@ -178,8 +157,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 ## Step 6 — declare what the domain may not do
 
-**Why.** This docstring is a boundary you will be tempted to cross. Write it
-first, while the temptation is theoretical.
+**Why.** This docstring is a boundary you will be tempted to cross. Write it first, while the temptation is theoretical.
 
 **File:** `services/api/app/domain/__init__.py`
 
@@ -198,18 +176,13 @@ constructed.
 
 ## Step 7 — `Vocabulary` and `Concept`
 
-**Why.** The vocabulary is the most valuable artefact in the system — it is what
-makes a search reproducible and the thing reviewers argue about.
+**Why.** The vocabulary is the most valuable artefact in the system — it is what makes a search reproducible and the thing reviewers argue about.
 
 Three decisions are encoded here:
 
-- **Immutability.** `revise()` returns version N+1; the original is untouched.
-  Results reference the version that produced them, so in-place edits would
-  destroy reproducibility silently.
-- **`origin` is stored, never inferred.** A reviewer must be able to tell whether
-  a term came from a model or a person.
-- **`terms` puts the canonical spelling first** and drops case-insensitive
-  duplicates, so a compiled query reads the way the author wrote it.
+- **Immutability.** `revise()` returns version N+1; the original is untouched. Results reference the version that produced them, so in-place edits would destroy reproducibility silently.
+- **`origin` is stored, never inferred.** A reviewer must be able to tell whether a term came from a model or a person.
+- **`terms` puts the canonical spelling first** and drops case-insensitive duplicates, so a compiled query reads the way the author wrote it.
 
 **File:** `services/api/app/domain/vocabulary.py`
 
@@ -343,9 +316,7 @@ class Vocabulary:
 
 ## Step 8 — `BooleanQuery` and the compiler
 
-**Why.** A `BooleanQuery` is **not a string**. Four repositories have four
-syntaxes, four escaping rules and four sets of field names. Keeping the structure
-is what lets one search run against all of them and stay reproducible.
+**Why.** A `BooleanQuery` is **not a string**. Four repositories have four syntaxes, four escaping rules and four sets of field names. Keeping the structure is what lets one search run against all of them and stay reproducible.
 
 The shape follows systematic-review practice:
 
@@ -355,9 +326,7 @@ concepts in a theme ->  OR'd together
 themes              ->  AND'd together
 ```
 
-`compile_vocabulary` is pure and total: same vocabulary, same query, no model
-consulted. That is what makes a user-supplied vocabulary strict **by
-construction** rather than by everyone remembering to be careful.
+`compile_vocabulary` is pure and total: same vocabulary, same query, no model consulted. That is what makes a user-supplied vocabulary strict **by construction** rather than by everyone remembering to be careful.
 
 **File:** `services/api/app/domain/query.py`
 
@@ -481,15 +450,9 @@ def compile_vocabulary(vocabulary: Vocabulary) -> BooleanQuery:
 
 ## Step 9 — `PaperRecord` and identity
 
-**Why.** The hard part is identity. Four sources will return the same paper with
-different ids, different capitalisation and sometimes a different year. If they
-do not collapse into one record, every count downstream is wrong.
+**Why.** The hard part is identity. Four sources will return the same paper with different ids, different capitalisation and sometimes a different year. If they do not collapse into one record, every count downstream is wrong.
 
-DOI wins when present — it is the only globally unique identifier available.
-Otherwise normalised title plus year, which is imperfect: a preprint and its
-published version differ in year and will not merge. That is deliberate. Fuzzy
-matching would hide wrong merges, and a wrong merge is far harder to notice than
-a missed one.
+DOI wins when present — it is the only globally unique identifier available. Otherwise normalised title plus year, which is imperfect: a preprint and its published version differ in year and will not merge. That is deliberate. Fuzzy matching would hide wrong merges, and a wrong merge is far harder to notice than a missed one.
 
 **File:** `services/api/app/domain/paper.py`
 
@@ -600,14 +563,9 @@ above this package.
 
 ## Step 11 — the `PaperSearchProvider` Protocol
 
-**Why.** The most important interface in the system: everything downstream
-inherits the provenance it establishes.
+**Why.** The most important interface in the system: everything downstream inherits the provenance it establishes.
 
-A `Protocol`, not an abstract base class. Implementations inherit from nothing,
-so a provider can be written, tested and swapped without importing this module at
-runtime — conformance is checked by shape. `fetch_fulltext` returning `None` is a
-normal outcome, not an error: much of the corpus is metadata-only and screening
-has to cope with abstracts alone.
+A `Protocol`, not an abstract base class. Implementations inherit from nothing, so a provider can be written, tested and swapped without importing this module at runtime — conformance is checked by shape. `fetch_fulltext` returning `None` is a normal outcome, not an error: much of the corpus is metadata-only and screening has to cope with abstracts alone.
 
 **File:** `services/api/app/search/base.py`
 
@@ -667,15 +625,9 @@ class PaperSearchProvider(Protocol):
 
 ## Step 12 — the fake provider
 
-**Why.** This exists to prove the interface is right before any real source is
-involved. **If the fake is awkward to write, the interface is wrong** — and
-finding that out here costs nothing.
+**Why.** This exists to prove the interface is right before any real source is involved. **If the fake is awkward to write, the interface is wrong** — and finding that out here costs nothing.
 
-It evaluates the query for real rather than returning a fixed list. The four-paper
-corpus is built so that AND-across-themes actually discriminates: `fake-003`
-matches *chatbot* only, `fake-004` matches *humanitarian* only, and a correct
-implementation must exclude both. A fake returning three hardcoded records would
-make every test pass without proving anything.
+It evaluates the query for real rather than returning a fixed list. The four-paper corpus is built so that AND-across-themes actually discriminates: `fake-003` matches *chatbot* only, `fake-004` matches *humanitarian* only, and a correct implementation must exclude both. A fake returning three hardcoded records would make every test pass without proving anything.
 
 **File:** `services/api/app/search/fake.py`
 
@@ -796,10 +748,7 @@ class FakePaperSearchProvider:
 
 **File:** `services/api/tests/test_domain.py`
 
-The one to read closely is `test_strict_vocabulary_gains_no_terms`. It asserts
-the compiled term set equals the supplied term set **exactly**. When LLM
-expansion is added later, that test is what stops it reaching user-supplied
-terms. Strict mode as an executable property, not a comment.
+The one to read closely is `test_strict_vocabulary_gains_no_terms`. It asserts the compiled term set equals the supplied term set **exactly**. When LLM expansion is added later, that test is what stops it reaching user-supplied terms. Strict mode as an executable property, not a comment.
 
 ```python
 """Domain rules: vocabulary immutability, query compilation, paper identity."""
@@ -976,8 +925,7 @@ class TestDeduplicate:
 
 **File:** `services/api/tests/test_search.py`
 
-`test_fake_satisfies_the_protocol_without_inheriting_it` is the one that proves
-the seam: `isinstance` passes against a Protocol the class never inherited from.
+`test_fake_satisfies_the_protocol_without_inheriting_it` is the one that proves the seam: `isinstance` passes against a Protocol the class never inherited from.
 
 ```python
 """The PaperSearchProvider seam, exercised through the fake."""
@@ -1154,16 +1102,11 @@ Expected: `All checks passed!`
 
 # Session 2b — put the seam on the wire
 
-One endpoint does not demo well, and a seam nobody can see is hard to argue
-about. These five steps expose the domain and the provider over HTTP — still
-backed by the fake, so nothing reaches the network.
+One endpoint does not demo well, and a seam nobody can see is hard to argue about. These five steps expose the domain and the provider over HTTP — still backed by the fake, so nothing reaches the network.
 
 ## Step 17 — the API package boundary
 
-**Why.** Pydantic lives here and nowhere deeper. Untrusted JSON is validated
-into these models, then converted into domain dataclasses that are valid by
-construction. Writing the boundary down is what stops the wire format leaking
-inward.
+**Why.** Pydantic lives here and nowhere deeper. Untrusted JSON is validated into these models, then converted into domain dataclasses that are valid by construction. Writing the boundary down is what stops the wire format leaking inward.
 
 **File:** `services/api/app/api/__init__.py`
 
@@ -1181,10 +1124,7 @@ transport without the wire format leaking inwards.
 
 ## Step 18 — request and response schemas
 
-**Why.** Each schema carries a `to_domain()` or `from_domain()` so translation
-happens in one place. `EXAMPLE_VOCABULARY` is attached via `json_schema_extra`,
-which makes Swagger prefill a body that actually works — the difference between
-a demo someone can click and one they have to be talked through.
+**Why.** Each schema carries a `to_domain()` or `from_domain()` so translation happens in one place. `EXAMPLE_VOCABULARY` is attached via `json_schema_extra`, which makes Swagger prefill a body that actually works — the difference between a demo someone can click and one they have to be talked through.
 
 **File:** `services/api/app/api/schemas.py`
 
@@ -1396,13 +1336,9 @@ class InfoOut(BaseModel):
 
 ## Step 19 — the application service
 
-**Why.** Routes should not orchestrate. `SearchService` compiles the vocabulary,
-calls the provider and binds the results to the query that produced them. It
-depends on the Protocol, so it cannot tell an in-memory corpus from OpenAlex.
+**Why.** Routes should not orchestrate. `SearchService` compiles the vocabulary, calls the provider and binds the results to the query that produced them. It depends on the Protocol, so it cannot tell an in-memory corpus from OpenAlex.
 
-The `deduplicate` call is near-pointless with one source. It is there because
-the moment a second provider is added this becomes the merge point, and a
-missing dedup step is invisible until the counts are already wrong.
+The `deduplicate` call is near-pointless with one source. It is there because the moment a second provider is added this becomes the merge point, and a missing dedup step is invisible until the counts are already wrong.
 
 **Files:** `services/api/app/application/__init__.py` and `search_service.py`
 
@@ -1470,12 +1406,9 @@ class SearchService:
 
 ## Step 20 — the injection point
 
-**Why.** This is the seam made operational, and the most important file in the
-session. Every provider choice is made here. Session 3 changes one `return`
-statement and nothing above it moves.
+**Why.** This is the seam made operational, and the most important file in the session. Every provider choice is made here. Session 3 changes one `return` statement and nothing above it moves.
 
-If you ever import a concrete provider inside a route, the architecture has
-sprung a leak — import it here instead.
+If you ever import a concrete provider inside a route, the architecture has sprung a leak — import it here instead.
 
 **File:** `services/api/app/api/dependencies.py`
 
@@ -1532,13 +1465,9 @@ SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 
 ## Step 21 — the routes
 
-**Why.** Now there is a second endpoint, `main.py` is genuinely crowded, so
-`APIRouter` earns its place. Three modules, one per tag, which is also how
-Swagger groups them.
+**Why.** Now there is a second endpoint, `main.py` is genuinely crowded, so `APIRouter` earns its place. Three modules, one per tag, which is also how Swagger groups them.
 
-`/info` is worth the ten lines: the whole design rests on implementations being
-swappable, and this makes the current choice visible rather than buried in a
-config file.
+`/info` is worth the ten lines: the whole design rests on implementations being swappable, and this makes the current choice visible rather than buried in a config file.
 
 **File:** `services/api/app/api/routes/__init__.py`
 
@@ -1713,9 +1642,7 @@ async def search(payload: SearchIn, service: SearchServiceDep) -> SearchOut:
 
 ## Step 22 — rewrite main.py to assemble routers
 
-**Why.** The composition root now only wires URLs. `TAGS_METADATA` and the
-description are not decoration — they are what makes `/docs` readable to someone
-who has not seen the codebase.
+**Why.** The composition root now only wires URLs. `TAGS_METADATA` and the description are not decoration — they are what makes `/docs` readable to someone who has not seen the codebase.
 
 **File:** `services/api/app/main.py`
 
@@ -1778,9 +1705,7 @@ app.include_router(v1)
 
 **File:** `services/api/tests/test_api.py`
 
-`TestProviderSwap` is the one that matters. FastAPI's `dependency_overrides`
-replaces the provider; the endpoint returns different data; the route, service,
-schemas and domain are untouched. That is the architectural claim, executable.
+`TestProviderSwap` is the one that matters. FastAPI's `dependency_overrides` replaces the provider; the endpoint returns different data; the route, service, schemas and domain are untouched. That is the architectural claim, executable.
 
 ```python
 """The HTTP boundary: compilation, search, and the provider switch."""
@@ -1991,8 +1916,7 @@ curl -X POST http://127.0.0.1:8731/api/v1/search \
        {"term":"humanitarian","theme":"setting"}]}'
 ```
 
-**Check.** `/docs` now shows five endpoints in three groups, and Try it out on
-`/api/v1/search` returns two papers without you typing a body.
+**Check.** `/docs` now shows five endpoints in three groups, and Try it out on `/api/v1/search` returns two papers without you typing a body.
 
 ---
 
@@ -2029,21 +1953,13 @@ git commit -m "test(api): cover the HTTP boundary and the provider swap"
 
 Written into the steps above already, but worth knowing why:
 
-**`(str, Enum)` should be `StrEnum`.** I wrote `class VocabularyOrigin(str, Enum)`,
-which is the pre-3.11 idiom. Ruff's `UP042` flagged it. `StrEnum` has been
-available since Python 3.11 and does the same job without the double inheritance.
+**`(str, Enum)` should be `StrEnum`.** I wrote `class VocabularyOrigin(str, Enum)`, which is the pre-3.11 idiom. Ruff's `UP042` flagged it. `StrEnum` has been available since Python 3.11 and does the same job without the double inheritance.
 
-**`httpx` should be `httpx2`.** I added `httpx` for `TestClient` and every test
-run printed a starlette deprecation warning. The `TestClient` now expects
-`httpx2`. Swapping it cleared the warning and cut the run from 4.94s to 0.52s,
-which was the compatibility shim being slow.
+**`httpx` should be `httpx2`.** I added `httpx` for `TestClient` and every test run printed a starlette deprecation warning. The `TestClient` now expects `httpx2`. Swapping it cleared the warning and cut the run from 4.94s to 0.52s, which was the compatibility shim being slow.
 
-**`HTTP_422_UNPROCESSABLE_ENTITY` should be `HTTP_422_UNPROCESSABLE_CONTENT`.**
-Starlette renamed it to match the current HTTP spec, where 422 is
-'Unprocessable Content'. The old name still works and warns.
+**`HTTP_422_UNPROCESSABLE_ENTITY` should be `HTTP_422_UNPROCESSABLE_CONTENT`.** Starlette renamed it to match the current HTTP spec, where 422 is 'Unprocessable Content'. The old name still works and warns.
 
-All three were caught by tooling rather than by reading. That is the argument for
-installing ruff on day one instead of day thirty.
+All three were caught by tooling rather than by reading. That is the argument for installing ruff on day one instead of day thirty.
 
 ---
 
@@ -2053,6 +1969,4 @@ installing ruff on day one instead of day thirty.
 HTTP  ->  domain  ->  provider interface  ->  fake implementation
 ```
 
-Five endpoints, 59 tests, and the network switched off. [Session 3]
-(./implementation-plan.md) swaps the fake for OpenAlex without changing anything
-above `search/` — which is the same move that lets every test run against fakes.
+Five endpoints, 59 tests, and the network switched off. [Session 3] (./implementation-plan.md) swaps the fake for OpenAlex without changing anything above `search/` — which is the same move that lets every test run against fakes.

@@ -1,7 +1,6 @@
 # Repository Structure
 
-This is the canonical layout. Folders marked *(planned)* are added by the
-milestone that first needs them; they are listed so new code has an obvious home.
+This is the canonical layout. Folders marked *(planned)* are added by the milestone that first needs them; they are listed so new code has an obvious home.
 
 ```text
 humani-t/
@@ -59,14 +58,9 @@ humani-t/
 | `infrastructure/` | deployment and runtime config | application code |
 | `docs/` | how and why | generated API types |
 
-`apps/web` talks to the API only through generated types. Every rule — who may
-see a project, what gets masked — lives in `services/api`, because the browser
-is not trusted.
+`apps/web` talks to the API only through generated types. Every rule — who may see a project, what gets masked — lives in `services/api`, because the browser is not trusted.
 
 ## Notes
 
-- `migrations/` lives inside `services/api/`, not at the repository root, so the
-  Python service stays self-contained and builds as one image.
-- There are no shared `packages/`. With a single frontend there is nothing to
-  share, and the generated API types live next to the code that uses them. See
-  [ADR-0001](./adr/0001-web-only-self-hosted.md).
+- `migrations/` lives inside `services/api/`, not at the repository root, so the Python service stays self-contained and builds as one image.
+- There are no shared `packages/`. With a single frontend there is nothing to share, and the generated API types live next to the code that uses them. See [ADR-0001](./adr/0001-web-only-self-hosted.md).
