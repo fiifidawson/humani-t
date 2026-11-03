@@ -5,7 +5,7 @@ Files live in [`diagrams/`](./diagrams/). Open a `.excalidraw` file with the Exc
 | Diagram | File |
 | --- | --- |
 | System architecture — layers, the provider seams, default implementations | [`diagrams/01-system-architecture.excalidraw`](./diagrams/01-system-architecture.excalidraw) |
-| Review pipeline — question to cited synthesis, including the vocabulary branch | [`diagrams/02-review-pipeline.excalidraw`](./diagrams/02-review-pipeline.excalidraw) |
+| Review pipeline — question to cited decision brief, including the vocabulary branch | [`diagrams/02-review-pipeline.excalidraw`](./diagrams/02-review-pipeline.excalidraw) |
 
 ## Editing
 

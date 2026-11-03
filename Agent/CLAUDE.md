@@ -166,7 +166,7 @@ Skip docstrings on obvious properties and private helpers. `def is_frozen(self)`
 - Reveal intent: `deduplicate`, not `process`. `vocabulary_version`, not `ver`.
 - No abbreviations except `id`, `db`, `api`, `url`, `doi`.
 - Booleans read as assertions: `is_strict`, `is_open_access`, `makes_network_calls`.
-- Domain vocabulary is fixed — `Review`, `Vocabulary`, `Concept`, `BooleanQuery`, `PaperRecord`, `ScreeningDecision`, `Synthesis`, `RunManifest`. Do not invent synonyms for these; if a new concept is needed, add it to `docs/architecture.md` first.
+- Domain vocabulary is fixed — `Review`, `Vocabulary`, `Concept`, `BooleanQuery`, `PaperRecord`, `ScreeningDecision`, `DecisionBrief`, `RunManifest`. Do not invent synonyms for these; if a new concept is needed, add it to `docs/architecture.md` first.
 - Private module members take a leading underscore.
 
 ---

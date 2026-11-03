@@ -121,7 +121,7 @@ class UnitOfWork(Protocol):
     vocabularies: VocabularyRepository
     papers: PaperRecordRepository
     screenings: ScreeningDecisionRepository
-    syntheses: SynthesisRepository
+    briefs: DecisionBriefRepository
     runs: RunManifestRepository
     async def commit(self) -> None: ...
     async def rollback(self) -> None: ...
@@ -334,10 +334,24 @@ Review          a question, a Vocabulary, and a set of Criteria
   MaskingRule   a project-wide term that is always masked
   Criterion     an inclusion/exclusion rule
   ScreeningDecision  score, priority, rationale, provenance
-  Synthesis     agentic output, grounded in Citations
-  Citation      a claim bound to a PaperRecord
+  DecisionBrief the agent loop's output for one run: options, trade-offs,
+                conflicts, considerations, gaps; one version per run
+    Claim       a statement in the brief, marked evidence or hypothesis
+    Citation    a Claim bound to a passage of a PaperRecord or Document
+  AgentStep     one step of the loop that wrote a brief; together, its trace
   RunManifest   everything needed to reproduce or diff a run
 ```
+
+**The decision brief** is how humani-t presents its evidence synthesis. It compares the options a decision-maker faces instead of summarising the literature. Its fields follow the CHITCHAT prototype (`src/chitchat/agents/schemas.py`):
+
+- **Options:** 2 to 4. Each has benefits and risks as Claims, and an evidence strength: `strong`, `moderate`, `weak` or `insufficient`.
+- **Trade-offs:** one row per criterion, with one assessment per option. The relevant humanitarian principles are always among the criteria.
+- **Conflicts:** where sources disagree, typed as `hierarchy` (stronger vs weaker designs), `context` (different settings) or `noise` (small, old or unclear studies).
+- **Considerations:** "if this matters most, prefer that option, because …".
+- **Gaps:** what the evidence doesn't cover.
+- **Bottom line** (2 or 3 sentences), a fixed caveat, the model, the rounds and why the loop stopped.
+
+Claims are either `evidence`, citing passages the loop retrieved, or `hypothesis`, the model's reasoning with no citation. Code, not the model, checks that every cited passage was retrieved. A brief never names a winning option. [UI_UX_SPEC.md](UI_UX_SPEC.md) §6.9 specifies how it is shown.
 
 `RunManifest` is what makes reproducibility real. It records the vocabulary version, compiled queries, sources queried, model ids, prompt versions and timestamps. Two runs are comparable only if both recorded one.
 
@@ -371,15 +385,28 @@ Three rules follow:
 
 Two flows pause partway through for a human: vocabulary confirmation (§4.3) and the privacy HITL gate (§3.9). Neither fits request/response, and both must be in the API contract before it is frozen.
 
-The shape:
+A run is a background job. The browser follows it on one Server-Sent Events stream, and a gate is an event on that stream:
 
 ```text
-POST /api/v1/reviews/{id}/synthesis      -> SSE stream
-    event: progress
-    event: gate_required   { gate_id, kind, payload }   <- stream pauses
+POST /api/v1/reviews/{id}/runs           { stages }  -> 202 { run_id }
+GET  /api/v1/runs/{run_id}/events        -> SSE stream
+    event: stage.started    { stage, position, total, at }
+    event: stage.progress   { stage, done, total, item }
+    event: stage.finished   { stage, seconds, summary }
+    event: agent.step       { round, role, status, ... }       one AgentStep
+    event: gate.required    { gate_id, kind, payload }         <- run pauses
+    event: gate.resolved    { gate_id, by, decision }          -> run resumes
+    event: job.finished     { outcome, seconds, error }
 POST /api/v1/gates/{gate_id}             { decision, revisions }
-    -> original stream resumes
+POST /api/v1/runs/{run_id}/cancel
 ```
+
+- **Event names** follow the CHITCHAT prototype (`WEB_APP_REFERENCE.md` §2), plus the two gate events. [UI_UX_SPEC.md](UI_UX_SPEC.md) §11.2 says what the interface does with each.
+- **Gate kinds:** `vocabulary` (§4.3) and `privacy_review` (§3.9.1). Only a member whose role allows the action can resolve a gate. Resolving it emits `gate.resolved` to every open stream for that run, so other tabs and other members see it.
+- **`agent.step`** carries the fields of one trace step: `round` (0 for the Planner), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), and per role the seconds, token usage, output, error, queries and passage counts, or the checks' problems.
+- **`job.finished` outcome:** `done`, `failed` or `cancelled`. A failure keeps finished stages, and `error` is a plain-language message, never raw text.
+- **Reconnecting:** every event has an `id`. A browser that reconnects sends `Last-Event-ID`, and the server replays what it missed. The stream doesn't end when the browser disconnects, and a run doesn't stop when no one is watching.
+- **Access:** the stream is checked against the run's project membership like any other request. Events carry counts, labels and masked text only.
 
 Retrofitting a pause into a synchronous endpoint is a breaking change. Designing for it now costs nothing.
 

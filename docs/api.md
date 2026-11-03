@@ -259,7 +259,7 @@ Deliberately absent, in build order:
 
 - **Persistence of reviews** — only encryption keys are stored so far
 - **Real sources** — arXiv, OpenAlex, Europe PMC, Google Scholar
-- **Screening, synthesis, the privacy gate**
+- **Screening, the decision brief, the privacy gate**
 - **Multi-factor authentication** — passkeys, TOTP and recovery codes (next)
 - **Projects and roles** — owner, reviewer, viewer
 

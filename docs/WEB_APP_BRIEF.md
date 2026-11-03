@@ -2,6 +2,8 @@
 
 This brief describes what CHITCHAT does today, as a command-line pipeline, so it can be rebuilt as a secure web app. It covers the workflow, the data, and the security rules the web app must keep. For full detail see [PIPELINE.md](PIPELINE.md).
 
+The web interface, including the decision brief that CHITCHAT now produces at the end of a run, is specified in [UI_UX_SPEC.md](UI_UX_SPEC.md).
+
 ## What it does
 
 A researcher asks a research question. CHITCHAT finds relevant papers, adds the researcher's own documents, removes personal data, screens the papers against review criteria with an LLM, produces a dataset and a PRISMA report, and answers follow-up questions with cited sources.

@@ -92,6 +92,8 @@ Writer     synthesises with citations
 
 That loop is the right shape for evidence synthesis. The framework underneath it, `autogen-agentchat`, is on PyPI and can be added directly.
 
+The CHITCHAT prototype has since rebuilt the loop in plain Python, and that version is the one to follow. Its Critic reviews the Writer's draft rather than only the retrieval; every agent returns a schema through structured output; code checks the citations; and the output is a `DecisionBrief` ([architecture.md](architecture.md) §4.2) rather than free text.
+
 **Explicitly rejected:**
 
 - **Its OpenAI default.** AMMORE defaults to `gpt-4o-mini`. Sending a humanitarian team's question to a third-party API contradicts the core privacy commitment. Every model call goes through `InferenceProvider`, and the default must be one we can run ourselves.
@@ -128,7 +130,7 @@ Build order:
 [ ] 13. ScreeningProvider with a real model
 [ ] 14. Human review surface - the auditability requirement
 [ ] 15. Own documents: uploads, malware scan, isolated worker
-[ ] 16. Agentic synthesis loop (Planner/Retriever/Critic/Writer)
+[ ] 16. Agentic loop for the decision brief (Planner/Retriever/Writer/Critic)
 [ ] 17. LitLens-equivalent analytics, exports, PRISMA report
 [ ] 18. Freeze the API and domain contracts
 

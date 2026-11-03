@@ -37,6 +37,7 @@ uv run ruff check . && uv run ruff format --check .
 | [`CLAUDE.md`](CLAUDE.md) | Code standards and the working agreement |
 | [`docs/architecture.md`](docs/architecture.md) | Layers, provider seams, domain model, security model |
 | [`docs/api.md`](docs/api.md) | HTTP API reference |
+| [`docs/UI_UX_SPEC.md`](docs/UI_UX_SPEC.md) | The web interface: layout, chat, decision brief, history, design system |
 | [`docs/standards.md`](docs/standards.md) | Commit messages and git workflow |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
 
