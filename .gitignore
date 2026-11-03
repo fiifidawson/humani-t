@@ -2,10 +2,8 @@
 # humani-t
 #
 # Layout this file covers:
-#   apps/        Vite + React (web), Tauri (desktop, V2)
-#   packages/    shared TS packages
+#   apps/        Vite + React (web)
 #   services/api Python + uv + FastAPI
-#   crates/      Rust (V2)
 #
 # Note: patterns are intentionally NOT anchored with a leading slash, so they
 # match at every depth of the monorepo (e.g. apps/web/node_modules).
@@ -18,6 +16,8 @@
 *.pem
 *.key
 secrets.json
+# Docker secret files written by scripts/dev_secrets.py
+secrets/
 
 # --- Node / pnpm ------------------------------------------------------------
 node_modules/
@@ -31,7 +31,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Lockfiles are committed on purpose. Do not ignore:
-#   pnpm-lock.yaml, services/api/uv.lock, Cargo.lock
+#   pnpm-lock.yaml, services/api/uv.lock
 
 # --- Build output -----------------------------------------------------------
 dist/
@@ -67,15 +67,11 @@ venv/
 .coverage.*
 htmlcov/
 
-# --- Databases (V2 local-first uses SQLite) ---------------------------------
+# --- Local database files (never commit data) -------------------------------
 *.db
 *.sqlite
 *.sqlite3
 *.db-journal
-
-# --- Rust / Tauri (V2) ------------------------------------------------------
-target/
-**/gen/schemas/
 
 # --- Editors and IDEs -------------------------------------------------------
 .idea/

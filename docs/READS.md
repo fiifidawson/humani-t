@@ -8,6 +8,6 @@ The original. Skim it. You only need the shape: your app in the middle, provider
 This is the big one, and it's almost uncannily on-target: Python, repositories, ports and adapters, swappable infrastructure. Read ch. 2 Repository, ch. 4 Service Layer, ch. 13 Dependency Injection. Skip the rest for now. Chapter 2 alone will make StorageProvider obvious.
 
 4. 12factor: [Backing Services](https://12factor.net/backing-services) + [Config](https://12factor.net/config) (10 min)
-Two short pages. "Swap the attached resource without changing code" is your entire V1→V2 thesis, stated in 300 words.
+Two short pages. "Swap the attached resource without changing code" is the whole idea behind `api/dependencies.py`, stated in 300 words.
 
 Save FastAPI's dependency docs for when you actually start the backend — it's the mechanism you'll wire providers with, but it'll mean nothing until then.

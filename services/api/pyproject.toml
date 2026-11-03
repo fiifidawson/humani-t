@@ -3,12 +3,147 @@ name = "humani-t-api"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "aiosmtplib>=5.1.3",
+    "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.32.0",
+    "cryptography>=50.0.2",
+    "email-validator>=2.3.0",
     "fastapi>=0.141.1",
+    "pydantic-settings>=2.16.1",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.12.0",
+    "hypothesis>=6.170.9",
+    "import-linter>=2.15",
+    "pre-commit>=4.7.0",
+    "pyright>=1.1.414",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.6",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "postgres: needs a real database; set TEST_DATABASE_URL (skipped otherwise)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    '^\s*\.\.\.$',  # Protocol method bodies
+]
+
+[tool.ruff]
+line-length = 96
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "UP", "B", "SIM", "RUF",
+    "S",      # bandit: security smells (hard-coded secrets, unsafe calls)
+    "ASYNC",  # blocking calls inside async functions
+    "PT",     # pytest style
+    "DTZ",    # naive datetimes — every timestamp here is UTC-aware
+    "TID",    # banned imports, see below
+    "C4",     # comprehensions
+    "PTH",    # pathlib over os.path
+    "N",      # pep8 naming
+]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest is built on assert; test fixtures need literal (fake) passwords.
+"tests/**" = ["S101", "S105", "S106"]
+# Alembic generates this layout; revision ids are not secrets.
+"migrations/**" = ["S105"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.pyright]
+include = ["app", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+# The rules of the system live here, so they get the strictest checking.
+strict = ["app/domain", "app/application"]
+venvPath = "."
+venv = ".venv"
+
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain imports nothing outside the domain and the standard library"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = [
+    "app.api", "app.application", "app.main", "app.settings", "app.cli",
+    "app.search", "app.storage", "app.crypto", "app.auth", "app.email", "app.ratelimit",
+    "fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "cryptography", "structlog",
+    "argon2", "aiosmtplib", "redis",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application depends on provider Protocols, never implementations or frameworks"
+type = "forbidden"
+source_modules = ["app.application"]
+forbidden_modules = [
+    "app.api", "app.main", "app.settings", "app.cli",
+    "app.search.fake",
+    "app.storage.memory", "app.storage.postgres",
+    "app.crypto.aesgcm", "app.crypto.local_key",
+    "app.auth.argon2", "app.auth.fake",
+    "app.email.smtp", "app.email.recording",
+    "app.ratelimit.memory", "app.ratelimit.valkey",
+    "fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "cryptography",
+    "argon2", "aiosmtplib", "redis",
+]
+
+[[tool.importlinter.contracts]]
+name = "Providers never reach up into the API or application layers"
+type = "forbidden"
+source_modules = [
+    "app.search", "app.storage", "app.crypto", "app.auth", "app.email", "app.ratelimit",
+]
+forbidden_modules = ["app.api", "app.application", "app.main", "app.settings"]
+
+[[tool.importlinter.contracts]]
+name = "Only api.dependencies chooses concrete providers"
+type = "forbidden"
+# Routes import api.dependencies, which imports the concretes. That is the
+# design; what is forbidden is a route importing one directly.
+allow_indirect_imports = true
+source_modules = [
+    "app.api.routes", "app.api.schemas", "app.api.middleware", "app.api.errors",
+    "app.api.session",
+]
+forbidden_modules = [
+    "app.search.fake",
+    "app.storage.memory", "app.storage.postgres",
+    "app.crypto.aesgcm", "app.crypto.local_key",
+    "app.auth.argon2", "app.auth.fake",
+    "app.email.smtp", "app.email.recording",
+    "app.ratelimit.memory", "app.ratelimit.valkey",
+    "sqlalchemy", "cryptography", "argon2", "aiosmtplib", "redis",
 ]
