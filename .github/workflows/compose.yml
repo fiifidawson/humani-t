@@ -1,0 +1,165 @@
+# Builds the images and starts the whole self-hosted stack the way an operator
+# would, then checks it from the outside: the API answers through Caddy over HTTPS,
+# and every response carries the security headers.
+
+name: compose
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    name: compose smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      # A project name of its own, and ports nobody else uses: the run can never
+      # touch another stack's containers or volumes.
+      COMPOSE_PROJECT_NAME: humani-t-smoke
+      COMPOSE_PROFILES: local-mail
+      HUMANI_T_DOMAIN: localhost
+      HUMANI_T_HTTP_PORT: "8080"
+      HUMANI_T_HTTPS_PORT: "8443"
+      HUMANI_T_PUBLIC_ORIGIN: https://localhost:8443
+      HUMANI_T_SMTP_HOST: mailpit
+      HUMANI_T_SMTP_PORT: "1025"
+      HUMANI_T_SMTP_STARTTLS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Dependabot updates compose.yaml; this catches compose.dev.yaml falling
+      # behind it, so development never runs a different Postgres from production.
+      - name: Development images match the self-hosted stack
+        run: |
+          missing=$(comm -23 \
+            <(docker compose -f compose.dev.yaml config --images | sort -u) \
+            <(docker compose -f compose.yaml config --images | sort -u))
+          if [[ -n "$missing" ]]; then
+            echo "compose.dev.yaml uses images compose.yaml does not:"
+            echo "$missing"
+            exit 1
+          fi
+
+      - name: Every image is pinned by digest
+        run: |
+          base_images() {
+            # FROM lines, minus references to the file's own earlier stages.
+            grep -v -x -F -f <(sed -n 's/^FROM .* AS \(.*\)$/\1/p' "$1") \
+              <(sed -n 's/^FROM \([^ ]*\).*/\1/p' "$1")
+          }
+          unpinned=$(
+            { docker compose -f compose.yaml --profile '*' config --images
+              docker compose -f compose.dev.yaml config --images
+              base_images services/api/Dockerfile
+              base_images apps/web/Dockerfile
+            } | grep -v '^humani-t-' | grep -v '@sha256:' || true
+          )
+          if [[ -n "$unpinned" ]]; then
+            echo "Pin these by digest (image:tag@sha256:...):"
+            echo "$unpinned"
+            exit 1
+          fi
+
+      - name: Create throwaway secrets
+        run: |
+          echo "HUMANI_T_SECRETS_DIR=$RUNNER_TEMP/secrets" >> "$GITHUB_ENV"
+          export HUMANI_T_SECRETS_DIR="$RUNNER_TEMP/secrets"
+          python3 infrastructure/generate_secrets.py --dir "$HUMANI_T_SECRETS_DIR"
+          for file in "$HUMANI_T_SECRETS_DIR"/*; do
+            [[ -s "$file" ]] && echo "::add-mask::$(cat "$file")"
+          done
+
+      - name: Build the images
+        run: docker compose build
+
+      # Naming caddy, worker and mailpit starts everything they depend on: api,
+      # migrate (which must exit 0 first), postgres and valkey. Ollama is left out:
+      # its image is several gigabytes and nothing here calls a model.
+      - name: Start the stack
+        run: docker compose up --detach --wait --wait-timeout 300 caddy worker mailpit
+
+      - name: The API answers through Caddy over HTTPS
+        run: |
+          curl --fail --silent --show-error --insecure https://localhost:8443/api/v1/health
+          curl --fail --silent --show-error --insecure https://localhost:8443/api/v1/ready
+
+      - name: Plain HTTP redirects to HTTPS
+        run: |
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/)
+          [[ "$status" == "308" ]] || { echo "expected 308, got $status"; exit 1; }
+
+      - name: Security headers
+        run: bash .github/scripts/check-security-headers.sh https://localhost:8443
+
+      - name: Oversized request bodies are refused at the edge
+        run: |
+          status=$(head -c 1100000 /dev/zero | curl --silent --insecure --output /dev/null \
+            --write-out '%{http_code}' --header 'Content-Type: application/json' \
+            --data-binary @- https://localhost:8443/api/v1/auth/login)
+          [[ "$status" == "413" ]] || { echo "expected 413, got $status"; exit 1; }
+
+      - name: Every container runs as a non-root user
+        run: |
+          for service in caddy api worker postgres valkey mailpit; do
+            uid=$(docker compose exec -T "$service" id -u)
+            echo "$service: uid $uid"
+            [[ "$uid" != "0" ]] || { echo "$service runs as root"; exit 1; }
+          done
+
+      - name: Every container is hardened and publishes only what it should
+        run: |
+          hardening='{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}}'
+          # shellcheck disable=SC2016 # $port and $to are Go template variables, not shell ones
+          bindings='{{range $port, $to := .NetworkSettings.Ports}}{{range $to}}{{.HostIp}}:{{.HostPort}} {{end}}{{end}}'
+          for service in $(docker compose ps --services); do
+            container=$(docker compose ps --quiet "$service")
+            settings=$(docker inspect --format "$hardening" "$container")
+            published=$(docker inspect --format "$bindings" "$container" | xargs)
+            echo "$service: $settings; published: ${published:-none}"
+            [[ "$settings" == "true [ALL] [no-new-privileges:true]" ]] \
+              || { echo "$service is not read-only, capability-free and no-new-privileges"; exit 1; }
+            case "$service" in
+              caddy) ;;
+              mailpit) [[ "$published" =~ ^(127\.0\.0\.1:[0-9]+ ?)+$ ]] \
+                || { echo "mailpit is published beyond loopback"; exit 1; } ;;
+              *) [[ -z "$published" ]] || { echo "$service publishes a port"; exit 1; } ;;
+            esac
+          done
+
+      - name: Each container holds only its own secrets
+        run: |
+          in_api() { docker compose exec -T api sh -c "$1"; }
+          in_api 'test -s /run/secrets/humani_t_database_url'
+          in_api 'test ! -e /run/secrets/humani_t_migration_database_url' \
+            || { echo "the API can read the schema-owner credentials"; exit 1; }
+          in_api 'test ! -e /run/secrets/db_superuser_password' \
+            || { echo "the API can read the Postgres superuser password"; exit 1; }
+          in_api '! env | grep -i -E "password|postgresql|redis://"' \
+            || { echo "a secret is in the API's environment"; exit 1; }
+
+      - name: Service logs
+        if: failure()
+        run: |
+          docker compose ps --all
+          docker compose logs --no-color
+
+      - name: Remove the stack and its volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans

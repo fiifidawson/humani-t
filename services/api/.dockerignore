@@ -1,0 +1,13 @@
+# An allowlist: everything is excluded, then only what the image needs is let back in.
+# A denylist misses the file nobody thought of — a .env, a coverage database, a
+# developer's virtual environment — and copies it into an image that gets shared.
+*
+
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!app/
+!migrations/
+
+**/__pycache__/
+**/*.py[cod]

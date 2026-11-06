@@ -1,0 +1,158 @@
+# Scanners that look for what tests cannot: leaked secrets, dependencies with known
+# vulnerabilities, vulnerable packages inside the images, and unsafe workflows.
+# They also run weekly, because a dependency that was clean on merge day can have
+# an advisory published against it later.
+
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1" # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  secrets:
+    name: gitleaks (whole history)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every commit, not only the last: a secret added and then deleted in a
+          # later commit is still in the history, and still leaked.
+          fetch-depth: 0
+
+      # The gitleaks image itself, pinned by digest, rather than gitleaks-action,
+      # whose licence requires a paid key for repositories owned by organisations.
+      # Keep the version in step with the hook in .pre-commit-config.yaml.
+      - name: gitleaks
+        uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+        env:
+          # The container runs as root on a checkout owned by the runner user, which
+          # git refuses as "dubious ownership" unless the directory is marked safe.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: /github/workspace
+        with:
+          args: git --redact --verbose --exit-code 1 /github/workspace
+
+  dependencies:
+    name: osv-scanner (uv.lock, pnpm-lock.yaml)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One scanner for both ecosystems, against the OSV database (which includes
+      # the GitHub and PyPI advisories pip-audit would use).
+      - name: osv-scanner
+        uses: docker://ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+        with:
+          args: scan source --lockfile /github/workspace/services/api/uv.lock --lockfile /github/workspace/pnpm-lock.yaml
+
+  images:
+    name: trivy (${{ matrix.image }} image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: services/api
+            dockerfile: services/api/Dockerfile
+          - image: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the ${{ matrix.image }} image
+        run: docker build --file "$DOCKERFILE" --tag "humani-t-$IMAGE:ci" "$CONTEXT"
+        env:
+          IMAGE: ${{ matrix.image }}
+          CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+
+      # Fails on HIGH or CRITICAL vulnerabilities that have a fix available. One
+      # without a fix cannot be acted on here; it is still listed in the output.
+      - name: trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          scan-type: image
+          image-ref: humani-t-${{ matrix.image }}:ci
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          timeout: 15m0s
+
+  configuration:
+    name: trivy (Dockerfiles)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: trivy config
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  workflows:
+    name: zizmor and actionlint (GitHub Actions)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Security: excessive permissions, template injection, unpinned actions,
+      # credentials left in the checkout. Findings appear as annotations on the pull
+      # request; uploading them to the Security tab would need security-events: write.
+      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: "1.31.1"
+          advanced-security: false
+
+      # Correctness: expression and context errors, and shellcheck on every `run:`.
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: -color

@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest something humani-t should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        humani-t's design rests on two rules (CLAUDE.md). A request that bends either is welcome, but please say so and why.
+
+        1. Data leaves the deployment only to destinations the operator has configured, and only after it has been masked.
+        2. A reviewer can reconstruct why a paper was included or excluded, months later, from what was stored.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, for whom, and what stops you today. Describe the need before the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+    validations:
+      required: true
+
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and data flow
+      description: Would this send anything (a question, a document, a log line, a request) somewhere new? Would it store anything new about people?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,0 +1,94 @@
+# Dependabot opens pull requests that update dependencies; CI then decides whether
+# they are safe to merge. Updates are grouped, so a week of patch releases is one
+# pull request to review instead of twenty.
+#
+# The cooldown waits a few days after a release before proposing it. Most
+# malicious releases (a hijacked maintainer account publishing a poisoned
+# version) are found and pulled within that window, before they reach us.
+# Security updates ignore the cooldown and arrive at once.
+
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /services/api
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      python:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm # pnpm workspaces are handled by the npm ecosystem
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      javascript:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories:
+      - /services/api
+      - /apps/web
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # CLAUDE.md targets Python 3.13; moving to 3.14 is a decision, not an update.
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
+      # Stay on the active LTS line of Node.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    groups:
+      service-images:
+        patterns: ["*"]
+    ignore:
+      # A new Postgres major version cannot open the old one's data directory:
+      # it needs a dump and restore (docs/deploy/self-hosting.md, "Upgrades").
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+      - dependency-name: valkey/valkey
+        update-types: ["version-update:semver-major"]

@@ -1,0 +1,6 @@
+# Blank issues are off so every report arrives with the information needed to act on it.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/fiifidawson/humani-t/security/advisories/new
+    about: Privately, never in a public issue. See SECURITY.md.

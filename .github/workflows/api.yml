@@ -1,0 +1,117 @@
+# The API's quality gates: the same commands CLAUDE.md lists under "Before saying
+# it is done", run on every pull request and on main.
+#
+# Every action is pinned to a full commit SHA, with the version in a comment. A tag
+# can be moved to other code by whoever controls the repository (this is how the
+# 2025 tj-actions and 2026 trivy-action compromises spread); a SHA cannot.
+# Dependabot keeps the SHAs current.
+
+name: api
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# No job gets a permission it does not ask for below.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: services/api
+
+jobs:
+  static:
+    name: lint, format, types, layering
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --check
+
+      - name: Install (exactly what uv.lock says)
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+
+      - name: ruff format
+        run: uv run ruff format --check .
+
+      - name: pyright
+        run: uv run pyright
+
+      - name: import-linter (layering rules)
+        run: uv run lint-imports
+
+  test:
+    name: tests (with Postgres and Valkey)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+
+      # The development stack, set up exactly as a contributor sets it up: the same
+      # secrets script, the same compose file, the same init script creating the two
+      # roles and humani_t_test. GitHub's `services:` containers start before the
+      # checkout, so they could not run that script, and CI would drift from it.
+      - name: Start Postgres and Valkey
+        working-directory: .
+        run: |
+          python3 scripts/dev_secrets.py
+          for name in db_superuser_password db_migrator_password db_app_password valkey_password; do
+            echo "::add-mask::$(cat "secrets/$name")"
+          done
+          docker compose -p humani-t-ci -f compose.dev.yaml up -d --wait --wait-timeout 120 postgres valkey
+
+      - name: Point the tests at humani_t_test
+        run: |
+          value() { sed -n "s/^$1=//p" .env; }
+          {
+            echo "TEST_DATABASE_URL=$(value HUMANI_T_DATABASE_URL)_test"
+            echo "TEST_VALKEY_URL=$(value HUMANI_T_VALKEY_URL)"
+            echo "HUMANI_T_MIGRATION_DATABASE_URL=$(value HUMANI_T_MIGRATION_DATABASE_URL)_test"
+          } >> "$GITHUB_ENV"
+
+      - name: Migrate humani_t_test (as the schema-owner role)
+        run: uv run --locked alembic upgrade head
+
+      - name: pytest with branch coverage (fails under 85%)
+        # HUMANI_T_MIGRATION_DATABASE_URL was only for Alembic; the tests build
+        # their own settings and must not inherit it.
+        run: |
+          unset HUMANI_T_MIGRATION_DATABASE_URL
+          uv run --locked pytest --cov -rs
+
+      - name: Service logs
+        if: failure()
+        working-directory: .
+        run: docker compose -p humani-t-ci -f compose.dev.yaml logs --no-color
