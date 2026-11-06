@@ -217,7 +217,7 @@
 			"fillStyle": "solid",
 			"strokeColor": "#8b5cf6",
 			"roundness": { "type": 3 },
-			"label": { "text": "BriefService", "fontSize": 16 }
+			"label": { "text": "DecisionBriefService", "fontSize": 16 }
 		},
 		{
 			"type": "arrow",
@@ -265,7 +265,7 @@
 			"strokeColor": "#f59e0b",
 			"roundness": { "type": 3 },
 			"label": {
-				"text": "Review · Vocabulary · Concept · BooleanQuery · PaperRecord\nCriterion · ScreeningDecision · DecisionBrief · Citation · RunManifest",
+				"text": "Review · Vocabulary · Concept · BooleanQuery · PaperRecord · Criterion\nScreeningDecision · DecisionBrief · Claim · Citation · AgentStep · RunManifest",
 				"fontSize": 16
 			}
 		},

@@ -43,13 +43,14 @@ This document says what the humani-t web interface shows, how it behaves, and wh
 | CHITCHAT `src/chitchat/agents/schemas.py` | The exact fields of the plan, the brief, claims, conflicts and the Critic's scores |
 | CHITCHAT `src/chitchat/ui.py` and `agents/render.py` | The terminal's condensed boxes and their wording, which already work as a small version of this design |
 | humani-t [architecture.md](architecture.md) | Projects as the organising unit (§4.1), reviews and run manifests (§4.2), vocabulary origin (§4.3), gates (§4.4), masking review (§3.9.1), security headers and errors (§5) |
-| `chitchat-ui` (the first mock-up) | The flat, hairline visual style, the colour tokens, a few small components |
+| `chitchat-ui` (the first mock-up) | A few small components and the flat, hairline style; its colours and type are replaced by LiGHT's brand (§9) |
+| LiGHT Brand Guidelines (August 2026) and [light-laboratory.org](https://www.light-laboratory.org/) | Colours, type, shapes, logos and the navigation, button and footer patterns (§9.9) |
 | Research (section [17](#17-references)) | The patterns for disclosure, trust, evidence display, trade-offs, history and low bandwidth |
 
 ### Decisions this document depends on
 
 - **The decision brief.** The agent loop's output is a `DecisionBrief` with a fixed schema: options, trade-offs, conflicts, considerations, gaps ([architecture.md](architecture.md) §4.2). It replaced the earlier `Synthesis`.
-- **Run events.** A run streams `stage.started`, `stage.progress`, `stage.finished`, `agent.step`, `gate.required`, `gate.resolved` and `job.finished` ([architecture.md](architecture.md) §4.4). Section [11.2](#112-live-events) says what the interface does with each.
+- **Run events.** A run streams `stage.started`, `stage.progress`, `stage.finished`, `agent.step`, `gate.required`, `gate.resolved` and `job.finished`. The gate events are humani-t's additions to CHITCHAT's job events. [architecture.md](architecture.md) §4.4 defines them, with how a gate is resolved and how a dropped stream resumes. Section [11.2](#112-live-events) says what the interface does with each.
 - **API paths.** Most "Source" lines name the CHITCHAT prototype's project-scoped paths (`/projects/{id}/plan`, `/projects/{id}/brief`, …), because humani-t hasn't defined those endpoints yet. Runs and gates use humani-t's paths from [architecture.md](architecture.md) §4.4. [api.md](api.md) is the reference once an endpoint exists.
 - **The chitchat-ui mock-up** was built for a different tool (ethical trade-off cards from fixed fields). Only its look carries over, not its screens.
 
@@ -193,11 +194,13 @@ The workspace has three zones. The chat is always the centre; the canvas is wher
 
 | Zone | Holds | Behaviour |
 |---|---|---|
-| **Rail** | Search, Needs you, pinned projects, collections, recent projects, new project, account | Collapses to icons (64 px) with `[`. Remembers its state per browser |
+| **Rail** | Search, Needs you, pinned projects, collections, recent projects, new project, account | Collapses to icons (72 px) with `[`. Remembers its state per browser |
 | **Chat** | The project's conversation as cards, and the composer | Always visible on desktop. Scroll position is kept when the canvas changes |
 | **Canvas** | One large view at a time: draft, run, papers, brief, trace, documents, compare | Opens from a card's main action. Resizable by dragging the divider. `⤢` makes it full width (the chat becomes a 56 px strip showing the latest turn). `Esc` or `✕` closes it |
 
 Inside the canvas, a **source panel** can slide over from the right edge (400 px) to show a passage, without closing what is underneath. Section [6.10](#610-source-panel).
+
+**Density.** The rail and the chat are drawn at 75% of their natural size (CSS `zoom: 0.75`, `COMPACT_ZOOM` in `apps/web`), the owner's chosen density. It is the design, not a preference. Canvases keep their full size, so a brief or a table stays easy to read.
 
 ### 4.2 Breakpoints
 
@@ -785,7 +788,7 @@ The order of parts follows `agents/render.py::brief_markdown`. The canvas has a 
 ```
 
 - **Layout:** side by side (2 to 4 cards). Below 900 px of canvas width, they stack, each collapsed to its name, strength and counts ("3 benefits · 2 risks"), and open on tap.
-- **Benefits** start with `+` and use the teal style; **risks** start with `−` and use the ember style. The words "Benefits" and "Risks" head each list.
+- **Benefits** start with `+` and use the blue `benefit.*` style; **risks** start with `−` and use the yellow `risk.*` style (§9.2.3). The words "Benefits" and "Risks" head each list.
 - **Claims marked `hypothesis`** are in italics with "⟡ reasoning, not a source". They never carry citation chips.
 - **Evidence strength** uses the four words and a three-dot meter (section [8.1](#81-evidence-strength)). The meter's meaning is on hover and in the "?" next to it.
 - **No ranking.** Cards keep the order the Writer gave. No card is highlighted unless the user picks a priority (below).
@@ -1238,7 +1241,7 @@ The legend sits at the top of the options section: "+ benefit · − risk · [P0
 
 ### 8.6 Model disclosure
 
-- Every brief, run and evaluation names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b on your organisation's server."
+- Every brief, run and evaluation names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b"
 - If a deployment uses a hosted provider, the line says so: "Made by … at Infomaniak (no training, no retention)".
 
 ### 8.7 The caveat
@@ -1255,96 +1258,194 @@ The fixed text from `schemas.py`:
 
 ## 9. Visual design system
 
-The style carries over from the `chitchat-ui` mock-up: flat, white, hairline borders, one blue accent, Inter. This section extends it with dark mode, more meaning colours, and rules for data.
+humani-t is a sub-project of the LiGHT lab and wears the lab's brand (LiGHT Brand Guidelines, August 2026), so that it reads as part of the lab's family next to [the lab's website](https://www.light-laboratory.org/). This section turns the guidelines into tokens, adds what the guidelines leave open (a dark theme, meaning colours, data), and records every colour pair the interface uses with its measured contrast.
 
 ### 9.1 Tokens
 
-Tokens are CSS custom properties, set once in a stylesheet. **The CSP forbids inline styles**, so components never use `style="…"`; they use classes that read the tokens. The mock-up's inline styles (`style={{ background: "var(--color-primary-hover)" }}`) must become classes. Dynamic values (a progress bar's width) use a `data-*` attribute with a fixed set of classes (`w-[10%]` steps) or an SVG attribute, which CSP allows.
+Tokens live in one place: the Chakra UI system in [`apps/web/src/theme/system.ts`](../apps/web/src/theme/system.ts) (`createSystem`). Raw brand colours are `colors.light.*`; components read only **semantic tokens**, which say what a colour is for (`fg.muted`, `border.emphasized`, `danger.subtle`) and switch with the theme. A component never names a hex value; [`QrCode`](../apps/web/src/features/auth/QrCode.tsx) is the one exception, because phone cameras need black on white in both themes.
+
+Chakra's style props become class names, and Emotion writes the rules into `<style>` elements at run time. **The CSP forbids inline styles and allows those elements only with the page's nonce** ([ADR 0004](adr/0004-chakra-ui-with-a-nonce-csp.md)), so components still never use a `style` attribute or write `element.style` in script; `src/csp.test.ts` fails if they do. Dynamic values use a `data-*` attribute that CSS reads (the composer's grow mechanism) or an SVG attribute.
+
+The theme is a class on `<html>`: `dark` or `light`, resolved from the person's choice (`data-theme`) or, for "System", from `prefers-color-scheme`, and re-resolved when the system's setting changes ([`preferences.ts`](../apps/web/src/app/preferences.ts)).
 
 ### 9.2 Colour
 
-Contrast values must be checked with a tool before release; the ones below are targets. **Text colours must reach 4.5:1 on their background; icons and borders 3:1.**
+**The brand palette.** Base colours are for backgrounds, accent colours for highlights, and one colour family is used per view.
+
+| Name | HEX | Role in the brand | Use in humani-t |
+|---|---|---|---|
+| Dark Blue | `#0C43A0` | primary base | Primary buttons, links, focus ring, the current page in the rail, the sign-in cover (light theme) |
+| Light Blue | `#68AFE7` | primary accent | The light-beam on the cover; in the dark theme, primary buttons, links and focus. **Never text or essential UI on a light background** (2.35:1 on Eggshell) |
+| Dark Yellow | `#EBA547` | secondary base | Caveat and risk borders, the "waiting for you" run strip border (decoration only on light backgrounds: 2.08:1); risk text in the dark theme |
+| Light Yellow | `#F6D54D` | secondary accent | Caveat text in the dark theme. Never text on Eggshell (1.43:1) |
+| Dark Purple | `#79123F` | secondary base | Reserved; see 9.2.3 |
+| Light Purple | `#AE3156` | secondary accent | Errors and destructive actions (light theme) |
+| Eggshell | `#FEFFF7` | neutral | All text in the dark theme, text on brand colour. The light theme's page background is pure white instead, by the owner's choice |
+
+#### 9.2.1 Semantic tokens
+
+The brand defines no dark theme. The dark one here is derived: deep blue-black surfaces from the blue family, Eggshell text, and the light accents taking over where the dark bases would disappear. Colours marked *derived* are tints or shades of a brand colour, made because no brand colour reaches the contrast needed in that place.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--canvas` | `#ffffff` | `#0f1419` | Page background |
-| `--surface` | `#ffffff` | `#151b22` | Cards, canvas |
-| `--surface-2` | `#f7f8fa` | `#1b232c` | Chat background, wells, table stripes |
-| `--line` | `#e4e7eb` | `#2a323c` | Hairlines |
-| `--text` | `#111827` | `#e6e9ee` | Main text |
-| `--text-muted` | `#6b7280` | `#9aa4b2` | Secondary text |
-| `--primary` | `#58a3cf` | `#58a3cf` | Fills, focus, large accents |
-| `--primary-text` | `#2c6690` | `#8cc3e3` | Links and accent text (`#58a3cf` is too light for body text on white) |
-| `--primary-050` | `#eef5fa` | `#13283a` | Chip and selection backgrounds |
-| `--benefit` | `#0e8a66` | `#3cc79c` | Benefit icons, borders |
-| `--benefit-text` | `#0b6e52` | `#6fdcb8` | Benefit text |
-| `--risk` | `#c2610e` | `#f08a3c` | Risk icons, borders |
-| `--risk-text` | `#9a4a08` | `#f5a66b` | Risk text |
-| `--caveat-bg` | `#fff7e6` | `#2b2210` | Caveat and warning boxes |
-| `--caveat-line` | `#e0a400` | `#b8860b` | Their border |
-| `--caveat-text` | `#7a5200` | `#f2cf7a` | Their text |
-| `--danger` | `#b42318` | `#f97066` | Errors, destructive actions (not used for risks) |
-| `--masked` | `#5b5bd6` | `#9b9bf0` | Masked-item pills (dashed border) |
+| `bg` | `#FFFFFF` white | `#060E22` derived | Page background |
+| `bg.panel` | `#FFFFFF` | `#0B1631` derived | Cards, dialogs, inputs |
+| `bg.subtle` | `#EEF2F9` derived | `#12204A` derived | The chat column, wells, table header row |
+| `bg.muted` | `#E6EAF5` (the lab site's hover tint) | `#1A2B5C` derived | Hover, the current rail item |
+| `fg` | `#0A1633` derived ink | `#FEFFF7` Eggshell | Main text |
+| `fg.muted` | `#4A5570` derived | `#B7C0D6` derived | Secondary text, small labels |
+| `border` | `#D9DEEA` derived | `#24325A` derived | Hairlines (decorative: not relied on to identify anything) |
+| `border.emphasized` | `#7A8499` derived | `#6A79A3` derived | Edges that identify a control: inputs, checkboxes, radios, the composer, outline buttons |
+| `focusRing`, `link`, `brand.solid` | `#0C43A0` Dark Blue | `#68AFE7` Light Blue | Focus outline, links, primary buttons |
+| `brand.contrast` | `#FEFFF7` | `#06102A` derived | Text on a primary button |
+| `marker` | `#000000` | `#FEFFF7` | The section dot |
+| `fg.error`, `danger.solid` | `#AE3156` Light Purple | `#F08BA8` derived | Error text and icons, destructive actions |
+| `danger.subtle` | `#F8E9EE` derived | `#2A0E1A` derived | Error notice background |
+| `caveat.fg` | `#5C3D00` derived | `#F6D54D` Light Yellow | Caveat and "not available yet" text |
+| `caveat.subtle` | `#FDF4DC` derived | `#241D08` derived | Caveat boxes, the signed-out banner |
+| `border.warning` | `#EBA547` Dark Yellow | `#EBA547` | Caveat border (decorative) |
+| `benefit.fg` / `benefit.bg` | `#0C43A0` / `#E6EAF5` | `#68AFE7` / `#12204A` | Benefit text and fill |
+| `risk.fg` / `risk.bg` | `#7A4800` derived / `#FBEFDA` | `#EBA547` / `#2A1E08` | Risk text and fill |
+| `masked.fg` / `masked.bg` / `masked.line` | `#0C43A0` / `#E8F1FB` / `#68AFE7` | `#68AFE7` / `#0F2550` / `#68AFE7` | Masked-item pills (dashed border) |
+| `scrim` | black at 60% (the lab site's menu overlay) | black at 70% | Behind dialogs and the drawer |
 
-**Meaning colours and their partner cues:**
+#### 9.2.2 Measured contrast
+
+**Text must reach 4.5:1 on its background, large text (24 px, or 18.66 px bold) and the edges and icons that identify UI 3:1** (WCAG 2.2 AA, §12). Every pair the interface uses is listed, measured with the WCAG 2.x relative-luminance formula. Disabled controls are exempt and not listed.
+
+| Pair | Theme | Ratio | Needs | Where |
+|---|---|---|---|---|
+| `fg` `#0A1633` on `bg` `#FEFFF7` | light | 17.75 | 4.5 | Body text |
+| `fg` on `bg.panel` `#FFFFFF` | light | 17.87 | 4.5 | Text in cards and dialogs |
+| `fg` on `bg.subtle` `#EEF2F9` | light | 15.91 | 4.5 | Chat column, table header |
+| `fg` on `bg.muted` `#E6EAF5` | light | 14.85 | 4.5 | Hovered rail item |
+| `fg` on `danger.subtle` `#F8E9EE` | light | 15.21 | 4.5 | Error notice text |
+| `fg.muted` `#4A5570` on `bg` | light | 7.39 | 4.5 | Secondary text |
+| `fg.muted` on `bg.panel` | light | 7.43 | 4.5 | Secondary text in cards |
+| `fg.muted` on `bg.subtle` | light | 6.62 | 4.5 | Hints in the chat column |
+| `fg.muted` on `bg.muted` | light | 6.18 | 4.5 | Secondary text on hover |
+| `fg.muted` on `caveat.subtle` `#FDF4DC` | light | 6.78 | 4.5 | Request ids in a caveat |
+| `link` `#0C43A0` on `bg` | light | 8.97 | 4.5 | Links |
+| `link` on `bg.panel` | light | 9.03 | 4.5 | Links in cards |
+| `link` on `bg.subtle` | light | 8.04 | 4.5 | Links in the chat column |
+| `link` on `bg.muted` | light | 7.50 | 4.5 | The current rail item |
+| `brand.contrast` `#FEFFF7` on `brand.solid` `#0C43A0` | light | 8.97 | 4.5 | Primary button label; Eggshell text on the cover |
+| Eggshell on the cover's light-beam at its strongest (`#316EBC`) | both | 5.09 | 4.5 | Cover text crossing the beam |
+| `fg.error` `#AE3156` on `bg` | light | 6.18 | 4.5 | Error text |
+| `fg.error` on `bg.panel` | light | 6.23 | 4.5 | Field error |
+| `fg.error` on `danger.subtle` | light | 5.30 | 3 (icon) | Error icon |
+| `caveat.fg` `#5C3D00` on `caveat.subtle` | light | 9.02 | 4.5 | Caveat, signed-out banner |
+| `risk.fg` `#7A4800` on `risk.bg` `#FBEFDA` | light | 6.70 | 4.5 | Risk text |
+| `risk.fg` on `bg` | light | 7.57 | 4.5 | Risk text on the page |
+| `benefit.fg` `#0C43A0` on `benefit.bg` `#E6EAF5` | light | 7.50 | 4.5 | Benefit text |
+| `masked.fg` `#0C43A0` on `masked.bg` `#E8F1FB` | light | 7.91 | 4.5 | Masked pill |
+| `border.emphasized` `#7A8499` on `bg` | light | 3.73 | 3 | Input and checkbox edges |
+| `border.emphasized` on `bg.panel` | light | 3.76 | 3 | Inputs in cards |
+| `border.emphasized` on `bg.subtle` | light | 3.35 | 3 | The composer edge |
+| `focusRing` `#0C43A0` on `bg` / `bg.panel` | light | 8.97 / 9.03 | 3 | Focus outline |
+| `marker` `#000000` on `bg` | light | 20.86 | 3 | Section dot |
+| `fg` `#FEFFF7` on `bg` `#060E22` | dark | 19.07 | 4.5 | Body text |
+| `fg` on `bg.panel` `#0B1631` | dark | 17.78 | 4.5 | Cards and dialogs |
+| `fg` on `bg.subtle` `#12204A` | dark | 15.67 | 4.5 | Chat column |
+| `fg` on `bg.muted` `#1A2B5C` | dark | 13.51 | 4.5 | Hovered rail item |
+| `fg` on `danger.subtle` `#2A0E1A` | dark | 17.74 | 4.5 | Error notice text |
+| `fg.muted` `#B7C0D6` on `bg` | dark | 10.54 | 4.5 | Secondary text |
+| `fg.muted` on `bg.panel` | dark | 9.82 | 4.5 | Secondary text in cards |
+| `fg.muted` on `bg.subtle` | dark | 8.66 | 4.5 | Hints in the chat column |
+| `fg.muted` on `bg.muted` | dark | 7.46 | 4.5 | Secondary text on hover |
+| `link` `#68AFE7` on `bg` | dark | 8.11 | 4.5 | Links |
+| `link` on `bg.panel` | dark | 7.56 | 4.5 | Links in cards |
+| `link` on `bg.subtle` | dark | 6.67 | 4.5 | Links in the chat column |
+| `link` on `bg.muted` | dark | 5.75 | 4.5 | The current rail item |
+| `brand.contrast` `#06102A` on `brand.solid` `#68AFE7` | dark | 7.96 | 4.5 | Primary button label |
+| `fg.error` `#F08BA8` on `bg` / `bg.panel` | dark | 8.20 / 7.64 | 4.5 | Error text |
+| `fg.error` on `danger.subtle` | dark | 7.62 | 3 (icon) | Error icon |
+| `caveat.fg` `#F6D54D` on `caveat.subtle` `#241D08` | dark | 11.60 | 4.5 | Caveat, signed-out banner |
+| `risk.fg` `#EBA547` on `risk.bg` `#2A1E08` | dark | 7.77 | 4.5 | Risk text |
+| `masked.fg` `#68AFE7` on `masked.bg` `#0F2550` | dark | 6.34 | 4.5 | Masked pill |
+| `border.emphasized` `#6A79A3` on `bg` / `bg.panel` | dark | 4.46 / 4.16 | 3 | Input and checkbox edges |
+| `border.emphasized` on `bg.subtle` | dark | 3.66 | 3 | The composer edge |
+| `focusRing` `#68AFE7` on `bg` / `bg.panel` | dark | 8.11 / 7.56 | 3 | Focus outline |
+| `marker` `#FEFFF7` on `bg` | dark | 19.07 | 3 | Section dot |
+
+Pairs that **fail and are therefore never used** for text or essential UI: Light Blue on Eggshell (2.35), Dark Yellow on Eggshell (2.08), Light Yellow on Eggshell (1.43), Dark Blue on the dark background (2.13), Light Purple on the dark background (3.08). Hairlines (`border`, about 1.3:1) are decoration; anything that identifies a control uses `border.emphasized`.
+
+axe runs in every page test but cannot measure contrast in jsdom, so this table is the contrast check. Re-measure any pair you add, and add it here.
+
+#### 9.2.3 Meaning colours and their partner cues
+
+Colour never carries meaning alone (principle 4): every meaning has a word and an icon, and colour repeats them. Families are kept apart so a meaning cannot be mistaken for another: **blue** for the product and for good news, **yellow** for caution, **purple** for errors.
 
 | Meaning | Colour | Always with |
 |---|---|---|
-| Benefit | `--benefit` | "+" and the heading "Benefits" |
-| Risk | `--risk` | "−" and the heading "Risks" |
-| Strong / Moderate / Weak / Not enough | `--benefit` / `--primary` / `--caveat-line` / `--text-muted` | The meter and the word |
-| Highly relevant / Relevant / Possibly / Excluded / Skipped | `--benefit` / `--benefit` lighter / `--caveat-line` / `--text-muted` / `--text-muted` | The label word and an icon (▲ ▲ △ ✕ –) |
-| Failed | `--caveat-line` | ⚠ and the word |
-| Error | `--danger` | ✗ and a message |
-| Masked | `--masked` | Dashed border and the type name |
+| Benefit | `benefit.*` (blue) | "+" and the heading "Benefits" |
+| Risk | `risk.*` (yellow) | "−" and the heading "Risks" |
+| Strong / Moderate / Weak / Not enough | `benefit.fg` / `link` / `risk.fg` / `fg.muted` | The meter and the word |
+| Highly relevant / Relevant / Possibly / Excluded / Skipped | `benefit.fg` / `benefit.fg` / `risk.fg` / `fg.muted` / `fg.muted` | The label word and an icon (▲ ▲ △ ✕ –) |
+| Failed, waiting, caveat | `caveat.*` (yellow) | `triangle-alert` or `pause` and the word |
+| Error | `danger.*` (purple) | `circle-x` and a message |
+| Masked | `masked.*` (blue) | Dashed border and the type name |
 
-Risk is ember, not red. Red is kept for errors, so "a risk of this option" never looks like "something broke".
+Risk is yellow, not purple, so "a risk of this option" never looks like "something broke". Dark Purple is held back so a future meaning (or a humani-t sub-project colour, 9.8) has a family of its own.
 
 ### 9.3 Type
 
-Inter, self-hosted (CSP), as a variable font subset to Latin and Latin Extended. The fallback stack is the system UI font; in low data mode only the system font is used.
+Both fonts are self-hosted from Fontsource packages and bundled with the app, so the CSP's `font-src 'self'` holds and nothing loads from Adobe or a font service. Variable fonts, split by `unicode-range`, so a page in English downloads only the Latin files.
 
-| Token | Size / line height | Weight | Use |
+- **Titles:** Ivy Presto Headline, semibold, sentence case, behind the single family name **`"Brand Headline"`** ([`src/theme/fonts.css`](../apps/web/src/theme/fonts.css)). Until the lab's licensed `.woff2` files are dropped in, that name points at **Playfair Display** (SIL Open Font Licence), the closest open high-contrast editorial serif. Switching is a change to that one file ([`public/brand/README.md`](../apps/web/public/brand/README.md)).
+- **Everything else:** **Manrope** (`@fontsource-variable/manrope`, SIL OFL), replacing Inter. Regular for body, Medium for subtitles, labels and buttons, Regular in all caps for small labels.
+
+| Use | Family | Size / line height | Weight |
 |---|---|---|---|
-| `--text-xs` | 12 / 16 | 500 | Chips, meta lines, section labels (uppercase, 0.08em tracking) |
-| `--text-sm` | 14 / 20 | 400 | Tables, chat meta, secondary text |
-| `--text-base` | 16 / 24 | 400 | Body, chat cards, brief claims |
-| `--text-lg` | 18 / 28 | 500 | Card headlines, the bottom line |
-| `--text-xl` | 22 / 30 | 600 | Canvas titles |
-| `--text-2xl` | 28 / 36 | 600 | Page titles (Home, Projects) |
+| Page title (h1) | Brand Headline | 36 / 1.2 (30 on phones) | 600 |
+| Sign-in title | Brand Headline | 30 / 1.2 | 600 |
+| Workspace title | Brand Headline | 24 / 1.2 (20 on phones) | 600 |
+| Cover line, empty-chat prompt, project card name | Brand Headline | 48, 30, 20 | 600 |
+| Section label (h2) | Manrope, all caps, 0.08em tracking | 12 / 1.4 | 400 |
+| Body | Manrope | 16 / 1.6 (the lab site's body) | 400 |
+| Secondary text, tables | Manrope | 14 / 1.5 | 400 |
+| Labels, buttons | Manrope | 14–16 | 500 |
+| Small labels, meta | Manrope, all caps for labels | 12 | 400 |
 
-- Numbers in tables and counters use tabular figures (`.tnum`, already in the mock-up).
+- Numbers in tables and counters use tabular figures.
 - Line length in the brief is capped at about 75 characters.
 - Text size can be raised in Account preferences (100%, 112%, 125%); every layout must work at 200% browser zoom.
 
 ### 9.4 Space, shape and depth
 
-- Spacing steps of 4 px: 4, 8, 12, 16, 24, 32, 48.
-- Radii: 8 px chips and inputs; 12 px cards and buttons; 16 px canvas and dialogs; full for pills and avatar dots.
-- Depth by hairlines and background steps, not shadows. One shadow only, for things that float (menus, the source panel, dialogs): `0 8px 24px rgb(17 24 39 / 0.12)`.
+"If it feels cramped, it probably is": pages use generous space, close to the lab site's.
+
+- Spacing steps of 4 px. Pages have 32–48 px above the title, 40 px between sections, 16 px side gutters on phones and 32 px from tablets up; content is at most 1152 px wide (672 px for forms and Account).
+- **Section pattern:** a small black dot, the section label in small capitals at the top left, then a hairline rule under it ([`SectionHeading`](../apps/web/src/ui/SectionHeading.tsx)).
+- **Radii:** 8 px for cards, inputs, dialogs, notices and rail items (the brand's rounded cards); pill (300 px, as on the lab site) for buttons and badges; full for avatars and dots.
+- Depth by hairlines and background steps. Cards are white (`bg.panel`) on Eggshell with a hairline, no shadow; the only shadows are on things that float (the drawer, dialogs).
+- **The light-beam diagonal** is for covers and title areas only. Today it appears once, on the sign-in and enrolment cover: Light Blue at 40% over Dark Blue, decorative and hidden from assistive technology.
 - The canvas divider is a 1 px line with an 8 px wide drag handle that shows on hover and focus.
 
 ### 9.5 Motion
 
-- Cards enter with the mock-up's `card-in` (fade and 6 px rise, 350 ms). The run strip updates without motion except its bar.
-- Panels slide in 200 ms. Nothing bounces.
-- `prefers-reduced-motion` turns off all animation (the mock-up's rule is kept), and Account preferences can force it.
+- Hover and state changes fade in 0.2 s, as on the lab site. Panels (the drawer) slide in 0.2 s. Nothing bounces.
+- Cards enter with a fade and 6 px rise, 350 ms. The run strip updates without motion except its spinner.
+- `prefers-reduced-motion` cuts every animation and transition to nothing (a global rule in the system), and Account preferences can force it.
 - The streaming of an answer is not typed out letter by letter; text appears in sentences, which is easier to read and cheaper on slow links.
 
 ### 9.6 Icons
 
-lucide icons (as in the mock-up), self-hosted, as an SVG sprite. Each icon that carries meaning has text next to it or an accessible name. Main icons:
+**Lucide** through `lucide-react` (ISC licence): one React component per icon, tree-shaken, drawn as inline SVG, so nothing is requested and nothing needs a font. Lucide marks an icon `aria-hidden="true"` unless it is given an accessible name, so a decorative icon is skipped by screen readers; an icon that carries meaning always sits next to a word or inside a control with an `aria-label`. Main icons:
 
 | Meaning | Icon |
 |---|---|
-| Brief | `diamond` (◆) |
-| Privacy | `shield` (⛨) |
-| Running / done / failed / waiting / cancelled | `loader` / `check` / `x` / `pause` / `square` |
+| Brief | `diamond` |
+| Privacy, masking | `shield-check` |
+| Running / done / failed / waiting / cancelled | `loader-circle` / `check` / `x` / `pause` / `square` |
 | Benefit / risk | `plus` / `minus` |
-| Reasoning | `sparkle` (⟡) |
-| Humanitarian criterion | `heart-handshake` (◈) |
+| Reasoning | `sparkle` |
+| Humanitarian criterion | `heart-handshake` |
 | Paper / document | `file-text` / `folder` |
-| Warning | `triangle-alert` |
+| Warning, signed out | `triangle-alert` |
+| Error | `circle-x`, `circle-alert` (field) |
+| Navigation | `house`, `layout-grid`, `plus`, `panel-left`, `menu`, `log-out` |
+| Theme | `monitor` / `sun` / `moon` |
 
 ### 9.7 Charts
 
@@ -1354,16 +1455,61 @@ Few charts, all simple, all with a text or table version:
 - PRISMA diagram as SVG boxes and arrows, with numbers as text.
 - Progress bars with the numbers beside them.
 - No pie charts, no gauges, no "confidence %" dials.
+- Series colours come from one family per chart (blue tints for a sequence); yellow and purple are kept for caution and error.
+
+### 9.8 Logos and the sub-project rule
+
+humani-t's logo sits on the **left** and LiGHT's on the **right**: in the app header, on the sign-in cover, and in the footer. The LiGHT wordmark is used only as supplied (original dark and light blue, black or white) with its safe area, and is never redrawn. Until the official SVGs are in [`apps/web/public/brand/`](../apps/web/public/brand/README.md), [`Brand.tsx`](../apps/web/src/ui/Brand.tsx) renders "humani-t" and "by LiGHT" as Manrope text in those slots.
+
+The guidelines let a sub-project have its own colour pair, generated from one hue: light at 55% saturation and 91% brightness, dark at 93% saturation and 63% brightness. humani-t has none yet; if the lab assigns one, it becomes a palette next to `brand` and its pairs are measured into 9.2.2 before use.
+
+### 9.9 Brand sources
+
+What was taken from where, so it can be checked against the originals.
+
+- **LiGHT Brand Guidelines (August 2026):** the seven colours and their base/accent roles; one colour family at a time; Ivy Presto Headline semibold titles in sentence case; Manrope for everything else (Regular body, Medium subtitles, Regular all-caps labels); the section label, hairline rule and black dot; 8 px rounded cards on Eggshell; generous space; the light-beam diagonal for covers and title areas only; logo colours, safe area and the sub-project placement rule.
+- **[light-laboratory.org](https://www.light-laboratory.org/)** (a Wix site, read from its served HTML and theme variables on 3 November 2026):
+  - *Type:* body in Manrope at 16 px with 1.6 line height, 18 px/1.6 for lead text; section titles in Ivy Presto Headline (`--font_2`, 60 px/1.3); Manrope subtitles at 38, 34, 28 and 22 px; no letter-spacing on body text. The app scales these down for a working tool, keeping the families, weights and line height.
+  - *Colour usage:* black text on a white page, Dark Blue as the link and active colour (the site uses `#1E429A`, a near neighbour; the app uses the guidelines' `#0C43A0`), Light Blue `#68AFE7` only as an accent, a pale blue `rgb(230 234 245)` hover fill, kept as `bg.muted`.
+  - *Navigation:* logo on the left, links to the right in Manrope 16 px, black, Dark Blue when current, the pale blue fill on hover; on phones a "Menu" button opens a white panel over a 60% black overlay. The app keeps its left rail (§4) but gives its items this typography and these states, puts the logos in a top header in the same left/right order, and uses the same drawer and 60% scrim on small screens.
+  - *Buttons:* pill-shaped (`border-radius: 300px`), Manrope 16 px regular, an icon beside the label, 0.2 s transitions; a light grey fill when disabled. The app's buttons are pills with a Medium label and a 0.2 s transition, filled Dark Blue for the primary action so it reads as one.
+  - *Cards:* 10 px radius with a thin border and no shadow. The app uses the guidelines' 8 px and the same border-not-shadow depth.
+  - *Footer:* the LiGHT logo with the lab's affiliations, a short link list and contact. The app's footer is a hairline, then humani-t and its one-line purpose on the left and the LiGHT slot on the right; it leaves out the lab's addresses and links, which would point users of a self-hosted deployment to a third-party site.
+  - *Not taken:* the site's photography, statistics rows and team cards (marketing, not tool, patterns), and anything loaded from Wix or its font servers.
 
 ---
 
 ## 10. Component inventory
 
-Props are named after the API types (generated into `apps/web/src/api/schema.gen.ts`).
+### 10.1 Built on Chakra UI
+
+The interface is built on **Chakra UI v3** ([ADR 0004](adr/0004-chakra-ui-with-a-nonce-csp.md)) with the brand system of 9.1. Only the recipes listed in `system.ts` are registered; a Chakra component outside that list renders unstyled until its recipe is added. These are the Chakra parts in use and what they build:
+
+| Chakra component | Used for |
+|---|---|
+| `Box`, `Flex`, `Stack`, `HStack`, `Grid`, `chakra.*` | All layout: the shell, pages (`ui/Page`), the auth cover, rows, the composer |
+| `Heading` | Page titles (`ui/PageHeading`), section labels (`ui/SectionHeading`) |
+| `Text`, `Code`, `VisuallyHidden` | Copy, recovery codes and the TOTP key, screen-reader-only text |
+| `Button`, `IconButton` | Every action (pill-shaped); icon-only buttons always carry `aria-label` or hidden text |
+| `Link` (with `asChild` around the router's `Link`) | Text links, project cards, the header's home link |
+| `Input` | `ui/Field` (labels, hints and errors are wired by `ui/Field`, not by Chakra's `Field`, so the description is right on first render) |
+| `Checkbox` | "Show archived projects", "I've saved my recovery codes" |
+| `RadioGroup` | The theme choice on Account |
+| `Dialog` (with `Portal`) | `ui/Dialog`, used by the re-authentication dialog: focus trap, the page behind hidden from assistive technology, Esc closes |
+| `Alert` | `ui/ErrorNotice`, the signed-out banner |
+| `Badge` | Role, "Archived", "This device" |
+| `Table` | All projects |
+| `Skeleton` | `ui/Loading` |
+
+Not from Chakra, on purpose: the composer's textarea grows by the hidden-copy grid technique rather than Chakra's `autoresize`, which measures in script and writes `style.height`; the QR code is a single SVG path; the rail's items are router links styled from `shell/railStyles.ts`.
+
+### 10.2 Planned components
+
+Props are named after the API types (generated into `apps/web/src/api/schema.gen.ts`). Each is composed from the parts in 10.1.
 
 | Component | Purpose | Main props | States | Accessibility |
 |---|---|---|---|---|
-| `AppShell` | Rail, main area, canvas slots | `railCollapsed`, `canvas` | — | Landmarks: `nav`, `main`, `complementary` |
+| `AppShell` | Header, rail, main area, footer, canvas slots | `railCollapsed`, `canvas` | — | Landmarks: `banner`, `nav`, `main`, `contentinfo`, `complementary` |
 | `Rail` | Search, Needs you, pinned, collections, recent | `collections`, `pinned`, `needsYou` | collapsed, expanded | `nav` with a label; tree for collections |
 | `CollectionTree` | Collections with projects | `collections`, `onMove` | folded, unfolded, drop target | `role="tree"`, arrow keys |
 | `ProjectCard` | One project on Home or Projects | `project`, `status`, `tags`, `members` | normal, needs you, archived | The whole card is one link; actions inside are separate buttons |
@@ -1398,9 +1544,9 @@ Props are named after the API types (generated into `apps/web/src/api/schema.gen
 | `RunCompare` | Diff of two runs | `a`, `b` | comparable, not comparable | Tables with headers |
 | `Toast` | Short confirmations, undo | `message`, `action` | — | `role="status"` |
 | `Banner` | Connection, session, maintenance | `kind` | — | `role="alert"` only for errors |
-| `ReauthDialog` | Sign in again | `reason` | — | Dialog with focus trap |
+| `ReauthDialog` | Sign in again | `reason` | — | Chakra `Dialog` with focus trap |
 
-Reused from `chitchat-ui`: `ContextChip` (as the base of chips), the accordion pattern (option cards on mobile, quality checks), the skeleton style, the mobile bottom sheet (source panel), the CSV helper (client-side exports of filtered tables), the reduced-motion rule.
+Reused from `chitchat-ui`: the accordion pattern (option cards on mobile, quality checks), the skeleton style, the mobile bottom sheet (source panel), the CSV helper (client-side exports of filtered tables).
 
 ---
 
@@ -1445,7 +1591,7 @@ One SSE stream per run (`GET /api/v1/runs/{run_id}/events`, [architecture.md](ar
 | `gate.resolved` | `gate_id`, `by`, `decision` | Gate card folds; strip resumes |
 | `job.finished` | `outcome` (`done`, `failed`, `cancelled`), `seconds`, `error` | Strip's final state; a browser notification if the tab is hidden and the user allowed it |
 
-- **Reconnect.** Each event has an `id`. The browser's `EventSource` resends `Last-Event-ID`; the API replays missed events ([architecture.md](architecture.md) §4.4). While disconnected, the strip shows "Reconnecting…" and keeps the last state.
+- **Reconnect.** Each event has an `id`. The browser's `EventSource` resends `Last-Event-ID`; the API replays missed events ([architecture.md](architecture.md) §4.4). A replay can repeat an event, so the interface applies each event by its id and ignores one it has already seen. While disconnected, the strip shows "Reconnecting…" and keeps the last state.
 - **Several tabs.** All tabs on the same project show the same state from the same stream. Actions in one tab (accept, cancel) update the others through the stream.
 - **Several people.** Members see each other's actions as they happen: a system note "Maya K. accepted draft 2". Two people accepting at once: the second gets 409 and the message "Someone else already accepted this draft. Showing the latest."
 

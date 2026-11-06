@@ -577,7 +577,7 @@
 			"id": "zdl",
 			"x": 44,
 			"y": 731,
-			"text": "4 · AGENTIC SYNTHESIS",
+			"text": "4 · DECISION BRIEF",
 			"fontSize": 16,
 			"strokeColor": "#6d28d9"
 		},
@@ -640,16 +640,16 @@
 			"fillStyle": "solid",
 			"strokeColor": "#8b5cf6",
 			"roundness": { "type": 3 },
-			"label": { "text": "Critic", "fontSize": 16 }
+			"label": { "text": "Writer", "fontSize": 16 }
 		},
 		{
 			"type": "arrow",
 			"id": "agb",
-			"x": 510,
+			"x": 695,
 			"y": 800,
-			"width": -185,
+			"width": -370,
 			"height": 18,
-			"points": [[0, 0], [0, 18], [-185, 18], [-185, 0]],
+			"points": [[0, 0], [0, 18], [-370, 18], [-370, 0]],
 			"strokeColor": "#ef4444",
 			"strokeStyle": "dashed",
 			"endArrowhead": "arrow"
@@ -657,9 +657,9 @@
 		{
 			"type": "text",
 			"id": "agbl",
-			"x": 355,
+			"x": 431,
 			"y": 806,
-			"text": "gaps -> retrieve again",
+			"text": "critique -> next round",
 			"fontSize": 13,
 			"strokeColor": "#ef4444"
 		},
@@ -685,7 +685,7 @@
 			"fillStyle": "solid",
 			"strokeColor": "#8b5cf6",
 			"roundness": { "type": 3 },
-			"label": { "text": "Writer", "fontSize": 16 }
+			"label": { "text": "Checks + Critic", "fontSize": 16 }
 		},
 		{
 			"type": "arrow",
@@ -710,7 +710,7 @@
 			"strokeColor": "#22c55e",
 			"strokeWidth": 2,
 			"roundness": { "type": 3 },
-			"label": { "text": "Decision brief + Citations", "fontSize": 16 }
+			"label": { "text": "Decision brief\nclaims + citations", "fontSize": 16 }
 		},
 		{
 			"type": "rectangle",

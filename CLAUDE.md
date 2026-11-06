@@ -50,11 +50,11 @@ Concrete implementations are chosen in exactly one file: [`app/api/dependencies.
 ```bash
 # once: local secrets + services/api/.env, then the dev database
 python scripts/dev_secrets.py
-docker compose up -d          # postgres, valkey, mailpit (inbox: 127.0.0.1:58025)
+docker compose -f compose.dev.yaml up -d   # postgres, valkey, mailpit (inbox: 127.0.0.1:58025)
 
 cd services/api
 uv run --env-file .env alembic upgrade head        # migrate (schema-owner role)
-uv run --env-file .env uvicorn app.main:app --reload --port 8731   # /docs
+uv run --env-file .env uvicorn app.main:app --reload --port 8731 --no-proxy-headers   # /docs
 uv run pytest                                      # all tests (Postgres ones skip)
 TEST_DATABASE_URL=…/humani_t_test TEST_VALKEY_URL=… uv run pytest   # + Postgres, Valkey
 uv run pytest tests/test_domain.py -v              # one file
