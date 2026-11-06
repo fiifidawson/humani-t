@@ -339,6 +339,9 @@ networks:
     ipam:
       config:
         - subnet: 172.30.231.0/28
+          # Automatic addresses come from .8–.14 only. Without this, Docker gives
+          # whichever container starts first .2, and Caddy then cannot take it.
+          ip_range: 172.30.231.8/29
   # The database and Valkey, reachable only from the containers that need them.
   data:
     internal: true
