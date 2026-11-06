@@ -5,10 +5,11 @@
 #   humani_t_migrator  owns the schema; used only by the one-shot migrate job
 #   humani_t_app       reads and writes rows; cannot CREATE, ALTER or DROP
 #
-# Two databases with identical grants:
-#   humani_t       development data
-#   humani_t_test  for the Postgres contract tests, which delete what they write;
-#                  kept separate so a test run never touches development data
+# Databases, with identical grants:
+#   humani_t       the application's data
+#   humani_t_test  only when CREATE_TEST_DATABASE=true (compose.dev.yaml and CI):
+#                  the Postgres contract tests delete what they write, so they get
+#                  a database of their own. A production deployment has no use for it.
 set -eu
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
@@ -16,10 +17,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v app_password="$(cat /run/secrets/db_app_password)" <<'SQL'
 CREATE ROLE humani_t_migrator LOGIN PASSWORD :'migrator_password';
 CREATE ROLE humani_t_app LOGIN PASSWORD :'app_password';
-CREATE DATABASE humani_t_test;
 SQL
 
-for db in "$POSTGRES_DB" humani_t_test; do
+databases="$POSTGRES_DB"
+if [ "${CREATE_TEST_DATABASE:-false}" = "true" ]; then
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+    -c "CREATE DATABASE humani_t_test;"
+  databases="$databases humani_t_test"
+fi
+
+for db in $databases; do
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db" -v db="$db" <<'SQL'
 REVOKE ALL ON DATABASE :"db" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db" TO humani_t_migrator, humani_t_app;

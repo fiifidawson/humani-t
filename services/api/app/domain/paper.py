@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from urllib.parse import quote
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "doi:")
@@ -68,6 +69,19 @@ class PaperRecord:
         if self.doi:
             return f"doi:{normalise_doi(self.doi)}"
         return f"title:{normalise_title(self.title)}|{self.year or ''}"
+
+    @property
+    def link(self) -> str | None:
+        """Its own link, else one to the DOI resolver; `None` with neither.
+
+        A DOI is public bibliographic metadata, so linking to it reveals nothing
+        the record does not already say.
+        """
+        if self.url:
+            return self.url
+        if self.doi:
+            return f"https://doi.org/{quote(normalise_doi(self.doi), safe='/:;()._-')}"
+        return None
 
     @property
     def searchable_text(self) -> str:

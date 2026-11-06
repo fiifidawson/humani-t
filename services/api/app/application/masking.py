@@ -1,0 +1,350 @@
+"""Masking use cases: project rules, the papers' mask store, and the `mask` stage.
+
+What belongs here: sealing and opening masking rules and masked paper text
+under the project's key, the owner-only rule endpoints' use cases, and the
+stage that masks every kept paper text before anything screens it
+(architecture §3.9.1).
+
+What does not: finding spans (`app/privacy/`), the rules of masking
+(`domain/masking.py`), or the raw text, which stays where ingest kept it and is
+read only through `IngestedTextSource`. Only masked text leaves `PaperMaskStore`.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
+from typing import Protocol
+from uuid import UUID
+
+from app.application.accounts import Current
+from app.application.audit import AuditLog
+from app.application.encryption import ScopeEncryption
+from app.application.membership import require_member
+from app.domain.accounts import NotFoundError
+from app.domain.discovery import IngestedTextSource
+from app.domain.encryption import EncryptionContext
+from app.domain.masking import (
+    MAX_MASKING_RULES_PER_PROJECT,
+    DocumentAwaitingReview,
+    DuplicateMaskingRuleError,
+    EntityType,
+    MaskedText,
+    MaskingRule,
+    MaskingRuleRecord,
+    PaperMask,
+    masking_fingerprint,
+    normalize_masking_term,
+    spans_to_json,
+)
+from app.domain.projects import Action
+from app.domain.runs import GateDecision, GateKind, JsonValue
+from app.privacy.base import Sanitizer
+from app.runs.base import StageContext, StageFailedError
+from app.storage.base import StorageProvider, UnitOfWork
+
+# Table, column; the row is the rule or the paper (architecture §5.4).
+_TERM_PURPOSE = "masking_rules.term"
+_MASKED_PURPOSE = "paper_masks.masked_text"
+_SPANS_PURPOSE = "paper_masks.spans"
+_NO_PROJECT = "No such project."
+_NO_RULE = "No such masking rule."
+
+REVIEW_REJECTED = (
+    "The privacy review was not approved, so the run stopped before any document "
+    "was used. Correct the masking and start the run again."
+)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _term_context(project_id: UUID, rule_id: UUID) -> EncryptionContext:
+    return EncryptionContext(project_id, _TERM_PURPOSE, str(rule_id))
+
+
+class MaskingRuleService:
+    """Owner-only "always mask this term" rules, and the source that masking reads them from.
+
+    A term is usually a person's name, so it is treated as raw text: owners
+    only, sealed at rest, and never in the audit log.
+    """
+
+    def __init__(
+        self,
+        *,
+        storage: StorageProvider,
+        encryption: ScopeEncryption,
+        audit: AuditLog,
+        clock: Callable[[], datetime] = _utc_now,
+    ) -> None:
+        self._storage = storage
+        self._encryption = encryption
+        self._audit = audit
+        self._clock = clock
+
+    async def rules_for(self, uow: UnitOfWork, project_id: UUID) -> Sequence[MaskingRule]:
+        """Every rule of the project in the clear, inside the caller's transaction."""
+        return [
+            MaskingRule(record.id, await self._term(uow, record), record.entity_type)
+            for record in await uow.masking_rules.list_for_project(project_id)
+        ]
+
+    async def list(
+        self, current: Current, project_id: UUID, request_id: str | None = None
+    ) -> list[tuple[MaskingRuleRecord, str]]:
+        """Each rule with its term. Every listing is audited: it shows raw text."""
+        async with self._storage.unit_of_work() as uow:
+            await require_member(
+                uow, current.user.id, project_id, Action.VIEW_RAW_TEXT, not_found=_NO_PROJECT
+            )
+            records = await uow.masking_rules.list_for_project(project_id)
+            listed = [(r, await self._term(uow, r)) for r in records]
+            await self._audit.record(
+                uow,
+                current.actor(request_id),
+                "masking_rule.listed",
+                "project",
+                str(project_id),
+                scope_id=project_id,
+            )
+            await uow.commit()
+        return listed
+
+    async def add(
+        self,
+        current: Current,
+        project_id: UUID,
+        term: str,
+        entity_type: EntityType,
+        request_id: str | None = None,
+    ) -> tuple[MaskingRuleRecord, str]:
+        """Raise `ValueError` for an unusable term, `DuplicateMaskingRuleError` for a repeat."""
+        async with self._storage.unit_of_work() as uow:
+            await require_member(
+                uow,
+                current.user.id,
+                project_id,
+                Action.MANAGE_DOCUMENTS,
+                not_found=_NO_PROJECT,
+            )
+            term = normalize_masking_term(term)
+            # The project's row lock serialises adds, so two concurrent requests
+            # cannot both pass the duplicate check (ADR-0002).
+            await uow.projects.lock(project_id)
+            existing = await self.rules_for(uow, project_id)
+            if any(r.term.casefold() == term.casefold() for r in existing):
+                raise DuplicateMaskingRuleError("This project already masks that term.")
+            if len(existing) >= MAX_MASKING_RULES_PER_PROJECT:
+                raise ValueError(
+                    f"A project can have at most {MAX_MASKING_RULES_PER_PROJECT} masking rules"
+                )
+            rule_id = uuid.uuid4()
+            record = MaskingRuleRecord(
+                id=rule_id,
+                project_id=project_id,
+                term_sealed=await self._encryption.encrypt(
+                    uow, _term_context(project_id, rule_id), term.encode()
+                ),
+                entity_type=entity_type,
+                created_by=current.user.id,
+                created_at=self._clock(),
+            )
+            await uow.masking_rules.add(record)
+            await self._audit.record(
+                uow,
+                current.actor(request_id),
+                "masking_rule.created",
+                "masking_rule",
+                str(rule_id),
+                scope_id=project_id,
+            )
+            await uow.commit()
+        return record, term
+
+    async def remove(
+        self, current: Current, project_id: UUID, rule_id: UUID, request_id: str | None = None
+    ) -> None:
+        async with self._storage.unit_of_work() as uow:
+            await require_member(
+                uow,
+                current.user.id,
+                project_id,
+                Action.MANAGE_DOCUMENTS,
+                not_found=_NO_PROJECT,
+            )
+            record = await uow.masking_rules.get(rule_id)
+            if record is None or record.project_id != project_id:
+                raise NotFoundError(_NO_RULE)
+            if not await uow.masking_rules.delete(rule_id):
+                raise NotFoundError(_NO_RULE)
+            await self._audit.record(
+                uow,
+                current.actor(request_id),
+                "masking_rule.deleted",
+                "masking_rule",
+                str(rule_id),
+                scope_id=project_id,
+            )
+            await uow.commit()
+
+    async def _term(self, uow: UnitOfWork, record: MaskingRuleRecord) -> str:
+        context = _term_context(record.project_id, record.id)
+        return (await self._encryption.decrypt(uow, context, record.term_sealed)).decode()
+
+
+class PaperMaskStore:
+    """Papers' masked text, sealed and bound to the paper's row.
+
+    It implements the pipeline's `MaskedTextSource`: the screen stage and the
+    paper routes read masked text here, and nothing here can return raw text.
+    """
+
+    def __init__(self, encryption: ScopeEncryption, clock: Callable[[], datetime] = _utc_now):
+        self._encryption = encryption
+        self._clock = clock
+
+    async def masked_text(
+        self, uow: UnitOfWork, project_id: UUID, paper_id: UUID
+    ) -> str | None:
+        """The paper's masked text, or `None` if it has not been masked yet."""
+        mask = await uow.paper_masks.get(paper_id)
+        if mask is None or mask.project_id != project_id:
+            return None
+        context = EncryptionContext(project_id, _MASKED_PURPOSE, str(paper_id))
+        return (await self._encryption.decrypt(uow, context, mask.masked_sealed)).decode()
+
+    async def masked_with(self, uow: UnitOfWork, paper_id: UUID) -> tuple[str, ...] | None:
+        """What the stored masking was made with, or `None` if there is none."""
+        mask = await uow.paper_masks.get(paper_id)
+        return None if mask is None else mask.masked_with
+
+    async def save(
+        self,
+        uow: UnitOfWork,
+        project_id: UUID,
+        paper_id: UUID,
+        masked: MaskedText,
+        masked_with: tuple[str, ...],
+        *,
+        replaces: tuple[str, ...] | None,
+    ) -> bool:
+        """Store a new masking if the stored one is still `replaces`. False if it lost."""
+        row = str(paper_id)
+        mask = PaperMask(
+            paper_id=paper_id,
+            project_id=project_id,
+            masked_sealed=await self._encryption.encrypt(
+                uow, EncryptionContext(project_id, _MASKED_PURPOSE, row), masked.masked.encode()
+            ),
+            spans_sealed=await self._encryption.encrypt(
+                uow,
+                EncryptionContext(project_id, _SPANS_PURPOSE, row),
+                json.dumps(spans_to_json(masked.spans)).encode(),
+            ),
+            masked_with=masked_with,
+            masked_at=self._clock(),
+        )
+        return await uow.paper_masks.put(mask, replaces=replaces)
+
+
+class DocumentsAwaitingReview(Protocol):
+    """Uploaded documents whose masking no person has approved yet (P2: uploads)."""
+
+    async def awaiting_review(self, project_id: UUID) -> tuple[DocumentAwaitingReview, ...]: ...
+
+
+class MaskStage:
+    """Mask every kept paper text of the run with the narrow list and the project's rules.
+
+    A paper whose stored masking was made with the same detectors and rules is
+    skipped, so a re-run after a gate, a crash or a deploy redoes nothing, and
+    adding a rule or upgrading a detector masks everything again. If the
+    project has documents waiting for review, the stage stops at the
+    privacy_review gate first: no document is used until an owner approves.
+    """
+
+    def __init__(
+        self,
+        *,
+        storage: StorageProvider,
+        texts: IngestedTextSource[UnitOfWork],
+        masks: PaperMaskStore,
+        rules: MaskingRuleService,
+        sanitizer: Sanitizer,
+        detector_sources: Sequence[str],
+        entity_types: Sequence[EntityType],
+        documents: DocumentsAwaitingReview | None = None,
+    ) -> None:
+        self._storage = storage
+        self._texts = texts
+        self._masks = masks
+        self._rules = rules
+        self._sanitizer = sanitizer
+        self._detector_sources = tuple(sorted(detector_sources))
+        self._entity_types = sorted(t.value for t in entity_types)
+        self._documents = documents
+
+    async def run(self, context: StageContext) -> Mapping[str, JsonValue]:
+        await self._review_documents(context)
+        async with self._storage.unit_of_work() as uow:
+            rules = list(await self._rules.rules_for(uow, context.project_id))
+            texts = await self._texts.texts_for_run(uow, context.project_id, context.run_id)
+        fingerprint = masking_fingerprint(self._detector_sources, rules)
+        masked_items: Counter[str] = Counter()
+        masked = 0
+        for done, text in enumerate(texts, start=1):
+            await context.raise_if_cancelled()
+            async with self._storage.unit_of_work() as uow:
+                previous = await self._masks.masked_with(uow, text.paper_id)
+            if previous != fingerprint:
+                # Detection runs outside any transaction: a slow model must not
+                # hold a database connection (architecture §5.7).
+                result = await self._sanitizer.mask(text.text, rules=rules)
+                async with self._storage.unit_of_work() as uow:
+                    if await self._masks.save(
+                        uow,
+                        context.project_id,
+                        text.paper_id,
+                        result,
+                        fingerprint,
+                        replaces=previous,
+                    ):
+                        await uow.commit()
+                        masked += 1
+                        masked_items.update(result.counts)
+            await context.progress(done, len(texts), f"Paper {done} of {len(texts)}")
+        return {
+            "papers": len(texts),
+            "masked": masked,
+            "skipped": len(texts) - masked,
+            "masked_items": dict(sorted(masked_items.items())),
+            "manifest": {
+                "detectors": list(self._detector_sources),
+                "entity_types": list(self._entity_types),
+                "masking_rules": len(rules),
+            },
+        }
+
+    async def _review_documents(self, context: StageContext) -> None:
+        if self._documents is None:
+            return
+        waiting = await self._documents.awaiting_review(context.project_id)
+        if not waiting:
+            return
+        documents: list[JsonValue] = [
+            {
+                "document_id": str(d.document_id),
+                "masked_items": {k.value: n for k, n in sorted(d.counts.items())},
+            }
+            for d in waiting
+        ]
+        resolution = await context.require_gate(
+            GateKind.PRIVACY_REVIEW, {"documents": documents}
+        )
+        if resolution.decision is not GateDecision.APPROVE:
+            raise StageFailedError(REVIEW_REJECTED)

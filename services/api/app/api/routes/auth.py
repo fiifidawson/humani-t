@@ -17,25 +17,37 @@ from app.api.schemas.accounts import (
     SignedInOut,
     UserOut,
 )
-from app.api.session import CurrentDep, clear_session_cookies, request_id, set_session_cookies
+from app.api.session import (
+    AccountBasicsDep,
+    AnySessionDep,
+    clear_session_cookies,
+    request_id,
+    set_session_cookies,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str:
-    # Behind Caddy, uvicorn's --proxy-headers sets this from X-Forwarded-For,
-    # trusting only the proxy's network.
+    # Settled by ClientAddressMiddleware: X-Forwarded-For counts only when it
+    # comes from one of the operator's trusted_proxies.
     return request.client.host if request.client else "unknown"
 
 
-@router.post("/login", summary="Sign in with email and password")
+@router.post(
+    "/login", summary="Sign in with email and password", response_model_exclude_none=True
+)
 async def login(
     payload: LoginIn,
     request: Request,
     response: Response,
     accounts: AccountsDep,
 ) -> SignedInOut:
-    """Start a session. The same 401 for a wrong password and an unknown account."""
+    """Check the password and start a session; `status` says what comes next.
+
+    The same 401 for a wrong password and an unknown account. With an enrolled
+    second factor the session is pending: complete it under `/auth/mfa/*`.
+    """
     signed_in = await accounts.login(
         email=payload.email,
         password=payload.password,
@@ -44,11 +56,11 @@ async def login(
         request_id=request_id(request),
     )
     set_session_cookies(response, signed_in)
-    return SignedInOut(user=UserOut.from_domain(signed_in.user))
+    return SignedInOut.from_domain(signed_in)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="End this session")
-async def logout(request: Request, current: CurrentDep, accounts: AccountsDep) -> Response:
+async def logout(request: Request, current: AnySessionDep, accounts: AccountsDep) -> Response:
     await accounts.logout(current, request_id(request))
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     clear_session_cookies(response)
@@ -56,8 +68,11 @@ async def logout(request: Request, current: CurrentDep, accounts: AccountsDep) -
 
 
 @router.get("/session", summary="Who is signed in")
-async def current_session(current: CurrentDep) -> CurrentSessionOut:
+async def current_session(
+    current: AccountBasicsDep, accounts: AccountsDep
+) -> CurrentSessionOut:
     return CurrentSessionOut(
+        mfa_enrolment_required=not accounts.is_fully_signed_in(current),
         user=UserOut.from_domain(current.user),
         session=SessionOut.from_domain(current.session, current.session.id),
     )
@@ -71,13 +86,22 @@ async def current_session(current: CurrentDep) -> CurrentSessionOut:
 async def reauthenticate(
     payload: ReauthenticateIn,
     request: Request,
-    current: CurrentDep,
+    current: AccountBasicsDep,
     accounts: AccountsDep,
-) -> None:
-    await accounts.reauthenticate(current, payload.password, request_id(request))
+) -> Response:
+    """The session continues under new cookies; the old token stops working."""
+    signed_in = await accounts.reauthenticate(current, payload.password, request_id(request))
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    set_session_cookies(response, signed_in)
+    return response
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED, summary="Accept an invitation")
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    summary="Accept an invitation",
+    response_model_exclude_none=True,
+)
 async def register(
     payload: RegisterIn,
     request: Request,
@@ -92,7 +116,7 @@ async def register(
         request_id=request_id(request),
     )
     set_session_cookies(response, signed_in)
-    return SignedInOut(user=UserOut.from_domain(signed_in.user))
+    return SignedInOut.from_domain(signed_in)
 
 
 @router.post(

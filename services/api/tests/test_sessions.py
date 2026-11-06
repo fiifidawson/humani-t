@@ -10,9 +10,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from app.domain.sessions import Session, SessionPolicy, hash_token, new_token
 from app.ratelimit.memory import MemoryRateLimiter
-
 from tests.support import FakeClock
 
 START = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)

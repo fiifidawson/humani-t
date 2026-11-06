@@ -20,8 +20,9 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from uuid import UUID
 
 import structlog
@@ -38,14 +39,17 @@ from app.domain.accounts import (
     InvalidTokenError,
     Invitation,
     NotFoundError,
+    OwnAccountError,
     PasswordRejectedError,
     PasswordReset,
     ReauthenticationRequiredError,
     ThrottledError,
     User,
     normalize_email,
+    require_an_admin_remains,
 )
-from app.domain.errors import ConcurrentUpdateError
+from app.domain.errors import ConcurrentUpdateError, RateLimiterUnavailableError
+from app.domain.mfa import MfaPolicy
 from app.domain.notifications import EmailDeliveryError, EmailMessage
 from app.domain.passwords import PasswordPolicy, normalize_password
 from app.domain.sessions import Session, SessionPolicy, hash_token, new_token, tokens_match
@@ -67,14 +71,70 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class SignInStatus(StrEnum):
+    """Where a sign-in stands once the password has been accepted."""
+
+    SIGNED_IN = "signed_in"
+    MFA_REQUIRED = "mfa_required"
+    MFA_ENROLMENT_REQUIRED = "mfa_enrolment_required"
+
+
 @dataclass(frozen=True, slots=True)
 class SignedIn:
-    """A new session and the two raw tokens the browser must be given."""
+    """A new session and the two raw tokens the browser must be given.
+
+    `methods` lists the second factors the account can use, and is set only
+    when `status` is `MFA_REQUIRED`.
+    """
 
     user: User
     session: Session
     session_token: str
     csrf_token: str
+    status: SignInStatus = SignInStatus.SIGNED_IN
+    methods: tuple[str, ...] = ()
+
+
+def new_session(
+    user: User,
+    user_agent: str | None,
+    now: datetime,
+    *,
+    aal: int = 1,
+    is_mfa_pending: bool = False,
+    status: SignInStatus = SignInStatus.SIGNED_IN,
+    methods: tuple[str, ...] = (),
+) -> SignedIn:
+    """A fresh session with fresh tokens. Never reuses a token: no fixation."""
+    session_token, csrf_token = new_token(), new_token()
+    session = Session(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        token_hash=hash_token(session_token),
+        csrf_token_hash=hash_token(csrf_token),
+        created_at=now,
+        last_seen_at=now,
+        authenticated_at=now,
+        user_agent=user_agent[:256] if user_agent else None,
+        aal=aal,
+        is_mfa_pending=is_mfa_pending,
+    )
+    return SignedIn(user, session, session_token, csrf_token, status, methods)
+
+
+async def second_factor_methods(uow: UnitOfWork, user_id: UUID) -> tuple[str, ...]:
+    """The second factors an account can sign in with; empty if it has none enrolled."""
+    totp = await uow.totp_credentials.get_for_user(user_id)
+    has_totp = totp is not None and totp.is_confirmed
+    has_passkeys = bool(await uow.passkeys.list_for_user(user_id))
+    if not (has_totp or has_passkeys):
+        return ()
+    methods = ["passkey"] if has_passkeys else []
+    if has_totp:
+        methods.append("totp")
+    if await uow.recovery_codes.count_unused(user_id):
+        methods.append("recovery_code")
+    return tuple(methods)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,11 +148,30 @@ class Current:
         return Actor(self.user.id, request_id)
 
 
+def _rotated(current: Current, now: datetime) -> SignedIn:
+    """The same sign-in under fresh tokens, confirmed again at `now`.
+
+    The level and the creation time carry over: a password alone neither raises
+    the level nor restarts the absolute lifetime, which only a full sign-in does.
+    """
+    session_token, csrf_token = new_token(), new_token()
+    session = replace(
+        current.session,
+        id=uuid.uuid4(),
+        token_hash=hash_token(session_token),
+        csrf_token_hash=hash_token(csrf_token),
+        last_seen_at=now,
+        authenticated_at=now,
+    )
+    return SignedIn(current.user, session, session_token, csrf_token)
+
+
 @dataclass(frozen=True, slots=True)
 class PurgeReport:
     sessions: int
     password_resets: int
     invitations: int
+    webauthn_challenges: int = 0
 
 
 class AccountService:
@@ -107,6 +186,7 @@ class AccountService:
         public_origin: str,
         password_policy: PasswordPolicy | None = None,
         session_policy: SessionPolicy | None = None,
+        mfa_policy: MfaPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
@@ -117,6 +197,7 @@ class AccountService:
         self._origin = public_origin.rstrip("/")
         self._passwords = password_policy or PasswordPolicy()
         self.session_policy = session_policy or SessionPolicy()
+        self.mfa_policy = mfa_policy or MfaPolicy()
         self._clock = clock
         self._hash_slots = asyncio.Semaphore(_CONCURRENT_HASHES)
         # Verified against when the account does not exist, so the unknown-account
@@ -155,16 +236,51 @@ class AccountService:
             await uow.commit()
         return user
 
-    async def disable_user(self, admin: Current, user_id: UUID) -> None:
+    async def disable_user(
+        self, admin: Current, user_id: UUID, request_id: str | None = None
+    ) -> None:
+        """Disable an account and end its sessions; never one's own, nor the last admin."""
         self._require_admin(admin)
+        if user_id == admin.user.id:
+            raise OwnAccountError("You cannot disable your own account.")
+        async with self._storage.unit_of_work() as uow:
+            # Taken before anything is read, so of two admins disabling each
+            # other at once, the second sees the first's change and is refused.
+            enabled_admins = {a.id for a in await uow.users.lock_enabled_admins()}
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise NotFoundError("No such user.")
+            require_an_admin_remains(enabled_admins, user.id)
+            if admin.user.id not in enabled_admins:
+                # Disabled or demoted since this request was authenticated.
+                raise ForbiddenError("Administrators only.")
+            await uow.users.save(user.disabled())
+            await uow.sessions.revoke_all_for_user(user.id, self._clock())
+            await self._audit.record(
+                uow, admin.actor(request_id), "account.disabled", "user", str(user.id)
+            )
+            await uow.commit()
+
+    async def enable_user(
+        self, admin: Current, user_id: UUID, request_id: str | None = None
+    ) -> None:
+        """Let a disabled account sign in again. The sessions disabling ended stay ended.
+
+        Unlike disabling, this needs a recent sign-in: it gives access back, and
+        disabling must stay quick to reach during an incident.
+        """
+        self._require_admin(admin)
+        if not admin.session.is_recently_authenticated(self._clock(), self.session_policy):
+            raise ReauthenticationRequiredError("Confirm your password to continue.")
         async with self._storage.unit_of_work() as uow:
             user = await uow.users.get(user_id)
             if user is None:
                 raise NotFoundError("No such user.")
-            await uow.users.save(user.disabled())
-            await uow.sessions.revoke_all_for_user(user.id, self._clock())
+            if not user.is_disabled:
+                return
+            await uow.users.save(user.enabled())
             await self._audit.record(
-                uow, admin.actor(), "account.disabled", "user", str(user.id)
+                uow, admin.actor(request_id), "account.enabled", "user", str(user.id)
             )
             await uow.commit()
 
@@ -215,17 +331,50 @@ class AccountService:
                 raise InvalidCredentialsError("Email or password is incorrect.")
             if upgraded is not None:
                 await self._save_if_unchanged(uow, fresh.with_password_hash(upgraded))
-            signed_in = await self._start_session(uow, fresh, user_agent)
+            methods = await second_factor_methods(uow, fresh.id)
+            # An enrolled account always gets a pending session, whatever the
+            # policy says: a second factor someone set up is never skipped.
+            if methods:
+                signed_in = new_session(
+                    fresh,
+                    user_agent,
+                    self._clock(),
+                    is_mfa_pending=True,
+                    status=SignInStatus.MFA_REQUIRED,
+                    methods=methods,
+                )
+                action = "auth.login_pending_mfa"
+            else:
+                signed_in = new_session(
+                    fresh, user_agent, self._clock(), status=self._unenrolled_status()
+                )
+                action = "auth.login"
+            await uow.sessions.add(signed_in.session)
             await self._audit.record(
-                uow,
-                Actor(fresh.id, request_id),
-                "auth.login",
-                "session",
-                str(signed_in.session.id),
+                uow, Actor(fresh.id, request_id), action, "session", str(signed_in.session.id)
             )
             await uow.commit()
-        await self._limiter.reset(account_key)
+        await self._reset_quietly(account_key)
         return signed_in
+
+    def is_fully_signed_in(self, current: Current) -> bool:
+        """Past every factor the policy demands: aal 2, or aal 1 when MFA is optional."""
+        if current.session.is_mfa_pending:
+            return False
+        return current.session.aal == 2 or not self.mfa_policy.is_required
+
+    def _unenrolled_status(self) -> SignInStatus:
+        if self.mfa_policy.is_required:
+            return SignInStatus.MFA_ENROLMENT_REQUIRED
+        return SignInStatus.SIGNED_IN
+
+    async def _reset_quietly(self, key: str) -> None:
+        # The sign-in already happened; failing it now over a counter that could
+        # not be cleared would only punish the user. The count expires anyway.
+        try:
+            await self._limiter.reset(key)
+        except RateLimiterUnavailableError:
+            _log.warning("rate_limit_reset_failed", exc_info=True)
 
     async def authenticate(self, session_token: str) -> Current | None:
         """Resolve a session cookie to its caller, extending the idle window.
@@ -263,7 +412,8 @@ class AccountService:
 
     async def reauthenticate(
         self, current: Current, password: str, request_id: str | None
-    ) -> None:
+    ) -> SignedIn:
+        """Confirm the password and move this sign-in to new tokens (step-up rotation)."""
         if not await self._verify(current.user.password_hash, password):
             async with self._storage.unit_of_work() as uow:
                 await self._audit.record(
@@ -275,17 +425,21 @@ class AccountService:
                 )
                 await uow.commit()
             raise CurrentPasswordIncorrectError("The password is incorrect.")
+        now = self._clock()
+        rotated = _rotated(current, now)
         async with self._storage.unit_of_work() as uow:
-            if not await uow.sessions.mark_reauthenticated(current.session.id, self._clock()):
+            if not await uow.sessions.revoke(current.session.id, now):
                 raise ReauthenticationRequiredError("Sign in again to continue.")
+            await uow.sessions.add(rotated.session)
             await self._audit.record(
                 uow,
                 current.actor(request_id),
                 "auth.reauthenticated",
                 "session",
-                str(current.session.id),
+                str(rotated.session.id),
             )
             await uow.commit()
+        return rotated
 
     async def list_sessions(self, current: Current) -> list[Session]:
         now = self._clock()
@@ -351,7 +505,10 @@ class AccountService:
             user = fresh.with_password_hash(new_hash)
             await uow.users.save(user)
             await uow.sessions.revoke_all_for_user(user.id, self._clock())
-            signed_in = await self._start_session(uow, user, user_agent)
+            # The new session keeps this one's level: a password change is not
+            # a reason to ask for the second factor again, nor a way to skip it.
+            signed_in = new_session(user, user_agent, self._clock(), aal=current.session.aal)
+            await uow.sessions.add(signed_in.session)
             await self._audit.record(
                 uow, current.actor(request_id), "account.password_changed", "user", str(user.id)
             )
@@ -393,9 +550,9 @@ class AccountService:
             await self._send_quietly(
                 EmailMessage(
                     to=recipient.email,
-                    subject="Reset your humani-t password",
+                    subject="Reset your Humani-T password",
                     body=(
-                        "Someone asked to reset the password for your humani-t account.\n\n"
+                        "Someone asked to reset the password for your Humani-T account.\n\n"
                         f"{self._origin}/reset-password#token={token}\n\n"
                         "The link works once and expires in 30 minutes. If it was not you, "
                         "ignore this email; your password has not changed.\n"
@@ -464,9 +621,9 @@ class AccountService:
         await self._email.send(
             EmailMessage(
                 to=email,
-                subject="You have been invited to humani-t",
+                subject="You have been invited to Humani-T",
                 body=(
-                    f"{admin.user.display_name} invited you to humani-t.\n\n"
+                    f"{admin.user.display_name} invited you to Humani-T.\n\n"
                     f"{self._origin}/accept-invitation#token={token}\n\n"
                     "The link works once and expires in 7 days.\n"
                 ),
@@ -501,7 +658,8 @@ class AccountService:
             if not await uow.invitations.claim(invitation.id, now):
                 raise InvalidTokenError("This invitation is invalid or has expired.")
             await uow.users.add(user)
-            signed_in = await self._start_session(uow, user, user_agent)
+            signed_in = new_session(user, user_agent, now, status=self._unenrolled_status())
+            await uow.sessions.add(signed_in.session)
             await self._audit.record(
                 uow, Actor(user.id, request_id), "account.registered", "user", str(user.id)
             )
@@ -512,10 +670,12 @@ class AccountService:
         """Delete ended sessions and spent links, so these tables do not grow forever."""
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
+            challenges = await uow.webauthn_challenges.delete_spent(now)
             report = PurgeReport(
                 sessions=await uow.sessions.delete_ended(now, self.session_policy),
                 password_resets=await uow.password_resets.delete_spent(now),
                 invitations=await uow.invitations.delete_spent(now),
+                webauthn_challenges=challenges,
             )
             await uow.commit()
         return report
@@ -539,24 +699,6 @@ class AccountService:
         except ConcurrentUpdateError:
             _log.info("password_rehash_skipped", user_id=str(user.id))
 
-    async def _start_session(
-        self, uow: UnitOfWork, user: User, user_agent: str | None
-    ) -> SignedIn:
-        now = self._clock()
-        session_token, csrf_token = new_token(), new_token()
-        session = Session(
-            id=uuid.uuid4(),
-            user_id=user.id,
-            token_hash=hash_token(session_token),
-            csrf_token_hash=hash_token(csrf_token),
-            created_at=now,
-            last_seen_at=now,
-            authenticated_at=now,
-            user_agent=user_agent[:256] if user_agent else None,
-        )
-        await uow.sessions.add(session)
-        return SignedIn(user, session, session_token, csrf_token)
-
     async def _new_hash(self, password: str, context: tuple[str, ...]) -> str:
         violations = self._passwords.violations(password, context)
         if violations:
@@ -577,9 +719,9 @@ class AccountService:
     def _password_changed_message(user: User) -> EmailMessage:
         return EmailMessage(
             to=user.email,
-            subject="Your humani-t password was changed",
+            subject="Your Humani-T password was changed",
             body=(
-                "The password for your humani-t account was just changed, and every "
+                "The password for your Humani-T account was just changed, and every "
                 "other signed-in device was signed out.\n\nIf this was not you, reset "
                 "your password now and tell your administrator.\n"
             ),

@@ -23,9 +23,11 @@ from httpx2 import Response
 
 from app.api.dependencies import Providers, build_providers
 from app.auth.fake import FakePasswordHasher
+from app.domain.mfa import MfaPolicy
 from app.domain.notifications import EmailMessage
 from app.email.recording import RecordingEmailProvider
 from app.main import create_app
+from app.ratelimit.base import RateLimiter
 from app.settings import Environment, Settings
 from app.storage.base import UnitOfWork
 from app.storage.memory import MemoryStorage
@@ -139,16 +141,39 @@ class AuthHarness:
         return self.providers.email.outbox  # type: ignore[attr-defined, no-any-return]
 
 
-def make_harness(**settings_overrides: object) -> AuthHarness:
-    clock = FakeClock()
+def make_harness(
+    *,
+    mfa_policy: MfaPolicy | None = None,
+    rate_limiter: RateLimiter | None = None,
+    clock: FakeClock | None = None,
+    **settings_overrides: object,
+) -> AuthHarness:
+    """An app with production's defaults — MFA required — unless a spec says otherwise.
+
+    `mfa_policy=MfaPolicy(is_required=False)` is for specs of the password factor
+    alone; `rate_limiter` lets a spec unplug the limiter's backend.
+    """
+    clock = clock or FakeClock()
     storage = TrackingStorage()
     hasher = ObservingHasher(storage)
     email = ObservingEmail(storage)
-    values: dict[str, object] = {"environment": Environment.TEST, "public_origin": ORIGIN}
+    # Tests never load a real language model: they would depend on the ner extra
+    # being installed. Specs of the real model opt in explicitly.
+    values: dict[str, object] = {
+        "environment": Environment.TEST,
+        "public_origin": ORIGIN,
+        "masking_ner": "off",
+    }
     values.update(settings_overrides)
     settings = Settings.model_validate(values)
     providers = build_providers(
-        settings, clock=clock, password_hasher=hasher, storage=storage, email=email
+        settings,
+        clock=clock,
+        password_hasher=hasher,
+        storage=storage,
+        email=email,
+        rate_limiter=rate_limiter,
+        mfa_policy=mfa_policy,
     )
     return AuthHarness(
         create_app(settings, providers=providers), providers, clock, hasher, storage, email

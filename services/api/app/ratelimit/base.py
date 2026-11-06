@@ -1,4 +1,9 @@
-"""The rate-limiting seam: a sliding window per key."""
+"""The rate-limiting seam: a sliding window per key.
+
+Every method raises `RateLimiterUnavailableError` when the backend cannot be
+reached. Callers let it propagate: an attempt that cannot be counted is
+refused (fail closed), never allowed through.
+"""
 
 from __future__ import annotations
 

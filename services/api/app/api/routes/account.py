@@ -1,4 +1,9 @@
-"""The signed-in user's own account: sessions and password."""
+"""The signed-in user's own account: sessions and password.
+
+Reachable before MFA enrolment (`AccountBasicsDep`): an account that has not
+yet added a second factor can still see where it is signed in and change its
+password. A pending session cannot.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +13,13 @@ from fastapi import APIRouter, Request, Response, status
 
 from app.api.dependencies import AccountsDep
 from app.api.schemas.accounts import ChangePasswordIn, SessionOut
-from app.api.session import CurrentDep, request_id, set_session_cookies
+from app.api.session import AccountBasicsDep, request_id, set_session_cookies
 
 router = APIRouter(prefix="/account", tags=["account"])
 
 
 @router.get("/sessions", summary="Where this account is signed in")
-async def list_sessions(current: CurrentDep, accounts: AccountsDep) -> list[SessionOut]:
+async def list_sessions(current: AccountBasicsDep, accounts: AccountsDep) -> list[SessionOut]:
     sessions = await accounts.list_sessions(current)
     return [SessionOut.from_domain(s, current.session.id) for s in sessions]
 
@@ -27,7 +32,7 @@ async def list_sessions(current: CurrentDep, accounts: AccountsDep) -> list[Sess
 async def revoke_session(
     session_id: UUID,
     request: Request,
-    current: CurrentDep,
+    current: AccountBasicsDep,
     accounts: AccountsDep,
 ) -> None:
     await accounts.revoke_session(current, session_id, request_id(request))
@@ -39,7 +44,7 @@ async def revoke_session(
     summary="Sign out every other device",
 )
 async def revoke_other_sessions(
-    request: Request, current: CurrentDep, accounts: AccountsDep
+    request: Request, current: AccountBasicsDep, accounts: AccountsDep
 ) -> None:
     await accounts.revoke_other_sessions(current, request_id(request))
 
@@ -53,7 +58,7 @@ async def revoke_other_sessions(
 async def change_password(
     payload: ChangePasswordIn,
     request: Request,
-    current: CurrentDep,
+    current: AccountBasicsDep,
     accounts: AccountsDep,
 ) -> Response:
     """Every other session ends; this one continues under a fresh token."""

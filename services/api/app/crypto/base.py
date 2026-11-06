@@ -38,3 +38,7 @@ class Cipher(Protocol):
     def open(self, key: bytes, sealed: bytes, associated_data: bytes) -> bytes:
         """Raise `DecryptionError` on any tampering or context mismatch."""
         ...
+
+    def derive_key(self, key: bytes, info: bytes) -> bytes:
+        """A 256-bit subkey for one purpose (HKDF). Different `info`, unrelated keys."""
+        ...

@@ -55,6 +55,20 @@ class ScopeEncryption:
             )
         )
 
+    async def ensure_scope(self, uow: UnitOfWork, scope_id: UUID) -> None:
+        """Create the scope's data key if it has none yet. For lazily created scopes."""
+        if await uow.data_keys.get(scope_id) is None:
+            await self.create_scope(uow, scope_id)
+
+    async def derive_key(self, uow: UnitOfWork, scope_id: UUID, purpose: str) -> bytes:
+        """A subkey of the scope's data key for one purpose, such as a MAC key.
+
+        It dies with the data key: shredding the scope also makes everything
+        keyed with it unverifiable.
+        """
+        data_key = await self._data_key(uow, scope_id)
+        return self._cipher.derive_key(data_key, purpose.encode())
+
     async def encrypt(
         self, uow: UnitOfWork, context: EncryptionContext, plaintext: bytes
     ) -> bytes:

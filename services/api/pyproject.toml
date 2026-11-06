@@ -10,16 +10,25 @@ dependencies = [
     "cryptography>=50.0.2",
     "email-validator>=2.3.0",
     "fastapi>=0.141.1",
+    "httpx2>=2.12.0",
+    "jsonschema>=4.26.0",
     "pydantic-settings>=2.16.1",
+    "pypdf>=6.21.4",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.6",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
+    "webauthn>=3.0.1",
+]
+
+[project.optional-dependencies]
+ner = [
+    "en-core-web-sm",
+    "spacy>=3.8.18,<3.9",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.12.0",
     "hypothesis>=6.170.9",
     "import-linter>=2.15",
     "pre-commit>=4.7.0",
@@ -80,6 +89,11 @@ select = [
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
+[tool.ruff.lint.isort]
+# Named, not detected: a module that a red test imports before it exists would
+# otherwise be sorted as third-party, and the sort would flip once it is written.
+known-first-party = ["app", "tests"]
+
 [tool.pyright]
 include = ["app", "tests"]
 pythonVersion = "3.13"
@@ -100,8 +114,11 @@ source_modules = ["app.domain"]
 forbidden_modules = [
     "app.api", "app.application", "app.main", "app.settings", "app.cli",
     "app.search", "app.storage", "app.crypto", "app.auth", "app.email", "app.ratelimit",
+    "app.net", "app.inference", "app.runs", "app.signals", "app.worker", "app.briefs",
+    "app.files", "app.malware", "app.extraction",
     "fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "cryptography", "structlog",
-    "argon2", "aiosmtplib", "redis",
+    "argon2", "aiosmtplib", "redis", "webauthn", "httpx2", "httpcore2", "jsonschema",
+    "pypdf",
 ]
 
 [[tool.importlinter.contracts]]
@@ -113,11 +130,21 @@ forbidden_modules = [
     "app.search.fake",
     "app.storage.memory", "app.storage.postgres",
     "app.crypto.aesgcm", "app.crypto.local_key",
-    "app.auth.argon2", "app.auth.fake",
+    "app.auth.argon2", "app.auth.fake", "app.auth.webauthn",
     "app.email.smtp", "app.email.recording",
     "app.ratelimit.memory", "app.ratelimit.valkey",
+    "app.search.openalex", "app.search.europepmc", "app.search.arxiv",
+    "app.inference.fake", "app.inference.ollama", "app.inference.demo", "app.search.demo",
+    "app.runs.fake", "app.signals.memory", "app.signals.valkey", "app.worker",
+    "app.briefs.bm25", "app.briefs.fake",
+    "app.files.memory", "app.files.volume",
+    "app.malware.clamd", "app.malware.fake", "app.malware.skip",
+    "app.extraction.local", "app.extraction.isolated", "app.extraction.fake",
+    # Use cases never make a request themselves; they call a provider that does.
+    "app.net",
     "fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "cryptography",
-    "argon2", "aiosmtplib", "redis",
+    "argon2", "aiosmtplib", "redis", "webauthn", "httpx2", "httpcore2", "jsonschema",
+    "pypdf",
 ]
 
 [[tool.importlinter.contracts]]
@@ -125,8 +152,10 @@ name = "Providers never reach up into the API or application layers"
 type = "forbidden"
 source_modules = [
     "app.search", "app.storage", "app.crypto", "app.auth", "app.email", "app.ratelimit",
+    "app.net", "app.inference", "app.runs", "app.signals", "app.briefs",
+    "app.files", "app.malware", "app.extraction",
 ]
-forbidden_modules = ["app.api", "app.application", "app.main", "app.settings"]
+forbidden_modules = ["app.api", "app.application", "app.main", "app.settings", "app.worker"]
 
 [[tool.importlinter.contracts]]
 name = "Only api.dependencies chooses concrete providers"
@@ -136,14 +165,40 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = [
     "app.api.routes", "app.api.schemas", "app.api.middleware", "app.api.errors",
-    "app.api.session",
+    "app.api.session", "app.api.access", "app.api.sse", "app.api.uploads",
 ]
 forbidden_modules = [
     "app.search.fake",
     "app.storage.memory", "app.storage.postgres",
     "app.crypto.aesgcm", "app.crypto.local_key",
-    "app.auth.argon2", "app.auth.fake",
+    "app.auth.argon2", "app.auth.fake", "app.auth.webauthn",
     "app.email.smtp", "app.email.recording",
     "app.ratelimit.memory", "app.ratelimit.valkey",
-    "sqlalchemy", "cryptography", "argon2", "aiosmtplib", "redis",
+    "app.search.openalex", "app.search.europepmc", "app.search.arxiv",
+    "app.inference.fake", "app.inference.ollama", "app.inference.demo", "app.search.demo",
+    "app.net.httpx_fetcher", "app.net.fake",
+    "app.runs.fake", "app.signals.memory", "app.signals.valkey",
+    "app.briefs.bm25", "app.briefs.fake",
+    "app.files.memory", "app.files.volume",
+    "app.malware.clamd", "app.malware.fake", "app.malware.skip",
+    "app.extraction.local", "app.extraction.isolated", "app.extraction.fake",
+    "sqlalchemy", "cryptography", "argon2", "aiosmtplib", "redis", "webauthn",
+    "httpx2", "httpcore2", "pypdf",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Only app.net opens outbound HTTP connections"
+type = "forbidden"
+# Direct imports only: api.dependencies reaching httpx2 through app.net is the
+# design. What is forbidden is a second HTTP client that skips the SSRF guard.
+allow_indirect_imports = true
+source_modules = [
+    "app.api", "app.application", "app.domain", "app.search", "app.inference",
+    "app.storage", "app.crypto", "app.auth", "app.email", "app.ratelimit",
+    "app.main", "app.cli", "app.settings", "app.runs", "app.signals", "app.worker",
+    "app.briefs", "app.files", "app.malware", "app.extraction",
+]
+forbidden_modules = ["httpx2", "httpcore2"]
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
