@@ -16,8 +16,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
 	Check,
-	ChevronDown,
-	ChevronRight,
 	FastForward,
 	FileText,
 	Info,
@@ -31,7 +29,8 @@ import { ApiError, isApiError, userMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { planVersionQuery } from "../../app/reviewQueries";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { DisclosureButton } from "../../ui/DisclosureButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { PIPELINE } from "../runs/runEvents";
 import { ChatCard, ChatLine } from "./ChatCard";
 import { modeLabel, type PlanMode, plural } from "./format";
@@ -82,16 +81,13 @@ export function ErrorCard({
 						</Button>
 					)}
 					{known === null ? null : (
-						<Button
-							size="sm"
-							variant="outline"
-							aria-expanded={isOpen}
-							aria-controls={detailsId}
-							onClick={() => setOpen(!isOpen)}
+						<DisclosureButton
+							isOpen={isOpen}
+							controls={detailsId}
+							onToggle={() => setOpen(!isOpen)}
 						>
-							{isOpen ? <ChevronDown /> : <ChevronRight />}
 							Details
-						</Button>
+						</DisclosureButton>
 					)}
 				</>
 			}
@@ -148,15 +144,13 @@ export function PrivacyReceipt({
 			<ChatLine
 				icon={<ShieldCheck size={16} />}
 				actions={
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isOpen}
-						aria-controls={`${id}-sent`}
-						onClick={() => setOpen(!isOpen)}
+					<DisclosureButton
+						isOpen={isOpen}
+						controls={`${id}-sent`}
+						onToggle={() => setOpen(!isOpen)}
 					>
 						Show what was sent
-					</LinkButton>
+					</DisclosureButton>
 				}
 			>
 				<span>
@@ -363,15 +357,13 @@ export function AnsweredLine({ receipts }: { receipts: readonly Receipt[] }) {
 			<ChatLine
 				icon={<Check size={16} />}
 				actions={
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isOpen}
-						aria-controls={id}
-						onClick={() => setOpen(!isOpen)}
+					<DisclosureButton
+						isOpen={isOpen}
+						controls={id}
+						onToggle={() => setOpen(!isOpen)}
 					>
 						Show answers
-					</LinkButton>
+					</DisclosureButton>
 				}
 			>
 				<span>
