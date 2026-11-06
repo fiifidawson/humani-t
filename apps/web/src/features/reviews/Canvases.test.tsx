@@ -48,9 +48,32 @@ describe("the search draft canvas (UI_UX_SPEC §6.5)", () => {
 		).toBeInTheDocument();
 		expect(canvas).toHaveTextContent("cash transfers or: cash assistance");
 		expect(canvas).toHaveTextContent('"prices" and "price changes" merged');
-		expect(canvas).toHaveTextContent(
-			"I1 Include: Displaced households or camps",
+		const kept = within(canvas).getByRole("list", {
+			name: "A paper is included only if it meets all of these",
+		});
+		expect(kept).toHaveTextContent("Displaced households or camps");
+		expect(kept).toHaveTextContent("Reports a food security outcome");
+		const left = within(canvas).getByRole("list", {
+			name: "A paper is excluded if any of these apply",
+		});
+		expect(left).toHaveTextContent("School feeding programmes");
+		expect(canvas).not.toHaveTextContent(/\b[IE]\d\b/);
+	});
+
+	it("offers changes as a button that takes the owner to the chat box", async () => {
+		const { path } = planned();
+		const { user } = renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+
+		await user.click(
+			within(canvas).getByRole("button", {
+				name: "Ask for changes in the chat",
+			}),
 		);
+
+		expect(
+			screen.getByRole("textbox", { name: "Changing the search · draft 1" }),
+		).toHaveFocus();
 	});
 
 	it("marks the terms a person added, and shows what changed from the draft before", async () => {
@@ -215,7 +238,10 @@ describe("the papers canvas (UI_UX_SPEC §6.8)", () => {
 		expect(details).toHaveTextContent(
 			"Reports food security for displaced households.",
 		);
-		expect(details).toHaveTextContent("I1 Displaced households or camps");
+		const met = within(details).getByRole("list", { name: "Criteria met" });
+		expect(met).toHaveTextContent("Displaced households or camps");
+		expect(met).toHaveTextContent("Reports a food security outcome");
+		expect(details).not.toHaveTextContent(/\b[IE]\d\b/);
 		expect(details).toHaveTextContent("Read: the abstract");
 		expect(details).toHaveTextContent("Decided by llama3.1:8b");
 		expect(details).toHaveTextContent("Source tag P1");
@@ -228,6 +254,33 @@ describe("the papers canvas (UI_UX_SPEC §6.8)", () => {
 		expect(
 			await within(details).findByText("masked location 1"),
 		).toBeInTheDocument();
+	});
+
+	it("says in words why a paper was excluded, apart from the criteria it missed", async () => {
+		const { path } = screenedReview();
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", {
+				name: "School meals in Chad",
+			}),
+		);
+
+		const details = within(canvas).getByRole("region", {
+			name: "Why: School meals in Chad",
+		});
+		const reasons = within(details).getByRole("list", {
+			name: "Excluded because",
+		});
+		const items = within(reasons).getAllByRole("listitem");
+		expect(items[0]).toHaveTextContent("School feeding programmes");
+		expect(items[1]).toHaveTextContent(
+			"Doesn't meet: Reports a food security outcome",
+		);
+		expect(details).not.toHaveTextContent(/\b[IE]\d\b/);
 	});
 
 	it("shows the PRISMA counts as a table", async () => {

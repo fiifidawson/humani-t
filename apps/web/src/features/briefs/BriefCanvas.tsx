@@ -11,6 +11,7 @@
 
 import {
 	Box,
+	Button,
 	Link as ChakraLink,
 	chakra,
 	Flex,
@@ -29,8 +30,9 @@ import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { briefQuery } from "../../app/briefQueries";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Canvas } from "../reviews/Canvas";
 import { clockTime, plural } from "../reviews/format";
@@ -132,14 +134,14 @@ function SectionBar({ prefix }: { prefix: string }) {
 			<Flex as="ul" listStyleType="none" p="0" m="0" gap="1" wrap="wrap">
 				{SECTIONS.map(([name, label]) => (
 					<li key={name}>
-						<LinkButton
-							type="button"
-							fontSize="xs"
-							px="1.5"
+						<Button
+							size="xs"
+							variant="outline"
+							rounded="pill"
 							onClick={() => go(name)}
 						>
 							{label}
-						</LinkButton>
+						</Button>
 					</li>
 				))}
 			</Flex>
@@ -229,15 +231,13 @@ function StrengthHelp() {
 	const id = useId();
 	return (
 		<Box mb="3">
-			<LinkButton
-				type="button"
-				fontSize="sm"
-				aria-expanded={isOpen}
-				aria-controls={id}
-				onClick={() => setOpen(!isOpen)}
+			<DisclosureButton
+				isOpen={isOpen}
+				controls={id}
+				onToggle={() => setOpen(!isOpen)}
 			>
 				What the strengths mean
-			</LinkButton>
+			</DisclosureButton>
 			{isOpen ? (
 				<Box id={id} mt="2" color="fg.muted">
 					<chakra.ul pl="5">
@@ -659,15 +659,13 @@ function Quality({ quality }: { quality: NonNullable<Brief["quality"]> }) {
 	const id = useId();
 	return (
 		<Box mt="8">
-			<LinkButton
-				type="button"
-				fontSize="sm"
-				aria-expanded={isOpen}
-				aria-controls={id}
-				onClick={() => setOpen(!isOpen)}
+			<DisclosureButton
+				isOpen={isOpen}
+				controls={id}
+				onToggle={() => setOpen(!isOpen)}
 			>
 				Show quality checks
-			</LinkButton>
+			</DisclosureButton>
 			{isOpen ? (
 				<Box id={id} mt="2">
 					<Text color="fg.muted" mb="2">

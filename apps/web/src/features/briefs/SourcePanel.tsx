@@ -27,8 +27,9 @@ import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { evidenceQuery } from "../../app/briefQueries";
 import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
 import { MEDIUM_SCREEN, useMediaQuery } from "../../ui/useMediaQuery";
@@ -148,15 +149,13 @@ function Found({ evidence }: { evidence: Evidence }) {
 			<Passages evidence={evidence} />
 			{details === null ? null : (
 				<Box>
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isWhyOpen}
-						aria-controls={`${id}-why`}
-						onClick={() => setWhyOpen(!isWhyOpen)}
+					<DisclosureButton
+						isOpen={isWhyOpen}
+						controls={`${id}-why`}
+						onToggle={() => setWhyOpen(!isWhyOpen)}
 					>
 						Why it was included
-					</LinkButton>
+					</DisclosureButton>
 					{isWhyOpen ? (
 						<Text id={`${id}-why`} mt="1.5">
 							{details.rationale ??

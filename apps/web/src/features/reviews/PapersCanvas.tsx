@@ -30,10 +30,12 @@ import {
 	prismaQuery,
 } from "../../app/reviewQueries";
 import type { PapersSearch } from "../../app/router";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Canvas, CanvasHeading } from "./Canvas";
+import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { plural, sourceName, TIER_ORDER, TIERS } from "./format";
 import { MaskedText } from "./MaskedText";
 import { LabelBadge } from "./RunCards";
@@ -73,15 +75,13 @@ function ScreenedText({ paper, runId }: { paper: Paper; runId: string }) {
 	});
 	return (
 		<Box>
-			<LinkButton
-				type="button"
-				fontSize="sm"
-				aria-expanded={isOpen}
-				aria-controls={id}
-				onClick={() => setOpen(!isOpen)}
+			<DisclosureButton
+				isOpen={isOpen}
+				controls={id}
+				onToggle={() => setOpen(!isOpen)}
 			>
 				Show the text that was screened
-			</LinkButton>
+			</DisclosureButton>
 			{isOpen ? (
 				<Box id={id} mt="2" p="3" rounded="card" bg="bg.subtle">
 					{detail.isError ? (
@@ -111,13 +111,18 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 		enabled: decision !== null,
 	});
 	const criteria = version.data?.plan.criteria ?? [];
-	const named = (ids: readonly string[]) =>
-		ids
-			.map((id) => {
-				const criterion = criteria.find((c) => c.id === id);
-				return criterion === undefined ? id : `${id} ${criterion.text}`;
-			})
-			.join("; ");
+	// A reason for exclusion is either an exclusion criterion that applied or
+	// an inclusion criterion the paper missed; the words must say which.
+	const listed = (ids: readonly string[], isReason: boolean) =>
+		ids.map((id) => {
+			const criterion = criteria.find((c) => c.id === id);
+			const mark: CriterionMark = !isReason
+				? "meets"
+				: criterion?.kind === "inclusion"
+					? "misses"
+					: "excludes";
+			return { key: id, mark, text: criterion?.text ?? id };
+		});
 
 	return (
 		<Box
@@ -138,22 +143,14 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 						</Text>
 						{decision.rationale}
 					</Text>
-					{decision.criteria_matched.length === 0 ? null : (
-						<Text>
-							<Text as="span" fontWeight="medium">
-								Criteria met:{" "}
-							</Text>
-							{named(decision.criteria_matched)}
-						</Text>
-					)}
-					{decision.exclusion_reasons.length === 0 ? null : (
-						<Text>
-							<Text as="span" fontWeight="medium">
-								Excluded because of:{" "}
-							</Text>
-							{named(decision.exclusion_reasons)}
-						</Text>
-					)}
+					<CriteriaList
+						title="Criteria met"
+						items={listed(decision.criteria_matched, false)}
+					/>
+					<CriteriaList
+						title="Excluded because"
+						items={listed(decision.exclusion_reasons, true)}
+					/>
 					{decision.is_unreadable ? (
 						<Text color="caveat.fg">
 							The model's answer couldn't be read twice, so this paper is marked
@@ -260,15 +257,13 @@ function PrismaCounts({ runId }: { runId: string }) {
 	});
 	return (
 		<Box mt="6">
-			<LinkButton
-				type="button"
-				fontSize="sm"
-				aria-expanded={isOpen}
-				aria-controls={id}
-				onClick={() => setOpen(!isOpen)}
+			<DisclosureButton
+				isOpen={isOpen}
+				controls={id}
+				onToggle={() => setOpen(!isOpen)}
 			>
 				Show PRISMA counts
-			</LinkButton>
+			</DisclosureButton>
 			{isOpen ? (
 				<Box id={id} mt="3">
 					{prisma.isError ? (
