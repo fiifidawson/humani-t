@@ -6,7 +6,13 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"ignoreUnknown": false
+		"ignoreUnknown": false,
+		"includes": [
+			"*.json",
+			"apps/**",
+			"!apps/web/src/api/schema.gen.ts",
+			"!services/api/openapi.json"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -15,7 +21,23 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"complexity": {
+				"useLiteralKeys": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "error",
+				"noTsIgnore": "error"
+			},
+			"style": {
+				"noNonNullAssertion": "error",
+				"useImportType": "error",
+				"useExportType": "error"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "error",
+				"noDangerouslySetInnerHtmlWithChildren": "error"
+			}
 		}
 	},
 	"javascript": {

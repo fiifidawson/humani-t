@@ -1,2 +1,24 @@
 packages:
   - "apps/*"
+
+# One TypeScript for the whole repository: `tsc -b` runs from the root, and
+# openapi-typescript in apps/web needs the same compiler API. A catalog keeps
+# both package.json files on this exact version.
+catalog:
+  typescript: 6.0.3
+
+# openapi-typescript declares `typescript: ^5.x` but uses only the compiler API
+# that 6.x still ships (7.x, the native compiler, drops it). `pnpm check:api`
+# runs it on every CI build, so a break shows up there.
+peerDependencyRules:
+  allowedVersions:
+    openapi-typescript>typescript: "6"
+
+# GHSA-g3hv-75wg-m249 (pattern amplification, fixed in minimatch 11.0.1). Redocly's
+# 1.x line, which openapi-typescript 7.13.0 (the latest) needs, pins minimatch
+# 5.1.9 exactly, so there is no parent to upgrade. Redocly calls it only to match
+# configured HTTP headers to remote spec URLs, which `gen:api` never uses; v11 is
+# not callable as a function, so if that path is ever reached it fails loudly.
+# Remove this once openapi-typescript depends on a Redocly without minimatch 5.
+overrides:
+  "@redocly/openapi-core>minimatch": "^11.0.1"
