@@ -26,9 +26,13 @@ import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { evidenceQuery } from "../../app/briefQueries";
+import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
+import { ResizeHandle } from "../../ui/ResizeHandle";
+import { MEDIUM_SCREEN, useMediaQuery } from "../../ui/useMediaQuery";
 import { MaskedText } from "../reviews/MaskedText";
 import type { BriefSource } from "./Claim";
 import { SECTIONS, screeningWord } from "./words";
@@ -145,15 +149,13 @@ function Found({ evidence }: { evidence: Evidence }) {
 			<Passages evidence={evidence} />
 			{details === null ? null : (
 				<Box>
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isWhyOpen}
-						aria-controls={`${id}-why`}
-						onClick={() => setWhyOpen(!isWhyOpen)}
+					<DisclosureButton
+						isOpen={isWhyOpen}
+						controls={`${id}-why`}
+						onToggle={() => setWhyOpen(!isWhyOpen)}
 					>
 						Why it was included
-					</LinkButton>
+					</DisclosureButton>
 					{isWhyOpen ? (
 						<Text id={`${id}-why`} mt="1.5">
 							{details.rationale ??
@@ -181,6 +183,8 @@ export function SourcePanel({
 	const evidence = useQuery(evidenceQuery(api, briefId, tag));
 	const heading = useRef<HTMLHeadingElement>(null);
 	const id = useId();
+	const [width, setWidth] = usePanelWidth("source");
+	const isMedium = useMediaQuery(MEDIUM_SCREEN);
 
 	useEffect(() => {
 		heading.current?.focus({ preventScroll: true });
@@ -201,12 +205,14 @@ export function SourcePanel({
 	return (
 		<Box
 			as="aside"
+			id={`${id}-panel`}
 			aria-labelledby={id}
 			position="absolute"
 			top="0"
 			right="0"
 			bottom="0"
-			w={{ base: "full", md: "400px" }}
+			w={{ base: "full", md: `${width}px` }}
+			maxW={{ md: "calc(100% - 120px)" }}
 			zIndex="2"
 			display="flex"
 			flexDirection="column"
@@ -216,6 +222,19 @@ export function SourcePanel({
 			boxShadow="lg"
 			fontSize="sm"
 		>
+			{isMedium ? (
+				<ResizeHandle
+					position="absolute"
+					insetBlock="0"
+					left="-1"
+					label="Resize the source panel"
+					controls={`${id}-panel`}
+					edge="start"
+					width={width}
+					limits={PANEL_LIMITS.source}
+					onResize={setWidth}
+				/>
+			) : null}
 			<Flex
 				align="center"
 				gap="2"
@@ -245,7 +264,7 @@ export function SourcePanel({
 					<X />
 				</IconButton>
 			</Flex>
-			<Box flex="1" overflowY="auto" px="4" py="4">
+			<Box flex="1" position="relative" overflowY="auto" px="4" py="4">
 				{isApiError(evidence.error, "not-found") ? (
 					<Stack gap="2">
 						{source?.title == null ? null : (

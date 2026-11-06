@@ -22,6 +22,8 @@ import {
 	Check,
 	ChevronDown,
 	ChevronRight,
+	FileText,
+	Library,
 	Minus,
 	Square,
 	Triangle,
@@ -114,14 +116,15 @@ export function RetryButton({ live }: { live: LiveRun }) {
 function RunLinks({ run }: { run: Run }) {
 	const { project, review } = useReview();
 	return (
-		<ChakraLink asChild css={linkStyle} fontSize="sm">
+		<Button asChild size="sm" variant="outline">
 			<Link
 				to="/p/$projectId/r/$reviewId/run/$runId"
 				params={{ projectId: project.id, reviewId: review.id, runId: run.id }}
 			>
+				<FileText />
 				Open run details
 			</Link>
-		</ChakraLink>
+		</Button>
 	);
 }
 
@@ -383,15 +386,16 @@ export function ScreeningCard({ live }: { live: LiveRun }) {
 		<ChatCard
 			title={`Screening · ${plural(total, "paper")}`}
 			actions={
-				<ChakraLink asChild css={linkStyle} fontSize="sm">
+				<Button asChild size="sm" variant="outline">
 					<Link
 						to="/p/$projectId/r/$reviewId/papers"
 						params={{ projectId: project.id, reviewId: review.id }}
 						search={{ run: live.run.id }}
 					>
+						<Library />
 						Open papers
 					</Link>
-				</ChakraLink>
+				</Button>
 			}
 		>
 			<chakra.ul

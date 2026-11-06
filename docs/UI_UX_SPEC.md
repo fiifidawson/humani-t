@@ -202,6 +202,15 @@ Inside the canvas, a **source panel** can slide over from the right edge (400 px
 
 **Density.** The rail and the chat are drawn at 75% of their natural size (CSS `zoom: 0.75`, `COMPACT_ZOOM` in `apps/web`), the owner's chosen density. It is the design, not a preference. Canvases keep their full size, so a brief or a table stays easy to read.
 
+**Resizable panels.** On screens 1024px and wider, a handle between the chat and an open canvas resizes the chat: 320px to 720px, 480px at first. On screens 768px and wider, a handle on the source panel's left edge resizes it: 320px to 640px, 400px at first. The pointer shows ↔ over a handle. Drag it, or focus it and use the arrow keys (16px a step), Home and End. A double click restores the first width. Each width is kept in this browser only (`humani-t:width:chat`, `humani-t:width:source`). Narrower screens have no handles.
+
+**Controls.**
+
+- **Card actions:** a card's main action is a solid button; its other actions are outlined buttons with an icon, on one row.
+- **Show and hide:** every section that opens and closes uses one control, a quiet button with an arrow that points right when the section is closed and down when it is open.
+- **Underlined text:** used only for links inside text and in one-line rows.
+- **Screening criteria:** shown in words, never by their ids (I1, E1). The groups are "A paper is included only if it meets all of these" and "A paper is excluded if any of these apply". A paper's reasons say "Doesn't meet: …" for an inclusion criterion it missed.
+
 ### 4.2 Breakpoints
 
 | Width | Layout |

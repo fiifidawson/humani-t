@@ -7,19 +7,20 @@
  * Read-only: drafts change through the chat (§6.5 "Editing").
  */
 
-import { Box, Code, chakra, Flex, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, Code, chakra, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { Pencil } from "lucide-react";
+import { MessageSquare, Pencil } from "lucide-react";
 import { useId } from "react";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { planVersionQuery } from "../../app/reviewQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { LinkButton } from "../../ui/LinkButton";
+
 import { Loading } from "../../ui/Loading";
 import { fullDate } from "../projects/format";
 import { Canvas, CanvasHeading } from "./Canvas";
+import { CriteriaList } from "./CriteriaList";
 import { AcceptButton, AcceptProblem } from "./PlanCards";
 import { useReview, type Version } from "./reviewContext";
 
@@ -184,15 +185,20 @@ function Draft({
 			{diff === undefined ? null : <Changes diff={diff} />}
 
 			<CanvasHeading>Screening criteria</CanvasHeading>
-			<chakra.ul pl="5">
-				{version.criteria.map((criterion) => (
-					<li key={criterion.id}>
-						{criterion.id}{" "}
-						{criterion.kind === "inclusion" ? "Include" : "Exclude"}:{" "}
-						{criterion.text}
-					</li>
-				))}
-			</chakra.ul>
+			<Stack gap="4">
+				<CriteriaList
+					title="A paper is included only if it meets all of these"
+					items={version.criteria
+						.filter((c) => c.kind === "inclusion")
+						.map((c) => ({ key: c.id, mark: "meets", text: c.text }))}
+				/>
+				<CriteriaList
+					title="A paper is excluded if any of these apply"
+					items={version.criteria
+						.filter((c) => c.kind === "exclusion")
+						.map((c) => ({ key: c.id, mark: "excludes", text: c.text }))}
+				/>
+			</Stack>
 
 			<CanvasHeading>The exact query</CanvasHeading>
 			<Code display="block" whiteSpace="pre-wrap" overflowWrap="anywhere" p="3">
@@ -205,12 +211,13 @@ function Draft({
 
 			<Box mt="6" pt="4" borderTopWidth="1px" borderColor="border">
 				{isOpen && canManage ? (
-					<Flex gap="4" align="center" wrap="wrap">
+					<Flex gap="2" align="center" wrap="wrap">
 						<AcceptButton version={version.version} />
 						{version.is_strict ? null : (
-							<LinkButton type="button" fontSize="sm" onClick={focusComposer}>
+							<Button size="sm" variant="outline" onClick={focusComposer}>
+								<MessageSquare />
 								Ask for changes in the chat
-							</LinkButton>
+							</Button>
 						)}
 					</Flex>
 				) : null}

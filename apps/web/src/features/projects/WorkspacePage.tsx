@@ -88,6 +88,7 @@ function StartReview({ project }: { project: Project }) {
 				aria-label="Project conversation"
 				flex="1"
 				minH="0"
+				position="relative"
 				overflowY="auto"
 				direction="column"
 				p="4"

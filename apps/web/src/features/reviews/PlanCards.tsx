@@ -14,13 +14,23 @@ import {
 } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Check, Info, ShieldCheck, TriangleAlert } from "lucide-react";
+import {
+	Check,
+	FastForward,
+	FileText,
+	Info,
+	MessageSquare,
+	ShieldCheck,
+	SkipForward,
+	TriangleAlert,
+} from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { ApiError, isApiError, userMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { planVersionQuery } from "../../app/reviewQueries";
-import { LinkButton, linkStyle } from "../../ui/LinkButton";
+import { DisclosureButton } from "../../ui/DisclosureButton";
+import { linkStyle } from "../../ui/LinkButton";
 import { PIPELINE } from "../runs/runEvents";
 import { ChatCard, ChatLine } from "./ChatCard";
 import { modeLabel, type PlanMode, plural } from "./format";
@@ -71,15 +81,13 @@ export function ErrorCard({
 						</Button>
 					)}
 					{known === null ? null : (
-						<LinkButton
-							type="button"
-							fontSize="sm"
-							aria-expanded={isOpen}
-							aria-controls={detailsId}
-							onClick={() => setOpen(!isOpen)}
+						<DisclosureButton
+							isOpen={isOpen}
+							controls={detailsId}
+							onToggle={() => setOpen(!isOpen)}
 						>
 							Details
-						</LinkButton>
+						</DisclosureButton>
 					)}
 				</>
 			}
@@ -136,15 +144,13 @@ export function PrivacyReceipt({
 			<ChatLine
 				icon={<ShieldCheck size={16} />}
 				actions={
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isOpen}
-						aria-controls={`${id}-sent`}
-						onClick={() => setOpen(!isOpen)}
+					<DisclosureButton
+						isOpen={isOpen}
+						controls={`${id}-sent`}
+						onToggle={() => setOpen(!isOpen)}
 					>
 						Show what was sent
-					</LinkButton>
+					</DisclosureButton>
 				}
 			>
 				<span>
@@ -278,24 +284,26 @@ export function ClarifyCard({ draft }: { draft: string }) {
 						>
 							Answer
 						</Button>
-						<LinkButton
-							type="button"
-							fontSize="sm"
+						<Button
+							size="sm"
+							variant="outline"
 							disabled={actions.answer.isPending}
 							onClick={() =>
 								actions.answer.mutate({ questionId: question.id, answer: null })
 							}
 						>
+							<SkipForward />
 							Skip this one
-						</LinkButton>
-						<LinkButton
-							type="button"
-							fontSize="sm"
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
 							disabled={actions.answer.isPending}
 							onClick={() => actions.answer.mutate({ draftNow: true })}
 						>
+							<FastForward />
 							Skip all and draft now
-						</LinkButton>
+						</Button>
 					</>
 				) : undefined
 			}
@@ -349,15 +357,13 @@ export function AnsweredLine({ receipts }: { receipts: readonly Receipt[] }) {
 			<ChatLine
 				icon={<Check size={16} />}
 				actions={
-					<LinkButton
-						type="button"
-						fontSize="sm"
-						aria-expanded={isOpen}
-						aria-controls={id}
-						onClick={() => setOpen(!isOpen)}
+					<DisclosureButton
+						isOpen={isOpen}
+						controls={id}
+						onToggle={() => setOpen(!isOpen)}
 					>
 						Show answers
-					</LinkButton>
+					</DisclosureButton>
 				}
 			>
 				<span>
@@ -427,23 +433,34 @@ function conceptCount(version: Version): number {
 export const categoryCount = (version: Version) =>
 	plural(version.themes.length, "category", "categories");
 
+/** The draft canvas: a text link in one-line rows, an outlined button on a card. */
 function DraftLink({
 	version,
+	isButton = false,
 	children,
 }: {
 	version?: number;
+	isButton?: boolean;
 	children: ReactNode;
 }) {
 	const { project, review } = useReview();
-	return (
+	const link = (
+		<Link
+			to="/p/$projectId/r/$reviewId/draft"
+			params={{ projectId: project.id, reviewId: review.id }}
+			search={version === undefined ? {} : { version }}
+		>
+			{isButton ? <FileText /> : null}
+			{children}
+		</Link>
+	);
+	return isButton ? (
+		<Button asChild size="sm" variant="outline">
+			{link}
+		</Button>
+	) : (
 		<ChakraLink asChild css={linkStyle} fontSize="sm">
-			<Link
-				to="/p/$projectId/r/$reviewId/draft"
-				params={{ projectId: project.id, reviewId: review.id }}
-				search={version === undefined ? {} : { version }}
-			>
-				{children}
-			</Link>
+			{link}
 		</ChakraLink>
 	);
 }
@@ -514,11 +531,12 @@ export function DraftCard({ version }: { version: Version }) {
 			actions={
 				<>
 					{canManage ? <AcceptButton version={version.version} /> : null}
-					<DraftLink>Open draft</DraftLink>
+					<DraftLink isButton>Open draft</DraftLink>
 					{canManage && !version.is_strict ? (
-						<LinkButton type="button" fontSize="sm" onClick={focusComposer}>
+						<Button size="sm" variant="outline" onClick={focusComposer}>
+							<MessageSquare />
 							Ask for changes
-						</LinkButton>
+						</Button>
 					) : null}
 				</>
 			}
