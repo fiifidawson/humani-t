@@ -6,42 +6,52 @@ This is the canonical layout. Folders marked *(planned)* are added by the milest
 humani-t/
 |
 ├── apps/
-│   └── web/                  # Vite + React + strict TypeScript SPA (planned)
+│   └── web/                  # Vite + React + strict TypeScript SPA
+│       ├── Dockerfile        # builds the SPA, serves it from Caddy
 │       └── src/
 │           ├── api/          # generated OpenAPI types + typed client
-│           ├── features/     # auth, projects, account, …
-│           └── components/
+│           ├── features/     # auth, projects, account, chat, runs, …
+│           ├── shell/        # three-zone layout
+│           └── ui/           # shared components
 │
 ├── services/
 │   └── api/                  # Python backend (FastAPI)
+│       ├── Dockerfile        # one image: api, worker and migrate entry points
 │       ├── app/
 │       │   ├── main.py       # composition root: app, middleware, routers
+│       │   ├── worker.py     # background run worker
 │       │   ├── api/          # HTTP boundary: routes, schemas, dependencies.py
 │       │   ├── application/  # use cases / services
 │       │   ├── domain/       # entities and rules, no I/O
 │       │   ├── search/       # PaperSearchProvider + implementations
-│       │   ├── storage/      # StorageProvider + repositories (planned)
-│       │   ├── crypto/       # KeyProvider + envelope encryption (planned)
-│       │   ├── auth/         # hashers, passkeys, TOTP, OIDC (planned)
-│       │   ├── email/        # EmailProvider (planned)
-│       │   ├── ratelimit/    # RateLimiter (planned)
-│       │   ├── net/          # HttpFetcher, SSRF-guarded (planned)
-│       │   └── inference/    # InferenceProvider (planned)
+│       │   ├── storage/      # StorageProvider + repositories
+│       │   ├── crypto/       # KeyProvider + envelope encryption
+│       │   ├── auth/         # password hashing, passkeys
+│       │   ├── email/        # EmailProvider
+│       │   ├── ratelimit/    # RateLimiter
+│       │   ├── signals/      # run wake-ups across processes
+│       │   ├── runs/         # Stage seam for pipeline stages
+│       │   ├── net/          # HttpFetcher, SSRF-guarded
+│       │   └── inference/    # InferenceProvider
 │       ├── migrations/       # Alembic
 │       ├── tests/
 │       ├── pyproject.toml
 │       └── uv.lock
 │
 ├── infrastructure/
-│   ├── docker/               # Dockerfiles and compose support files
-│   ├── caddy/                # Caddyfile (planned)
-│   └── postgres/             # database role setup (planned)
+│   ├── caddy/                # Caddyfile and the Caddy build
+│   ├── postgres/             # database role setup
+│   └── generate_secrets.py   # secrets for the self-hosted stack
 │
-├── .github/                  # CI workflows, templates, Dependabot (planned)
+├── .github/                  # CI workflows, templates, Dependabot
 ├── docs/
-│   └── adr/                  # architecture decision records
+│   ├── adr/                  # architecture decision records
+│   ├── deploy/               # self-hosting guides
+│   └── walkthroughs/         # one detailed walkthrough per phase
 ├── scripts/
 │
+├── compose.yaml              # the full self-hosted stack
+├── compose.dev.yaml          # development services: Postgres, Valkey, Mailpit
 ├── package.json              # pnpm workspace root: Biome, shared scripts
 ├── pnpm-workspace.yaml
 ├── biome.json
@@ -57,6 +67,8 @@ humani-t/
 | `services/` | server-side application logic | UI |
 | `infrastructure/` | deployment and runtime config | application code |
 | `docs/` | how and why | generated API types |
+
+**Dockerfiles sit next to the code they build**, not in a shared `infrastructure/docker/`. Each image's build context is then its own package, with its own `.dockerignore`, and Dependabot finds each base image by directory. `infrastructure/` holds only what runs beside the application: Caddy, the Postgres init script, secret generation.
 
 `apps/web` talks to the API only through generated types. Every rule — who may see a project, what gets masked — lives in `services/api`, because the browser is not trusted.
 

@@ -100,10 +100,10 @@ app.include_router(v1)
 ## Step 3 — run it
 
 ```bash
-uv run uvicorn app.main:app --reload --port 8731
+uv run uvicorn app.main:app --reload --port 8731 --no-proxy-headers
 ```
 
-Reading that command: `app.main` is the module, the `:` separates it from `app` — the `FastAPI()` object inside. `--reload` watches the directory and restarts on save.
+Reading that command: `app.main` is the module, the `:` separates it from `app` — the `FastAPI()` object inside. `--reload` watches the directory and restarts on save. `--no-proxy-headers` stops uvicorn rewriting the client address from `X-Forwarded-For`; the API decides that itself ([05](walkthroughs/05-accounts-and-sessions.md) D5.6).
 
 > **Port note.** 8000 is the obvious choice and it is what most tutorials use. If you are also running `mkdocs serve` for `docs-site/`, it already holds 8000 — and on Windows both processes can bind it without either reporting an error, so uvicorn will claim to be running while your browser shows the docs site. Using 8731 avoids the collision entirely.
 
@@ -573,7 +573,8 @@ A `Protocol`, not an abstract base class. Implementations inherit from nothing, 
 """The PaperSearchProvider Protocol.
 
 This is the most important interface in the system. Everything downstream —
-screening, synthesis, the audit trail — inherits the provenance it establishes.
+screening, the decision brief, the audit trail — inherits the provenance it
+establishes.
 
 A Protocol rather than an ABC: implementations do not inherit from anything, so
 a provider can be written, tested and swapped without importing this module at

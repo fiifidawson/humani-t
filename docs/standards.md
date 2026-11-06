@@ -42,7 +42,7 @@ storage      persistence and migrations
 search       paper search providers
 inference    model calls
 rag          indexing and retrieval
-agents       synthesis loop and tools
+agents       the decision-brief loop and its tools
 deploy       Docker, Compose, Caddy
 ci           GitHub Actions
 docs         documentation
@@ -141,6 +141,7 @@ git push -u origin feat/my-change   # then open a pull request
 | FastAPI | `services/api/pyproject.toml` | HTTP layer |
 | SQLAlchemy + Alembic | `services/api/pyproject.toml` | Persistence and migrations |
 | pre-commit | `.pre-commit-config.yaml` | Runs the checks before each commit |
-| Docker + Compose | `compose.yaml`, `services/api/Dockerfile` | Build and self-hosted deployment |
+| Docker + Compose | `compose.yaml` (self-hosted stack), `compose.dev.yaml` (development services), `services/api/Dockerfile`, `apps/web/Dockerfile` | Build and self-hosted deployment |
+| Caddy | `infrastructure/caddy/Caddyfile` | HTTPS, the SPA, the reverse proxy and its security headers |
 | GitHub Actions | `.github/workflows/` | CI and security scanning |
 | Dependabot | `.github/dependabot.yml` | Dependency update pull requests |
