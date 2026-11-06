@@ -11,7 +11,7 @@ name: api
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, staging]
   workflow_dispatch:
 
 # No job gets a permission it does not ask for below.

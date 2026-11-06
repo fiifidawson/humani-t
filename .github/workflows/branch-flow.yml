@@ -1,0 +1,30 @@
+# Changes reach main only through staging: feature branches merge into staging,
+# and staging is promoted to main. main's ruleset requires this check, so a pull
+# request into main from any other branch cannot be merged.
+
+name: branch-flow
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  from-staging:
+    name: main accepts staging only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      # Compared by repository too: a fork can have a branch called staging.
+      - name: The pull request comes from this repository's staging
+        shell: bash
+        env:
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD" != "staging" || "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+            echo "::error::main accepts pull requests from staging only, not $HEAD_REPOSITORY:$HEAD"
+            exit 1
+          fi

@@ -8,7 +8,7 @@ name: codeql
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, staging]
   schedule:
     - cron: "41 4 * * 1" # Mondays 04:41 UTC: new queries find old bugs
   workflow_dispatch:

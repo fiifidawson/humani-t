@@ -116,7 +116,7 @@ Messages follow [Conventional Commits](https://www.conventionalcommits.org/): `<
 
 ## 6. Pull requests
 
-- Branch from `main`; one topic per branch.
+- Branch from `staging` and open the pull request into `staging`; one topic per branch. `staging` is promoted to `main` separately, and `main` accepts pull requests from `staging` only.
 - Keep pull requests small enough to review in one sitting. A large change is easier to review as a series.
 - Every check must pass before review. If a check is wrong, fix the check in its own pull request rather than skipping it.
 - Use fictional data in tests, examples, screenshots and issues. Never real names, questions or documents from a real review.
