@@ -1,0 +1,119 @@
+# Caddy: the only service with a published port. It terminates HTTPS, serves the
+# built single-page app, and forwards /api/* to the API on the same origin, so the
+# browser never makes a cross-origin request and there is no CORS to configure.
+#
+# HUMANI_T_DOMAIN is the public host name, e.g. humani-t.example.org. Caddy gets a
+# certificate for it from Let's Encrypt automatically. Left as `localhost`, Caddy
+# issues one from its own local authority instead, which browsers will warn about.
+{
+	# The admin API can rewrite this configuration at runtime. Nothing here needs it.
+	admin off
+
+	# For `localhost` certificates only: the container cannot add Caddy's root
+	# certificate to a trust store, and must not try.
+	skip_install_trust
+}
+
+# Container health check. Bound to the loopback interface and never published.
+http://:2020 {
+	bind 127.0.0.1
+	respond /healthz 200
+}
+
+{$HUMANI_T_DOMAIN:localhost} {
+	# Applied to every response, after the handler has run (`defer`). The `?` sets
+	# a header only when the response does not already carry it, so the API's own,
+	# stricter values win on /api and these cover the static files.
+	header {
+		defer
+		-Server
+		-Via
+		?Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		?X-Content-Type-Options "nosniff"
+		?X-Frame-Options "DENY"
+		?Referrer-Policy "no-referrer"
+		?Cross-Origin-Opener-Policy "same-origin"
+		?Cross-Origin-Resource-Policy "same-origin"
+		?Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+	}
+
+	handle /api/* {
+		# The API refuses bodies over 1 MiB too; stopping them here means an
+		# oversized upload never ties up an API worker.
+		@upload {
+			method POST
+			path_regexp ^/api/v1/projects/[^/]+/documents/?$
+		}
+		@notUpload {
+			not {
+				method POST
+				path_regexp ^/api/v1/projects/[^/]+/documents/?$
+			}
+		}
+		request_body @notUpload {
+			max_size 1MiB
+		}
+		# Document uploads alone: HUMANI_T_UPLOAD_MAX_BYTES (20 MiB by default) plus
+		# room for the multipart framing. Raise both together; the API checks the
+		# exact limit.
+		request_body @upload {
+			max_size 21MiB
+		}
+
+		# Server-Sent Events must reach the browser as each event is written.
+		# Buffering would hold them back until the buffer fills.
+		@events path_regexp ^/api/v1/runs/[^/]+/events$
+		handle @events {
+			reverse_proxy api:8000 {
+				flush_interval -1
+			}
+		}
+
+		# No `encode` here: compressing responses that carry secrets (recovery
+		# codes, TOTP set-up) next to attacker-influenced text is the BREACH attack.
+		handle {
+			reverse_proxy api:8000
+		}
+	}
+
+	handle {
+		root * /srv
+
+		# Static files are only ever read.
+		request_body {
+			max_size 0
+		}
+
+		# script-src 'self' with no 'unsafe-inline': an injected <script> or
+		# onclick= attribute does not run. Trusted Types blocks string assignment to
+		# innerHTML and other DOM sinks, so a script that does run cannot turn text
+		# into markup either. Styles need a nonce: Chakra UI writes them at run time
+		# (docs/adr/0004-chakra-ui-with-a-nonce-csp.md). {http.request.uuid} is a
+		# fresh UUIDv4 per request, the same value `templates` puts in the page below.
+		# Copied in apps/web/csp.config.ts; src/csp.test.ts fails if they differ.
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'nonce-{http.request.uuid}'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; upgrade-insecure-requests"
+
+		# Vite puts a content hash in every file name under /assets, so a changed
+		# file always has a new URL and the old one can be cached for good.
+		handle /assets/* {
+			header Cache-Control "public, max-age=31536000, immutable"
+			encode zstd gzip
+			file_server
+		}
+
+		# Every other path is a route inside the app: serve index.html and let the
+		# router decide. The page is a template only to fill in the nonce: the build
+		# leaves {{placeholder `http.request.uuid`}} where it goes, and the matcher
+		# runs after try_files, so it sees /index.html for every app route. Nothing
+		# else is templated. no-store, because a stored copy would carry an old
+		# nonce under a new header.
+		handle {
+			header Cache-Control "no-store"
+			try_files {path} /index.html
+			@page path / /index.html
+			templates @page
+			encode zstd gzip
+			file_server
+		}
+	}
+}

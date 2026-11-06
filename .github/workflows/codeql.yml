@@ -1,0 +1,51 @@
+# Static analysis (SAST) with CodeQL: follows untrusted input through the code to
+# dangerous sinks — SQL, shell, file paths, HTML — across function boundaries,
+# which ruff's bandit rules, looking at one line at a time, cannot. Results appear
+# under Security > Code scanning. Free for public repositories.
+
+name: codeql
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1" # Mondays 04:41 UTC: new queries find old bugs
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: codeql (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      # In a private repository CodeQL reads its own workflow run to tag the results.
+      actions: read
+      contents: read
+      security-events: write # upload the results
+    strategy:
+      fail-fast: false
+      matrix:
+        # `actions` analyses the workflow files themselves, alongside zizmor.
+        language: [python, javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          # Interpreted languages need no build step.
+          build-mode: none
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}

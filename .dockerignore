@@ -1,0 +1,21 @@
+# Build context for apps/web/Dockerfile, which builds from the repository root.
+# An allowlist: everything is excluded, then only what the web image needs is let
+# back in. A denylist misses the file nobody thought of — ./secrets, a .env, a
+# node_modules from another platform — and copies it into an image that gets shared.
+*
+
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!tsconfig.base.json
+!apps/web/
+!infrastructure/caddy/Caddyfile
+!infrastructure/caddy/main.go
+
+**/node_modules/
+**/dist/
+**/coverage/
+**/.env
+**/.env.*
+**/*.tsbuildinfo

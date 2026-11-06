@@ -1,13 +1,205 @@
-# Development stack. Production services (Caddy, api, worker, migrate) are added
-# in the containers milestone; until then the API runs on the host with uv.
+# The self-hosted humani-t stack: everything an organisation runs in production.
 #
-#   python scripts/dev_secrets.py     # once: writes ./secrets/* and services/api/.env
-#   docker compose up -d
-name: humani-t
+#   python infrastructure/generate_secrets.py     # once: ./secrets/*
+#   copy .env.example .env                        # then set the domain and mail server
+#   docker compose up -d --build
+#
+# Full guide: docs/deploy/self-hosting.md. For development, use compose.dev.yaml,
+# which runs only the backing services and leaves the API to `uv run` on the host.
+#
+# The project name differs from the development stack's (`humani-t`), so the two
+# never share containers or volumes, even on the same machine.
+name: humani-t-stack
+
+# Settings every long-running service shares. Each service merges them with `<<:`
+# and adds its own; `docker compose config` shows the merged result.
+x-hardened: &hardened
+  restart: unless-stopped
+  # The image is immutable at runtime; anything a process must write goes to a
+  # named volume or an in-memory tmpfs declared beside it.
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-api-image: &api-image
+  image: ${HUMANI_T_API_IMAGE:-humani-t-api:local}
+  build:
+    context: services/api
+
+# What the API and the worker are told about their surroundings. Secrets are not
+# here: they arrive as files under /run/secrets (see `secrets:` on each service).
+x-app-environment: &app-environment
+  HUMANI_T_ENVIRONMENT: production
+  HUMANI_T_PUBLIC_ORIGIN: ${HUMANI_T_PUBLIC_ORIGIN:-https://localhost}
+  HUMANI_T_LOG_LEVEL: ${HUMANI_T_LOG_LEVEL:-INFO}
+  HUMANI_T_SMTP_HOST: ${HUMANI_T_SMTP_HOST:?set HUMANI_T_SMTP_HOST in .env (see .env.example)}
+  HUMANI_T_SMTP_PORT: ${HUMANI_T_SMTP_PORT:-587}
+  HUMANI_T_SMTP_USERNAME: ${HUMANI_T_SMTP_USERNAME:-}
+  HUMANI_T_SMTP_SENDER: ${HUMANI_T_SMTP_SENDER:-humani-t <no-reply@localhost>}
+  HUMANI_T_SMTP_STARTTLS: ${HUMANI_T_SMTP_STARTTLS:-true}
+  HUMANI_T_INFERENCE_URL: ${HUMANI_T_INFERENCE_URL:-http://ollama:11434}
+  HUMANI_T_INFERENCE_MODEL: ${HUMANI_T_INFERENCE_MODEL:-llama3.1:8b}
+  HUMANI_T_PAPER_SOURCES: ${HUMANI_T_PAPER_SOURCES:-}
+  HUMANI_T_OPENALEX_MAILTO: ${HUMANI_T_OPENALEX_MAILTO:-}
+  # HUMANI_T_ALLOW_HOSTED_INFERENCE is deliberately not passed through: sending
+  # text to a third-party model API should take an edit here, not a stray .env line.
+
+x-app-secrets: &app-secrets
+  # `target` is the file name inside the container. Settings reads
+  # /run/secrets/humani_t_<field>, so each secret is named after its field.
+  - source: database_url
+    target: humani_t_database_url
+  - source: key_encryption_keys
+    target: humani_t_key_encryption_keys
+  - source: valkey_url
+    target: humani_t_valkey_url
+  - source: smtp_password
+    target: humani_t_smtp_password
+  # Empty files mean "not configured".
+  - source: inference_token
+    target: humani_t_inference_token
+  - source: openalex_api_key
+    target: humani_t_openalex_api_key
 
 services:
+  caddy:
+    <<: *hardened
+    image: ${HUMANI_T_WEB_IMAGE:-humani-t-web:local}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      HUMANI_T_DOMAIN: ${HUMANI_T_DOMAIN:-localhost}
+    ports:
+      - "${HUMANI_T_HTTP_PORT:-80}:80"
+      - "${HUMANI_T_HTTPS_PORT:-443}:443"
+      - "${HUMANI_T_HTTPS_PORT:-443}:443/udp" # HTTP/3
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    tmpfs:
+      - /tmp:size=16m
+    networks:
+      public: {}
+      backend:
+        # Fixed, so the API can name the one proxy whose X-Forwarded-For it believes.
+        ipv4_address: 172.30.231.2
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2020/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 256m, pids: 256 }
+
+  api:
+    <<: [*hardened, *api-image]
+    environment:
+      <<: *app-environment
+      # Caddy sets X-Forwarded-For; it is believed only from Caddy's fixed address
+      # on `backend`, so another service added to that network cannot forge client
+      # addresses and dodge per-IP throttling. The API decides (ClientAddressMiddleware);
+      # the image runs uvicorn with --no-proxy-headers so it does not decide first.
+      HUMANI_T_TRUSTED_PROXIES: 172.30.231.2
+      WEB_CONCURRENCY: ${HUMANI_T_API_WORKERS:-2}
+    secrets: *app-secrets
+    tmpfs:
+      - /tmp:size=64m
+    networks: [backend, data, egress]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      # /ready, not /health: Caddy should not receive traffic for an API that
+      # cannot reach its database. The slim image has no curl, so Python asks.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g, pids: 512 }
+
+  worker:
+    <<: [*hardened, *api-image]
+    command: ["python", "-m", "app.worker"]
+    environment: *app-environment
+    secrets: *app-secrets
+    # Also holds the heartbeat file (tempfile.gettempdir(), /tmp here).
+    tmpfs:
+      - /tmp:size=64m
+    # No `backend`: nothing calls the worker. It reads jobs from Valkey and Postgres
+    # and makes the outbound calls (paper sources, the model) through `egress`.
+    networks: [data, egress]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      # Healthy only while the heartbeat file is under 15 s old; the worker touches
+      # it at least every 5 s, so a stuck loop turns unhealthy within a few checks.
+      test: ["CMD", "python", "-m", "app.worker", "--check-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g, pids: 512 }
+
+  # One-shot: brings the schema to the latest migration, then exits. The API and
+  # the worker wait for it to succeed. It alone holds the schema-owner role's URL;
+  # it never sees the KEK or the runtime role.
+  migrate:
+    <<: [*hardened, *api-image]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      # migrations/env.py validates the full Settings, and production would demand
+      # the app's secrets, which this job must not hold. It reads only the
+      # migration URL; nothing else in Settings changes what Alembic does.
+      HUMANI_T_ENVIRONMENT: development
+    secrets:
+      - source: migration_database_url
+        target: humani_t_migration_database_url
+    tmpfs:
+      - /tmp:size=16m
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m, pids: 128 }
+
   postgres:
-    image: postgres:18-alpine
+    <<: *hardened
+    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    # The image's own `postgres` user. Starting as it, rather than as root and
+    # stepping down, means the container never needs CHOWN, SETUID or SETGID.
+    user: "70:70"
     environment:
       POSTGRES_DB: humani_t
       POSTGRES_USER: postgres
@@ -19,47 +211,171 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
-    ports:
-      # Loopback only, and not 5432, so a Postgres already on the host is untouched.
-      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/run/postgresql:uid=70,gid=70,mode=0775,size=1m
+      - /tmp:uid=70,gid=70,size=64m
+    shm_size: 256m
+    stop_grace_period: 30s
+    networks: [data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d humani_t"]
       interval: 5s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g, pids: 512 }
 
   valkey:
-    image: valkey/valkey:8-alpine
-    # The password is read from the secret at start-up. It is visible to
-    # processes inside this container only, which run nothing else.
-    command: ["sh", "-c", "exec valkey-server --requirepass \"$$(cat /run/secrets/valkey_password)\" --save '' --appendonly no"]
+    <<: *hardened
+    image: valkey/valkey:8.1.11-alpine@sha256:2602ace2be6569bc2bbb06f873776516ab9089821525be34f4305c67eb9db02a
+    user: "999:1000"
+    # The password goes in through standard input (`-` reads configuration from
+    # it), never as an argument: arguments show in `ps` on the Docker host. No
+    # persistence: rate-limit windows and queued jobs are rebuilt, never restored.
+    # noeviction: a full Valkey refuses writes rather than silently dropping
+    # throttling counters, which would hand an attacker fresh attempts.
+    command:
+      - sh
+      - -c
+      - |
+        exec valkey-server - --save "" --appendonly no --maxmemory 192mb --maxmemory-policy noeviction <<EOF
+        requirepass $$(cat /run/secrets/valkey_password)
+        EOF
     secrets:
       - valkey_password
-    ports:
-      - "127.0.0.1:56379:6379"
+    tmpfs:
+      - /tmp:size=1m
+      - /data:uid=999,gid=1000,size=1m
+    networks: [data]
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli -a \"$$(cat /run/secrets/valkey_password)\" --no-auth-warning ping | grep -q PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/valkey_password)\" valkey-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 256m, pids: 128 }
 
-  # Development only: catches every email the API sends and shows it in a web
-  # inbox at http://127.0.0.1:58025. Nothing is delivered to real addresses.
+  # Optional, for trying the stack on one machine: catches every email in a web
+  # inbox instead of delivering it. Enable with COMPOSE_PROFILES=local-mail and
+  # HUMANI_T_SMTP_HOST=mailpit, HUMANI_T_SMTP_PORT=1025, HUMANI_T_SMTP_STARTTLS=false.
   mailpit:
-    image: axllent/mailpit:v1.27
+    <<: *hardened
+    profiles: [local-mail]
+    image: axllent/mailpit:v1.27.11@sha256:e22dce5b36f93c77082e204a3942fb6b283b7896e057458400a4c88344c3df68
+    user: "10001:10001"
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,size=64m
     ports:
-      - "127.0.0.1:51025:1025"
-      - "127.0.0.1:58025:8025"
+      - "127.0.0.1:${HUMANI_T_MAILPIT_PORT:-8025}:8025"
+    networks: [egress]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128m, pids: 64 }
 
-secrets:
-  valkey_password:
-    file: ./secrets/valkey_password
-  db_superuser_password:
-    file: ./secrets/db_superuser_password
-  db_migrator_password:
-    file: ./secrets/db_migrator_password
-  db_app_password:
-    file: ./secrets/db_app_password
+  # Optional local model server. Enable with COMPOSE_PROFILES=local-model, then
+  # pull a model once: docker compose exec ollama ollama pull llama3.1:8b
+  # Ollama has no authentication; it is never published, and only containers on
+  # `egress` can reach it. To run it on another machine instead, see
+  # docs/deploy/remote-model.md.
+  ollama:
+    <<: *hardened
+    profiles: [local-model]
+    image: ollama/ollama:0.40.13@sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429
+    user: "10001:10001"
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_MODELS: /models
+      # Ollama writes an identity key under $HOME on start; it is used only to push
+      # to ollama.com, so an in-memory home that resets on restart is fine.
+      HOME: /tmp
+    volumes:
+      - ollama-models:/models
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,size=64m
+    # `egress` is also how it downloads model weights from ollama.com.
+    networks: [egress]
+    depends_on:
+      ollama-volume:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "${HUMANI_T_OLLAMA_CPUS:-4}", memory: "${HUMANI_T_OLLAMA_MEMORY:-8g}", pids: 512 }
+
+  # One-shot: a new named volume belongs to root, and Ollama runs as 10001. This
+  # hands the volume's top directory over, with CHOWN as its only capability.
+  ollama-volume:
+    profiles: [local-model]
+    image: ollama/ollama:0.40.13@sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429
+    user: "0:0"
+    entrypoint: ["chown", "10001:10001", "/models"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: none
+    volumes:
+      - ollama-models:/models
+
+networks:
+  # Caddy's published ports, and its route out to Let's Encrypt.
+  public: {}
+  # Caddy to the API, and nothing else. Internal: no route to the internet.
+  backend:
+    internal: true
+    # Fixed so Caddy's address is known in advance (HUMANI_T_TRUSTED_PROXIES).
+    ipam:
+      config:
+        - subnet: 172.30.231.0/28
+          # Automatic addresses come from .8–.14 only. Without this, Docker gives
+          # whichever container starts first .2, and Caddy then cannot take it.
+          ip_range: 172.30.231.8/29
+  # The database and Valkey, reachable only from the containers that need them.
+  data:
+    internal: true
+  # Outbound traffic from the API and the worker: paper sources, mail, the model.
+  egress: {}
 
 volumes:
   postgres-data:
+  caddy-data:
+  caddy-config:
+  ollama-models:
+
+# Files under ./secrets (or HUMANI_T_SECRETS_DIR), created by
+# infrastructure/generate_secrets.py. Each container sees only the ones it lists.
+secrets:
+  db_superuser_password:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/db_superuser_password
+  db_migrator_password:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/db_migrator_password
+  db_app_password:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/db_app_password
+  valkey_password:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/valkey_password
+  database_url:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/database_url
+  migration_database_url:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/migration_database_url
+  valkey_url:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/valkey_url
+  key_encryption_keys:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/key_encryption_keys
+  smtp_password:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/smtp_password
+  inference_token:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/inference_token
+  openalex_api_key:
+    file: ${HUMANI_T_SECRETS_DIR:-./secrets}/openalex_api_key
