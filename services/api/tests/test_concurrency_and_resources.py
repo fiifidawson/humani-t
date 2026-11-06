@@ -14,6 +14,7 @@ import dataclasses
 import pytest
 
 from app.domain.accounts import ThrottledError
+from app.domain.mfa import MfaPolicy
 from app.storage.base import StorageProvider
 from tests.support import (
     ADMIN_EMAIL,
@@ -31,7 +32,8 @@ from tests.support import (
 
 @pytest.fixture
 def harness() -> AuthHarness:
-    harness = make_harness()
+    """Load and race specs of the password factor; MFA races are in test_mfa_api.py."""
+    harness = make_harness(mfa_policy=MfaPolicy(is_required=False))
     harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
     harness.create_user(USER_EMAIL, USER_PASSWORD)
     return harness

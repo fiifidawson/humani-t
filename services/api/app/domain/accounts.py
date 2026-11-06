@@ -7,6 +7,7 @@ its message.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -46,6 +47,9 @@ class User:
 
     def disabled(self) -> User:
         return replace(self, is_disabled=True)
+
+    def enabled(self) -> User:
+        return replace(self, is_disabled=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,3 +127,17 @@ class NotFoundError(AccountError):
 
 class ForbiddenError(AccountError):
     """The caller is signed in but lacks the role."""
+
+
+class OwnAccountError(AccountError):
+    """An administrator tried to disable the account they are signed in with."""
+
+
+class LastAdminError(AccountError):
+    """The change would leave the instance with no enabled administrator."""
+
+
+def require_an_admin_remains(enabled_admin_ids: Collection[UUID], disabling: UUID) -> None:
+    """Refuse disabling `disabling` if it is the only enabled administrator left."""
+    if set(enabled_admin_ids) == {disabling}:
+        raise LastAdminError("The last enabled administrator cannot be disabled.")

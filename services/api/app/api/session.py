@@ -19,6 +19,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.api.dependencies import AccountsDep
 from app.application.accounts import Current, SignedIn
+from app.domain.mfa import MfaEnrolmentRequiredError, MfaRequiredError
 
 SESSION_COOKIE = "__Host-session"
 CSRF_COOKIE = "__Host-csrf"
@@ -58,12 +59,12 @@ def request_id(request: Request) -> str | None:
     return value if isinstance(value, str) else None
 
 
-async def get_current(request: Request, accounts: AccountsDep) -> Current:
-    """The signed-in caller; 401 if there is none, 403 if a write lacks its CSRF token.
+async def get_any_session(request: Request, accounts: AccountsDep) -> Current:
+    """Any live session, pending ones included; 401 if none, 403 if a write lacks CSRF.
 
-    Authentication runs in its own short transaction, so the idle-timeout
-    extension is saved even if the route itself later fails, and no connection
-    is held while the route does its own work.
+    Only for signing out. Authentication runs in its own short transaction, so
+    the idle-timeout extension is saved even if the route itself later fails,
+    and no connection is held while the route does its own work.
     """
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
@@ -76,6 +77,46 @@ async def get_current(request: Request, accounts: AccountsDep) -> Current:
         current, request.headers.get(CSRF_HEADER, "")
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Missing or invalid CSRF token.")
+    return current
+
+
+AnySessionDep = Annotated[Current, Depends(get_any_session)]
+
+
+async def get_pending(current: AnySessionDep) -> Current:
+    """A session past the password and waiting for its second factor (`/auth/mfa/*`)."""
+    if not current.session.is_mfa_pending:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "No sign-in is waiting for a second factor."
+        )
+    return current
+
+
+PendingDep = Annotated[Current, Depends(get_pending)]
+
+
+async def get_account_basics(current: AnySessionDep) -> Current:
+    """A completed sign-in, possibly not yet enrolled in MFA.
+
+    For what an account must reach in order to enrol: who am I, my sessions,
+    my password, my authenticators. A pending session gets 401 `mfa_required`.
+    """
+    if current.session.is_mfa_pending:
+        raise MfaRequiredError("Complete sign-in with your second factor.")
+    return current
+
+
+AccountBasicsDep = Annotated[Current, Depends(get_account_basics)]
+
+
+async def get_current(current: AccountBasicsDep, accounts: AccountsDep) -> Current:
+    """A caller past every factor the MFA policy demands. Everything else uses this.
+
+    An account that has not enrolled an authenticator gets 403
+    `mfa_enrolment_required` until it does.
+    """
+    if not accounts.is_fully_signed_in(current):
+        raise MfaEnrolmentRequiredError("Add a second sign-in method to continue.")
     return current
 
 

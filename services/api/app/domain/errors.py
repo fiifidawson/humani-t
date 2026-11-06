@@ -1,4 +1,4 @@
-"""Errors about storage that every layer may need to recognise.
+"""Errors about storage and other backing services that every layer may need to recognise.
 
 They live in the domain so the API layer can map them to HTTP without
 importing a storage implementation, and so each implementation raises the same
@@ -13,6 +13,14 @@ class ConcurrentUpdateError(Exception):
 
     Raised instead of silently overwriting a newer version (a lost update).
     The caller re-reads and decides again, or gives up.
+    """
+
+
+class RateLimiterUnavailableError(Exception):
+    """The rate limiter's backend cannot be reached.
+
+    Attempts are refused, never let through uncounted: sign-in fails closed,
+    and is answered with 503 rather than 500.
     """
 
 

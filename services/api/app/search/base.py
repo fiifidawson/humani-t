@@ -1,7 +1,8 @@
 """The PaperSearchProvider Protocol.
 
 This is the most important interface in the system. Everything downstream —
-screening, synthesis, the audit trail — inherits the provenance it establishes.
+screening, the decision brief, the audit trail — inherits the provenance it
+establishes.
 
 A Protocol rather than an ABC: implementations do not inherit from anything, so
 a provider can be written, tested and swapped without importing this module at

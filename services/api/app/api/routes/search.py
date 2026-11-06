@@ -2,23 +2,34 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.access import require
 from app.api.dependencies import SearchProviderDep, SearchServiceDep
 from app.api.schemas import CompiledQueryOut, PaperOut, SearchIn, SearchOut, SourceOut
+from app.api.session import get_current
+from app.domain.projects import Action
 
 router = APIRouter(tags=["search"])
 
+# Kept in step with docs/dependencies.md §4. Google Scholar is not a source: it
+# has no API and its terms forbid automated queries.
 SOURCE_DESCRIPTIONS = {
     "fake": "In-memory corpus of four papers. No network, no key, no rate limit.",
-    "openalex": "OpenAlex works index. Keyless; polite pool via mailto.",
-    "arxiv": "arXiv preprints.",
+    "openalex": (
+        "OpenAlex works index. Answers without a key within a small shared daily "
+        "budget; an API key raises the budget and the rate limit."
+    ),
     "europepmc": "Europe PMC life-sciences literature.",
-    "scholar": "Google Scholar.",
+    "arxiv": "arXiv preprints. One request every 3 seconds across the deployment.",
 }
 
 
-@router.get("/sources", summary="Search sources available in this process")
+@router.get(
+    "/sources",
+    summary="Search sources available in this process",
+    dependencies=[Depends(get_current)],
+)
 async def sources(provider: SearchProviderDep) -> list[SourceOut]:
     """Which repositories this deployment can currently reach.
 
@@ -36,7 +47,13 @@ async def sources(provider: SearchProviderDep) -> list[SourceOut]:
     ]
 
 
-@router.post("/search", summary="Compile a vocabulary and search for papers")
+# Inside a project: the results become that project's evidence, and a search is
+# a request leaving the deployment on the project's behalf.
+@router.post(
+    "/projects/{project_id}/search",
+    summary="Compile a vocabulary and search for papers",
+    dependencies=[require(Action.MANAGE_RUNS)],
+)
 async def search(payload: SearchIn, service: SearchServiceDep) -> SearchOut:
     """Run a vocabulary against the configured source.
 

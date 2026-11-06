@@ -3,21 +3,29 @@
 Source: WEB_APP_BRIEF rules 6, 9 and 16; NIST SP 800-63B rev 4; OWASP ASVS 5.0
 V6 (Authentication), V7 (Session Management) and V16 (Security Logging).
 
-MFA is specified separately (M9). Until then a password sign-in is a full
-sign-in.
+MFA is specified in `test_mfa_api.py`. These specs cover the password factor
+alone, so they opt out of the MFA requirement explicitly in the fixture below.
 """
 
 from __future__ import annotations
 
-import pytest
+from datetime import timedelta
 
+import pytest
+from fastapi.testclient import TestClient
+
+from app.domain.mfa import MfaPolicy
+from app.ratelimit.base import RateDecision
+from app.ratelimit.memory import MemoryRateLimiter
 from tests.support import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
     NEW_PASSWORD,
+    ORIGIN,
     USER_EMAIL,
     USER_PASSWORD,
     AuthHarness,
+    FakeClock,
     cookie_attributes,
     csrf_headers,
     last_link,
@@ -31,7 +39,8 @@ from tests.support import (
 
 @pytest.fixture
 def harness() -> AuthHarness:
-    harness = make_harness()
+    """The password factor alone: MFA is required by default, and specified elsewhere."""
+    harness = make_harness(mfa_policy=MfaPolicy(is_required=False))
     harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
     harness.create_user(USER_EMAIL, USER_PASSWORD)
     return harness
@@ -165,6 +174,73 @@ class TestCurrentSession:
         harness.clock.advance(minutes=50)  # 24 h 10 min since sign-in
 
         assert browser.get("/api/v1/auth/session").status_code == 401
+
+
+class TestReauthentication:
+    """Step-up rotates the token (architecture §5.2), so a token seen before it is spent."""
+
+    def _reauthenticate(self, browser, password: str = USER_PASSWORD):
+        return browser.post(
+            "/api/v1/auth/reauthenticate",
+            json={"password": password},
+            headers=csrf_headers(browser),
+        )
+
+    def test_confirming_the_password_issues_new_session_and_csrf_cookies(self, harness):
+        browser = harness.browser()
+        signed_in = login(browser, USER_EMAIL, USER_PASSWORD)
+
+        response = self._reauthenticate(browser)
+
+        assert response.status_code == 204
+        rotated = set_cookie_headers(response)
+        assert session_cookie_value(response) != session_cookie_value(signed_in)
+        assert rotated["__Host-csrf"] != set_cookie_headers(signed_in)["__Host-csrf"]
+        assert {"secure", "httponly", "path=/", "samesite=lax"} <= cookie_attributes(
+            rotated["__Host-session"]
+        )
+
+    def test_the_token_from_before_stops_working(self, harness):
+        browser = harness.browser()
+        old_token = session_cookie_value(login(browser, USER_EMAIL, USER_PASSWORD))
+
+        self._reauthenticate(browser)
+        replayed = harness.browser()
+        plant_session_cookie(replayed, old_token)
+
+        assert replayed.get("/api/v1/auth/session").status_code == 401
+        assert browser.get("/api/v1/auth/session").status_code == 200
+
+    def test_a_wrong_password_keeps_the_session_and_issues_nothing(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+
+        response = self._reauthenticate(browser, "not-my-password-at-all")
+
+        assert response.status_code == 403
+        assert "__Host-session" not in set_cookie_headers(response)
+        assert browser.get("/api/v1/auth/session").status_code == 200
+
+    def test_reauthenticating_does_not_extend_the_24_hour_limit(self, harness):
+        """Only a full sign-in, with every factor, starts a new absolute lifetime."""
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+        for _ in range(28):  # 23 h 20 min of steady activity, confirming each time
+            harness.clock.advance(minutes=50)
+            assert self._reauthenticate(browser).status_code == 204
+
+        harness.clock.advance(minutes=50)  # 24 h 10 min since sign-in
+
+        assert browser.get("/api/v1/auth/session").status_code == 401
+
+    def test_the_rotation_is_audited(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+
+        self._reauthenticate(browser)
+
+        events = harness.providers.storage.state.audit_events  # type: ignore[attr-defined]
+        assert events[-1].entry.action == "auth.reauthenticated"
 
 
 class TestLogout:
@@ -561,6 +637,192 @@ class TestAuditTrail:
         events = repr(harness.providers.storage.state.audit_events)  # type: ignore[attr-defined]
         assert "example.org" not in events
         assert USER_PASSWORD not in events
+
+
+class TestAccountAdministration:
+    """An instance must always keep an administrator who can sign in."""
+
+    def _admin(self, harness: AuthHarness):
+        browser = harness.browser()
+        login(browser, ADMIN_EMAIL, ADMIN_PASSWORD)
+        return browser
+
+    def _post(self, browser, user_id: str, action: str):
+        return browser.post(
+            f"/api/v1/admin/users/{user_id}/{action}", headers=csrf_headers(browser)
+        )
+
+    def test_an_admin_cannot_disable_their_own_account(self, harness):
+        admin = self._admin(harness)
+
+        response = self._post(admin, _user_id(harness, ADMIN_EMAIL), "disable")
+
+        assert response.status_code == 409
+        assert response.headers["content-type"] == "application/problem+json"
+        assert admin.get("/api/v1/auth/session").status_code == 200
+        assert login(harness.browser(), ADMIN_EMAIL, ADMIN_PASSWORD).status_code == 200
+
+    def test_an_admin_can_disable_another_admin_while_one_remains(self, harness):
+        harness.create_user("second-admin@example.org", ADMIN_PASSWORD, is_admin=True)
+        admin = self._admin(harness)
+
+        response = self._post(admin, _user_id(harness, "second-admin@example.org"), "disable")
+
+        assert response.status_code == 204
+
+    def test_an_admin_can_re_enable_a_disabled_account(self, harness):
+        admin = self._admin(harness)
+        user_id = _user_id(harness, USER_EMAIL)
+        self._post(admin, user_id, "disable")
+        assert login(harness.browser(), USER_EMAIL, USER_PASSWORD).status_code == 401
+
+        response = self._post(admin, user_id, "enable")
+
+        assert response.status_code == 204
+        assert login(harness.browser(), USER_EMAIL, USER_PASSWORD).status_code == 200
+
+    def test_re_enabling_does_not_revive_the_sessions_that_disabling_ended(self, harness):
+        user = harness.browser()
+        login(user, USER_EMAIL, USER_PASSWORD)
+        admin = self._admin(harness)
+        user_id = _user_id(harness, USER_EMAIL)
+        self._post(admin, user_id, "disable")
+
+        self._post(admin, user_id, "enable")
+
+        assert user.get("/api/v1/auth/session").status_code == 401
+
+    def test_re_enabling_needs_a_recent_sign_in(self, harness):
+        admin = self._admin(harness)
+        user_id = _user_id(harness, USER_EMAIL)
+        self._post(admin, user_id, "disable")
+        harness.clock.advance(minutes=16)
+        admin.get("/api/v1/auth/session")
+
+        refused = self._post(admin, user_id, "enable")
+        admin.post(
+            "/api/v1/auth/reauthenticate",
+            json={"password": ADMIN_PASSWORD},
+            headers=csrf_headers(admin),
+        )
+
+        assert refused.status_code == 401
+        assert refused.json()["reauthentication_required"] is True
+        assert self._post(admin, user_id, "enable").status_code == 204
+
+    def test_only_admins_can_re_enable(self, harness):
+        harness.create_user("kofi@example.org", USER_PASSWORD)
+        admin = self._admin(harness)
+        self._post(admin, _user_id(harness, "kofi@example.org"), "disable")
+        user = harness.browser()
+        login(user, USER_EMAIL, USER_PASSWORD)
+
+        response = self._post(user, _user_id(harness, "kofi@example.org"), "enable")
+
+        assert response.status_code == 403
+
+    def test_re_enabling_an_unknown_account_is_not_found(self, harness):
+        admin = self._admin(harness)
+
+        response = self._post(admin, "00000000-0000-4000-8000-000000000000", "enable")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No such user."
+
+    def test_disabling_and_re_enabling_are_audited(self, harness):
+        admin = self._admin(harness)
+        user_id = _user_id(harness, USER_EMAIL)
+
+        self._post(admin, user_id, "disable")
+        self._post(admin, user_id, "enable")
+
+        events = harness.providers.storage.state.audit_events  # type: ignore[attr-defined]
+        recorded = [(e.entry.action, e.entry.target_id) for e in events]
+        assert recorded[-2:] == [("account.disabled", user_id), ("account.enabled", user_id)]
+
+
+class _RecordingRateLimiter:
+    """The real in-memory limiter, recording every key it is asked to count."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self._inner = MemoryRateLimiter(clock)
+        self.keys: list[str] = []
+
+    async def hit(self, key: str, limit: int, window: timedelta) -> RateDecision:
+        self.keys.append(key)
+        return await self._inner.hit(key, limit, window)
+
+    async def check(self, key: str, limit: int, window: timedelta) -> RateDecision:
+        return await self._inner.check(key, limit, window)
+
+    async def reset(self, key: str) -> None:
+        await self._inner.reset(key)
+
+    async def close(self) -> None:
+        await self._inner.close()
+
+
+class TestClientAddress:
+    """The per-client throttle counts the real client, which only a trusted proxy may name."""
+
+    def _sign_in_from(
+        self, peer: str, forwarded_for: str | None, **settings: object
+    ) -> list[str]:
+        clock = FakeClock()
+        limiter = _RecordingRateLimiter(clock)
+        harness = make_harness(
+            mfa_policy=MfaPolicy(is_required=False),
+            rate_limiter=limiter,
+            clock=clock,
+            **settings,
+        )
+        harness.create_user(USER_EMAIL, USER_PASSWORD)
+        browser = TestClient(
+            harness.app, base_url=ORIGIN, headers={"Origin": ORIGIN}, client=(peer, 50000)
+        )
+        headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else {}
+        browser.post(
+            "/api/v1/auth/login",
+            json={"email": USER_EMAIL, "password": USER_PASSWORD},
+            headers=headers,
+        )
+        return [key for key in limiter.keys if key.startswith("login:client:")]
+
+    def test_without_a_forwarded_header_the_peer_is_the_client(self):
+        assert self._sign_in_from("203.0.113.7", None) == ["login:client:203.0.113.7"]
+
+    def test_a_forged_forwarded_for_from_an_untrusted_peer_does_not_change_the_key(self):
+        keys = self._sign_in_from("203.0.113.7", "198.51.100.9")
+
+        assert keys == ["login:client:203.0.113.7"]
+
+    def test_no_peer_is_trusted_by_default_not_even_loopback(self):
+        keys = self._sign_in_from("127.0.0.1", "198.51.100.9")
+
+        assert keys == ["login:client:127.0.0.1"]
+
+    def test_a_peer_outside_the_trusted_proxies_is_not_believed(self):
+        keys = self._sign_in_from("10.0.0.9", "198.51.100.9", trusted_proxies="10.0.0.2")
+
+        assert keys == ["login:client:10.0.0.9"]
+
+    def test_a_trusted_proxy_names_the_client(self):
+        keys = self._sign_in_from("10.0.0.2", "198.51.100.9", trusted_proxies="10.0.0.2")
+
+        assert keys == ["login:client:198.51.100.9"]
+
+    def test_addresses_a_client_prepended_itself_are_ignored(self):
+        """The proxy appends the address it saw; anything left of it came from the client."""
+        keys = self._sign_in_from(
+            "10.0.0.2", "192.0.2.1, 198.51.100.9", trusted_proxies="10.0.0.2"
+        )
+
+        assert keys == ["login:client:198.51.100.9"]
+
+    def test_a_malformed_forwarded_header_falls_back_to_the_peer(self):
+        keys = self._sign_in_from("10.0.0.2", "not-an-address", trusted_proxies="10.0.0.2")
+
+        assert keys == ["login:client:10.0.0.2"]
 
 
 def _user_id(harness: AuthHarness, email: str) -> str:

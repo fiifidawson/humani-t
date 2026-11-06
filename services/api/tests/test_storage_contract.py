@@ -7,6 +7,7 @@ database as the runtime role. See CONTRIBUTING for how to start one.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -17,17 +18,29 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.application.accounts import AccountService, Current
 from app.application.audit import SYSTEM, AuditLog
 from app.application.encryption import ScopeEncryption
+from app.auth.fake import FakePasswordHasher
 from app.crypto.aesgcm import AesGcmCipher
 from app.crypto.local_key import LocalKeyProvider
-from app.domain.accounts import EmailTakenError, PasswordReset, User
+from app.domain.accounts import (
+    EmailTakenError,
+    ForbiddenError,
+    LastAdminError,
+    PasswordReset,
+    User,
+)
 from app.domain.audit import AuditEntry, AuditEvent
 from app.domain.encryption import WrappedDataKey
 from app.domain.errors import ConcurrentUpdateError, StorageUnavailableError
+from app.domain.sessions import Session
+from app.email.recording import RecordingEmailProvider
+from app.ratelimit.memory import MemoryRateLimiter
 from app.storage.base import StorageProvider
 from app.storage.memory import MemoryStorage
 from app.storage.postgres.storage import PostgresStorage
+from tests.postgres_support import delete_all_rows
 
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 _DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -53,20 +66,7 @@ async def storage(request: pytest.FixtureRequest) -> AsyncIterator[StorageProvid
     postgres = PostgresStorage.from_url(_DATABASE_URL)
     yield postgres
     await postgres.close()
-    await _truncate(_DATABASE_URL)
-
-
-async def _truncate(url: str) -> None:
-    # audit_events cannot be cleaned up — that is the point of it — so the audit
-    # tests below never assume an empty log, only one that grows correctly.
-    engine = create_async_engine(url)
-    async with engine.begin() as connection:
-        await connection.execute(text("DELETE FROM data_keys"))
-        await connection.execute(text("DELETE FROM password_resets"))
-        await connection.execute(text("DELETE FROM sessions"))
-        await connection.execute(text("DELETE FROM invitations"))
-        await connection.execute(text("DELETE FROM users"))
-    await engine.dispose()
+    await delete_all_rows(_DATABASE_URL)
 
 
 def _key(scope_id: uuid.UUID | None = None) -> WrappedDataKey:
@@ -325,3 +325,137 @@ class TestShreddingIsFinal:
             current = await uow.data_keys.get(key.scope_id)
         assert current is not None
         assert current.is_destroyed
+
+
+async def _stored_admins(storage: StorageProvider, count: int) -> list[Current]:
+    admins = [dataclasses.replace(_user(), is_admin=True) for _ in range(count)]
+    async with storage.unit_of_work() as uow:
+        for admin in admins:
+            await uow.users.add(admin)
+        await uow.commit()
+    return [_current(admin) for admin in admins]
+
+
+def _current(user: User) -> Current:
+    session = Session(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        token_hash=uuid.uuid4().bytes * 2,
+        csrf_token_hash=uuid.uuid4().bytes * 2,
+        created_at=NOW,
+        last_seen_at=NOW,
+        authenticated_at=NOW,
+    )
+    return Current(user, session)
+
+
+def _accounts(storage: StorageProvider) -> AccountService:
+    return AccountService(
+        storage=storage,
+        hasher=FakePasswordHasher(),
+        email=RecordingEmailProvider(),
+        limiter=MemoryRateLimiter(lambda: NOW),
+        audit=_AUDIT,
+        public_origin="https://testserver",
+        clock=lambda: NOW,
+    )
+
+
+async def _enabled_admin_ids(storage: StorageProvider) -> set[uuid.UUID]:
+    async with storage.unit_of_work() as uow:
+        return {admin.id for admin in await uow.users.lock_enabled_admins()}
+
+
+class TestEnabledAdmins:
+    async def test_only_enabled_administrators_are_returned(self, storage):
+        enabled, disabled = (a.user for a in await _stored_admins(storage, 2))
+        user = _user()
+        async with storage.unit_of_work() as uow:
+            await uow.users.add(user)
+            await uow.users.save(disabled.disabled())
+            await uow.commit()
+
+        found = await _enabled_admin_ids(storage)
+
+        assert enabled.id in found
+        assert disabled.id not in found
+        assert user.id not in found
+
+
+class TestLastAdminUnderConcurrency:
+    """Admins disabling one another at the same moment must leave one who can sign in."""
+
+    async def test_two_admins_disabling_each_other_together_leave_one(self, storage):
+        accounts = _accounts(storage)
+        first, second = await _stored_admins(storage, 2)
+        assert await _enabled_admin_ids(storage) == {first.user.id, second.user.id}
+
+        outcomes = await asyncio.gather(
+            accounts.disable_user(first, second.user.id),
+            accounts.disable_user(second, first.user.id),
+            return_exceptions=True,
+        )
+
+        assert len(await _enabled_admin_ids(storage)) == 1
+        refusals = [o for o in outcomes if isinstance(o, BaseException)]
+        assert len(refusals) == 1
+        assert isinstance(refusals[0], LastAdminError)
+
+    async def test_a_ring_of_admins_disabling_the_next_always_leaves_one(self, storage):
+        accounts = _accounts(storage)
+        admins = await _stored_admins(storage, 5)
+        targets = admins[1:] + admins[:1]
+
+        outcomes = await asyncio.gather(
+            *(
+                accounts.disable_user(a, t.user.id)
+                for a, t in zip(admins, targets, strict=True)
+            ),
+            return_exceptions=True,
+        )
+
+        left = await _enabled_admin_ids(storage) & {a.user.id for a in admins}
+        succeeded = sum(not isinstance(o, BaseException) for o in outcomes)
+        assert len(left) >= 1
+        assert succeeded == len(admins) - len(left)
+        assert all(
+            isinstance(o, LastAdminError | ForbiddenError)
+            for o in outcomes
+            if isinstance(o, BaseException)
+        )
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not _DATABASE_URL, reason="TEST_DATABASE_URL not set")
+class TestPostgresAdminLock:
+    async def test_a_second_locker_waits_until_the_first_commits(self):
+        """`lock_enabled_admins` is SELECT … FOR UPDATE: where admin changes serialise."""
+        assert _DATABASE_URL is not None
+        postgres = PostgresStorage.from_url(_DATABASE_URL)
+        order: list[str] = []
+        first_has_lock = asyncio.Event()
+        try:
+            await _stored_admins(postgres, 1)
+
+            async def first() -> None:
+                async with postgres.unit_of_work() as uow:
+                    await uow.users.lock_enabled_admins()
+                    order.append("first locked")
+                    first_has_lock.set()
+                    await asyncio.sleep(0.2)
+                    order.append("first committing")
+                    await uow.commit()
+
+            async def second() -> None:
+                await first_has_lock.wait()
+                async with postgres.unit_of_work() as uow:
+                    await uow.users.lock_enabled_admins()
+                    order.append("second locked")
+                    await uow.commit()
+
+            await asyncio.wait_for(asyncio.gather(first(), second()), timeout=5)
+        finally:
+            await postgres.close()
+            await delete_all_rows(_DATABASE_URL)
+
+        assert order == ["first locked", "first committing", "second locked"]
