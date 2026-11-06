@@ -1,24 +1,31 @@
 {
-  "name": "humani-t",
-  "version": "1.0.0",
-  "description": "",
-  "private": true,
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "Apache-2.0",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "12.3.4",
-      "onFail": "download"
-    }
-  },
-  "packageManager": "pnpm@12.3.4",
-  "type": "module",
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.12"
-  }
+	"name": "humani-t",
+	"version": "1.0.0",
+	"description": "Privacy-preserving evidence synthesis for humanitarian decisions.",
+	"private": true,
+	"scripts": {
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"typecheck": "tsc -b",
+		"test": "pnpm --filter @humani-t/web test",
+		"build": "pnpm --filter @humani-t/web build",
+		"gen:api": "pnpm --filter @humani-t/web gen:api",
+		"check:api": "pnpm --filter @humani-t/web check:api"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "Apache-2.0",
+	"devEngines": {
+		"packageManager": {
+			"name": "pnpm",
+			"version": "12.3.4",
+			"onFail": "download"
+		}
+	},
+	"packageManager": "pnpm@12.3.4",
+	"type": "module",
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.12",
+		"typescript": "catalog:"
+	}
 }
