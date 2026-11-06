@@ -430,7 +430,10 @@ class TestCriterionAnswers:
         assert stored
         for decision in stored:
             assert decision.answers_sealed is not None
-            assert b"I1" not in decision.answers_sealed
+            # JSON keys, not a criterion id: a two-byte id turns up in random
+            # ciphertext about once in a hundred runs.
+            assert b'"answer"' not in decision.answers_sealed
+            assert b'"quote"' not in decision.answers_sealed
 
     def test_deleting_the_project_makes_the_answers_unreadable(self):
         p = _screen(_with_answers)
