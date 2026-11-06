@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check the security headers Caddy and the API send, through the running stack.
 #
-#   .github/scripts/check-security-headers.sh https://localhost:8443
+#   .github/scripts/check-security-headers.sh https://localhost:58443
 #
 # -k: the stack under test uses Caddy's internal certificate authority for localhost.
 set -euo pipefail
