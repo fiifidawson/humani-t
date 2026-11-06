@@ -9,6 +9,8 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # pnpm's lockfile holds two YAML documents.
+        args: [--allow-multiple-documents]
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
@@ -58,3 +60,11 @@ repos:
         entry: pnpm exec biome check --write --no-errors-on-unmatched
         language: system
         types_or: [javascript, ts, tsx, json]
+      # The whole project, not the staged files: a change to one type can
+      # break code in a file that was not touched.
+      - id: tsc
+        name: tsc (pnpm typecheck)
+        entry: pnpm typecheck
+        language: system
+        files: ^(apps/web/.*\.(ts|tsx|json)|tsconfig(\.base)?\.json|package\.json|pnpm-lock\.yaml)$
+        pass_filenames: false
