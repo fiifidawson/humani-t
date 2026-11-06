@@ -54,7 +54,7 @@ The body (after a blank line) says *why*. A commit that adds a dependency says w
 
 ## Git Commands
 
-`main` is the default branch and is always releasable. Work happens on short-lived branches named `<type>/<topic>` (`feat/api-foundation`, `docs/web-only`) and lands through a pull request. Remote is `origin`.
+`main` is the default branch and is always releasable. Changes flow one way: a short-lived branch named `<type>/<topic>` (`feat/api-foundation`, `docs/web-only`) is branched from `staging` and merged into `staging` through a pull request; `staging` is then promoted to `main` through another. Both branches are protected: no direct pushes, no force-pushes, every check must pass, and pull requests merge with a merge commit. The `branch-flow` check refuses a pull request into `main` from anything but `staging`. Remote is `origin`.
 
 ### Daily loop
 | Command | What it does |
@@ -107,13 +107,12 @@ Rule of thumb: `revert` for anything already pushed, `reset` only for local comm
 | ------- | ------------ |
 | `git fetch` | Update remote-tracking refs; changes nothing in the working tree |
 | `git pull --rebase` | Fetch, then replay your commits on top — avoids merge-commit noise |
-| `git merge main` | Bring `main` into the current branch |
+| `git merge origin/staging` | Bring `staging` into the current branch |
 
 ### Typical session
 ```bash
-git switch main
-git pull --rebase
-git switch -c feat/my-change
+git fetch origin
+git switch -c feat/my-change origin/staging
 
 # ...work...
 
@@ -121,7 +120,7 @@ git status -sb
 git diff
 git add -p
 git commit -m "feat(api): add health endpoint"
-git push -u origin feat/my-change   # then open a pull request
+git push -u origin feat/my-change   # then open a pull request into staging
 ```
 
 ## Library
