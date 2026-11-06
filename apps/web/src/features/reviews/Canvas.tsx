@@ -111,9 +111,12 @@ export function Canvas({
 					<X />
 				</IconButton>
 			</Flex>
+			{/* position: relative keeps visually hidden text, which is absolutely
+			    positioned, inside this scroller; without it the page itself scrolls. */}
 			<Box
 				flex="1"
 				minH="0"
+				position="relative"
 				overflowY="auto"
 				px={{ base: "4", md: "6" }}
 				py="5"

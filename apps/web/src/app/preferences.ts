@@ -1,5 +1,5 @@
 /**
- * Per-browser display preferences: theme and the folded rail.
+ * Per-browser display preferences: theme, the folded rail and panel widths.
  *
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
@@ -12,18 +12,21 @@ export type ThemeChoice = "system" | "light" | "dark";
 const THEME_KEY = "humani-t:theme";
 const RAIL_KEY = "humani-t:rail-folded";
 const listeners = new Set<() => void>();
+// Where a preference lives when storage refuses it: for this page view only.
+const unsaved = new Map<string, string | null>();
 
 // Storage can throw: blocked cookies, private windows, a full quota. A
-// preference that cannot be saved falls back to the default.
+// preference that cannot be saved still applies until the page is closed.
 function read(key: string): string | null {
 	try {
 		return window.localStorage.getItem(key);
 	} catch {
-		return null;
+		return unsaved.get(key) ?? null;
 	}
 }
 
 function write(key: string, value: string | null): void {
+	unsaved.set(key, value);
 	try {
 		if (value === null) {
 			window.localStorage.removeItem(key);
@@ -102,4 +105,44 @@ export function useRailFolded(): [boolean, (isFolded: boolean) => void] {
 		[],
 	);
 	return [isFolded, setFolded];
+}
+
+export type PanelName = "chat" | "source";
+
+export interface PanelLimits {
+	initial: number;
+	min: number;
+	max: number;
+}
+
+/**
+ * Widths in CSS pixels. The chat's are as drawn, after its 75% zoom; the most
+ * it can take still leaves the canvas room for a readable column.
+ */
+export const PANEL_LIMITS: Readonly<Record<PanelName, PanelLimits>> = {
+	chat: { initial: 480, min: 320, max: 720 },
+	source: { initial: 400, min: 320, max: 640 },
+};
+
+export function clampWidth(width: number, limits: PanelLimits): number {
+	return Math.min(limits.max, Math.max(limits.min, Math.round(width)));
+}
+
+/** A panel's width, and a setter that keeps it within its limits; null resets it. */
+export function usePanelWidth(
+	name: PanelName,
+): [number, (width: number | null) => void] {
+	const key = `humani-t:width:${name}`;
+	const limits = PANEL_LIMITS[name];
+	const stored = useSyncExternalStore(subscribe, () => read(key));
+	const parsed = stored === null ? Number.NaN : Number(stored);
+	const width = Number.isFinite(parsed)
+		? clampWidth(parsed, limits)
+		: limits.initial;
+	const setWidth = useCallback(
+		(value: number | null) =>
+			write(key, value === null ? null : String(clampWidth(value, limits))),
+		[key, limits],
+	);
+	return [width, setWidth];
 }

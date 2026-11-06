@@ -4,14 +4,14 @@
  * counts or the failing checks, and the short caveat, always.
  */
 
-import { Link as ChakraLink, chakra, Text } from "@chakra-ui/react";
+import { Button, chakra, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { TriangleAlert } from "lucide-react";
+import { FileText, Route, TriangleAlert } from "lucide-react";
 import { isApiError } from "../../api/problem";
 import { useApi } from "../../app/api-context";
 import { briefQuery } from "../../app/briefQueries";
-import { linkStyle } from "../../ui/LinkButton";
+
 import { ChatCard } from "../reviews/ChatCard";
 import { plural } from "../reviews/format";
 import type { LiveRun } from "../reviews/liveRun";
@@ -59,16 +59,18 @@ export function BriefCard({ live }: { live: LiveRun }) {
 			at={data.created_at}
 			actions={
 				<>
-					<ChakraLink asChild css={linkStyle} fontSize="sm">
+					<Button asChild size="sm" variant="outline">
 						<Link to="/p/$projectId/r/$reviewId/brief" params={params}>
+							<FileText />
 							Open brief
 						</Link>
-					</ChakraLink>
-					<ChakraLink asChild css={linkStyle} fontSize="sm">
+					</Button>
+					<Button asChild size="sm" variant="outline">
 						<Link to="/p/$projectId/r/$reviewId/trace" params={params}>
+							<Route />
 							How this was made
 						</Link>
-					</ChakraLink>
+					</Button>
 				</>
 			}
 		>

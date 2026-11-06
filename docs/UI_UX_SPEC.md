@@ -202,6 +202,8 @@ Inside the canvas, a **source panel** can slide over from the right edge (400 px
 
 **Density.** The rail and the chat are drawn at 75% of their natural size (CSS `zoom: 0.75`, `COMPACT_ZOOM` in `apps/web`), the owner's chosen density. It is the design, not a preference. Canvases keep their full size, so a brief or a table stays easy to read.
 
+**Resizable panels.** On screens 1024px and wider, a handle between the chat and an open canvas resizes the chat: 320px to 720px, 480px at first. On screens 768px and wider, a handle on the source panel's left edge resizes it: 320px to 640px, 400px at first. The pointer shows ↔ over a handle. Drag it, or focus it and use the arrow keys (16px a step), Home and End. A double click restores the first width. Each width is kept in this browser only (`humani-t:width:chat`, `humani-t:width:source`). Narrower screens have no handles.
+
 ### 4.2 Breakpoints
 
 | Width | Layout |
