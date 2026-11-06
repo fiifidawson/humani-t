@@ -5,7 +5,7 @@ packages:
 # openapi-typescript in apps/web needs the same compiler API. A catalog keeps
 # both package.json files on this exact version.
 catalog:
-  typescript: 6.0.3
+  typescript: 7.0.2
 
 # openapi-typescript declares `typescript: ^5.x` but uses only the compiler API
 # that 6.x still ships (7.x, the native compiler, drops it). `pnpm check:api`
