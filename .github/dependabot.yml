@@ -7,10 +7,16 @@
 # version) are found and pulled within that window, before they reach us.
 # Security updates ignore the cooldown and arrive at once.
 
+# Updates go to staging like any other change, and reach main only when staging
+# is promoted. Dependabot reads this file from the default branch (main), so a
+# change here takes effect once it is there. Security updates ignore target-branch
+# and open against main; change their base to staging before merging.
+
 version: 2
 
 updates:
   - package-ecosystem: uv
+    target-branch: staging
     directory: /services/api
     schedule:
       interval: weekly
@@ -25,6 +31,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: npm # pnpm workspaces are handled by the npm ecosystem
+    target-branch: staging
     directory: /
     schedule:
       interval: weekly
@@ -39,6 +46,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
+    target-branch: staging
     directory: /
     schedule:
       interval: weekly
@@ -52,6 +60,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
+    target-branch: staging
     directories:
       - /services/api
       - /apps/web
@@ -74,6 +83,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker-compose
+    target-branch: staging
     directory: /
     schedule:
       interval: weekly
