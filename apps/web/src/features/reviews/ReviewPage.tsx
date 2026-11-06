@@ -8,12 +8,13 @@
  * whether that is allowed and answers 409 when it no longer is.
  */
 
-import { Flex, Stack, Text } from "@chakra-ui/react";
+import { Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import { type ReactNode, useCallback, useEffect, useMemo } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo } from "react";
 import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
+import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
 import { projectQuery, sessionQuery } from "../../app/queries";
 import {
 	planQuery,
@@ -23,6 +24,8 @@ import {
 } from "../../app/reviewQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
+import { ResizeHandle } from "../../ui/ResizeHandle";
+import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { ChatZone } from "../chat/ChatZone";
 import { Composer } from "../chat/Composer";
 import { LiveRunProvider } from "./liveRun";
@@ -311,54 +314,75 @@ function ReviewLayout({
 	const { pathname } = useLocation();
 	const isCanvasOpen = !pathname.replace(/\/$/, "").endsWith(`/r/${review.id}`);
 	const setup = composerFor(plan, runs, actions);
+	const chatId = useId();
+	const [chatWidth, setChatWidth] = usePanelWidth("chat");
+	const isWide = useMediaQuery(WIDE_SCREEN);
 
 	return (
 		<Flex flex="1" minH="0">
-			<ChatZone
-				direction="column"
-				flex={isCanvasOpen ? { base: "1", lg: "0 1 640px" } : "1"}
-				minW={{ lg: "380px" }}
+			{/* The width sits outside the chat's zoom, so it is in the pixels the
+			    pointer moves in. */}
+			<Box
+				id={chatId}
+				display="flex"
+				minW="0"
 				minH="0"
-				bg="bg.subtle"
+				flex={isCanvasOpen ? { base: "1", lg: `0 0 ${chatWidth}px` } : "1"}
+				maxW={isCanvasOpen ? { lg: "calc(100% - 480px)" } : undefined}
 			>
-				<Flex
-					role="log"
-					aria-label="Project conversation"
-					flex="1"
-					minH="0"
-					overflowY="auto"
-					direction="column"
-					p="4"
-				>
-					<Stack gap="4" w="full" maxW="3xl" mx="auto">
-						<Conversation draft={draft} isFirstReview={isFirstReview} />
-					</Stack>
-				</Flex>
-				{canManage ? (
-					<Composer
-						label={setup.label}
-						placeholder={setup.placeholder}
-						draft={draft}
-						onDraftChange={setDraft}
-						onSend={setup.onSend}
-						unavailableReason={setup.unavailableReason}
-						note={setup.note}
-					/>
-				) : (
-					<Text
-						px="4"
-						py="3"
-						borderTopWidth="1px"
-						borderColor="border"
-						bg="bg"
-						fontSize="sm"
-						color="fg.muted"
-						textAlign="center"
+				<ChatZone direction="column" flex="1" minW="0" minH="0" bg="bg.subtle">
+					{/* position: relative keeps visually hidden text, which is absolutely
+					    positioned, inside this scroller; without it the page itself scrolls. */}
+					<Flex
+						role="log"
+						aria-label="Project conversation"
+						flex="1"
+						minH="0"
+						position="relative"
+						overflowY="auto"
+						direction="column"
+						p="4"
 					>
-						Only owners and reviewers can change or accept the search plan.
-					</Text>
-				)}
-			</ChatZone>
+						<Stack gap="4" w="full" maxW="3xl" mx="auto">
+							<Conversation draft={draft} isFirstReview={isFirstReview} />
+						</Stack>
+					</Flex>
+					{canManage ? (
+						<Composer
+							label={setup.label}
+							placeholder={setup.placeholder}
+							draft={draft}
+							onDraftChange={setDraft}
+							onSend={setup.onSend}
+							unavailableReason={setup.unavailableReason}
+							note={setup.note}
+						/>
+					) : (
+						<Text
+							px="4"
+							py="3"
+							borderTopWidth="1px"
+							borderColor="border"
+							bg="bg"
+							fontSize="sm"
+							color="fg.muted"
+							textAlign="center"
+						>
+							Only owners and reviewers can change or accept the search plan.
+						</Text>
+					)}
+				</ChatZone>
+			</Box>
+			{isCanvasOpen && isWide ? (
+				<ResizeHandle
+					label="Resize the conversation"
+					controls={chatId}
+					edge="end"
+					width={chatWidth}
+					limits={PANEL_LIMITS.chat}
+					onResize={setChatWidth}
+				/>
+			) : null}
 			<Outlet />
 		</Flex>
 	);

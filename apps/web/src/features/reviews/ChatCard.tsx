@@ -79,7 +79,15 @@ export function ChatCard({
 				{children}
 			</Box>
 			{actions === undefined ? null : (
-				<Flex mt="3" gap="2" wrap="wrap" align="center">
+				// Text-style buttons pin themselves to the top (LinkButton); here every
+				// action sits on the row's centre line.
+				<Flex
+					mt="3"
+					gap="2"
+					wrap="wrap"
+					align="center"
+					css={{ "& > *": { alignSelf: "center" } }}
+				>
 					{actions}
 				</Flex>
 			)}
@@ -105,7 +113,7 @@ export function ChatLine({
 			px="1"
 			fontSize="sm"
 			color="fg.muted"
-			css={{ "& > svg": { flex: "none" } }}
+			css={{ "& > *": { alignSelf: "center" }, "& > svg": { flex: "none" } }}
 		>
 			{icon}
 			{children}
