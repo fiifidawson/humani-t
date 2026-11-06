@@ -2,6 +2,10 @@
 
 Each key is a sorted set of event timestamps. The check-and-add runs as one Lua
 script, so two workers cannot both admit the last allowed event.
+
+An outage is reported as `RateLimiterUnavailableError`, quickly: short socket
+timeouts and no client-side retries, because a sign-in waiting on a dead Valkey
+is worse than one refused with 503 and a `Retry-After`.
 """
 
 from __future__ import annotations
@@ -12,7 +16,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from redis.asyncio import Redis
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
+from redis.exceptions import RedisError
 
+from app.domain.errors import RateLimiterUnavailableError
 from app.ratelimit.base import RateDecision
 
 _HIT = """
@@ -30,6 +38,7 @@ end
 return {1, 0}
 """
 _PREFIX = "ratelimit:"
+_SOCKET_TIMEOUT_SECONDS = 2
 
 
 class ValkeyRateLimiter:
@@ -44,17 +53,26 @@ class ValkeyRateLimiter:
     def from_url(
         cls, url: str, clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     ) -> ValkeyRateLimiter:
-        return cls(Redis.from_url(url), clock)
+        client = Redis.from_url(
+            url,
+            socket_connect_timeout=_SOCKET_TIMEOUT_SECONDS,
+            socket_timeout=_SOCKET_TIMEOUT_SECONDS,
+            retry=Retry(NoBackoff(), 0),
+        )
+        return cls(client, clock)
 
     async def _run(
         self, key: str, limit: int, window: timedelta, *, record: bool
     ) -> RateDecision:
         now_ms = int(self._clock().timestamp() * 1000)
         window_ms = int(window.total_seconds() * 1000)
-        allowed, retry_ms = await self._script(
-            keys=[_PREFIX + key],
-            args=[now_ms, window_ms, limit, "1" if record else "0", uuid.uuid4().hex],
-        )
+        try:
+            allowed, retry_ms = await self._script(
+                keys=[_PREFIX + key],
+                args=[now_ms, window_ms, limit, "1" if record else "0", uuid.uuid4().hex],
+            )
+        except (RedisError, OSError) as exc:
+            raise RateLimiterUnavailableError("rate limiter unreachable") from exc
         return RateDecision(bool(allowed), timedelta(milliseconds=int(retry_ms)))
 
     async def hit(self, key: str, limit: int, window: timedelta) -> RateDecision:
@@ -64,7 +82,10 @@ class ValkeyRateLimiter:
         return await self._run(key, limit, window, record=False)
 
     async def reset(self, key: str) -> None:
-        await self._client.delete(_PREFIX + key)
+        try:
+            await self._client.delete(_PREFIX + key)
+        except (RedisError, OSError) as exc:
+            raise RateLimiterUnavailableError("rate limiter unreachable") from exc
 
     async def close(self) -> None:
         await self._client.aclose()

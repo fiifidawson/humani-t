@@ -8,10 +8,12 @@ limit and reports it as a violation.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.application.accounts import SignedIn, SignInStatus
 from app.domain.accounts import Invitation, User
 from app.domain.sessions import Session
 
@@ -69,7 +71,26 @@ class UserOut(BaseModel):
 
 
 class SignedInOut(BaseModel):
-    user: UserOut
+    """Where the sign-in stands. Fields that do not apply are left out.
+
+    `mfa_required` carries `methods` and no `user`: the password alone does not
+    earn the account's details.
+    """
+
+    status: Literal["signed_in", "mfa_required", "mfa_enrolment_required"]
+    user: UserOut | None = None
+    methods: list[str] | None = None
+
+    @classmethod
+    def from_domain(cls, signed_in: SignedIn) -> SignedInOut:
+        user = UserOut.from_domain(signed_in.user)
+        match signed_in.status:
+            case SignInStatus.MFA_REQUIRED:
+                return cls(status="mfa_required", methods=list(signed_in.methods))
+            case SignInStatus.MFA_ENROLMENT_REQUIRED:
+                return cls(status="mfa_enrolment_required", user=user)
+            case SignInStatus.SIGNED_IN:
+                return cls(status="signed_in", user=user)
 
 
 class SessionOut(BaseModel):
@@ -78,6 +99,7 @@ class SessionOut(BaseModel):
     last_seen_at: datetime
     user_agent: str | None
     current: bool
+    aal: int
 
     @classmethod
     def from_domain(cls, session: Session, current_id: UUID) -> SessionOut:
@@ -87,12 +109,14 @@ class SessionOut(BaseModel):
             last_seen_at=session.last_seen_at,
             user_agent=session.user_agent,
             current=session.id == current_id,
+            aal=session.aal,
         )
 
 
 class CurrentSessionOut(BaseModel):
     user: UserOut
     session: SessionOut
+    mfa_enrolment_required: bool
 
 
 class InvitationOut(BaseModel):

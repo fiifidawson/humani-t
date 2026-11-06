@@ -70,7 +70,8 @@ async def _purge(providers: Providers) -> int:
     report = await providers.accounts.purge_expired()
     print(
         f"purged {report.sessions} session(s), {report.password_resets} reset link(s), "
-        f"{report.invitations} invitation(s)"
+        f"{report.invitations} invitation(s), "
+        f"{report.webauthn_challenges} passkey challenge(s)"
     )
     return 0
 

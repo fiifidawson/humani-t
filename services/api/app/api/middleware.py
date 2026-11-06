@@ -11,6 +11,7 @@ import re
 import uuid
 from collections.abc import Iterable
 from http import HTTPStatus
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
 
 import structlog
 from starlette.datastructures import MutableHeaders
@@ -108,11 +109,19 @@ class CrossSiteRequestMiddleware:
     A request with neither header comes from a non-browser client (curl,
     Postman). Forgery needs a victim's browser, so those pass; anything signed
     in still needs the session's CSRF token.
+
+    `multipart_paths` (the document upload) may also send `multipart/form-data`.
+    A cross-site form can send that too, so on those paths the other two layers
+    carry the defence: the origin checks here, and the session's token, which a
+    form cannot set as a header.
     """
 
-    def __init__(self, app: ASGIApp, public_origin: str) -> None:
+    def __init__(
+        self, app: ASGIApp, public_origin: str, multipart_paths: Iterable[re.Pattern[str]] = ()
+    ) -> None:
         self.app = app
         self.public_origin = public_origin.rstrip("/")
+        self.multipart_paths = tuple(multipart_paths)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope["method"] not in _UNSAFE_METHODS:
@@ -130,11 +139,20 @@ class CrossSiteRequestMiddleware:
 
         content_type = headers.get("content-type", "").split(";")[0].strip().lower()
         has_body = headers.get("content-length", "0") != "0" or "transfer-encoding" in headers
-        if has_body and content_type != "application/json":
+        if (
+            has_body
+            and content_type != "application/json"
+            and not self._is_upload(scope["path"], content_type)
+        ):
             await _refuse(send, 415, "Request bodies must be application/json.")
             return
 
         await self.app(scope, receive, send)
+
+    def _is_upload(self, path: str, content_type: str) -> bool:
+        return content_type == "multipart/form-data" and any(
+            pattern.match(path) for pattern in self.multipart_paths
+        )
 
 
 async def _refuse(send: Send, status: int, detail: str) -> None:
@@ -170,19 +188,32 @@ class BodySizeLimitMiddleware:
     A body without one (chunked) is counted as it streams, and refused as soon as
     it passes the limit. The reverse proxy enforces a limit too; this one holds
     when the app is reached some other way.
+
+    `larger_limits` gives named paths (the document upload) their own limit.
     """
 
-    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_bytes: int,
+        larger_limits: Iterable[tuple[re.Pattern[str], int]] = (),
+    ) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.larger_limits = tuple(larger_limits)
+
+    def _limit(self, path: str) -> int:
+        matching = (n for pattern, n in self.larger_limits if pattern.match(path))
+        return next(matching, self.max_bytes)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
+        limit = self._limit(scope["path"])
         declared = dict(scope["headers"]).get(b"content-length")
-        if declared is not None and declared.isdigit() and int(declared) > self.max_bytes:
+        if declared is not None and declared.isdigit() and int(declared) > limit:
             await _refuse(send, 413, "The request body is too large.")
             return
 
@@ -194,7 +225,7 @@ class BodySizeLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > limit:
                     raise _BodyTooLargeError
             return message
 
@@ -209,3 +240,102 @@ class BodySizeLimitMiddleware:
         except _BodyTooLargeError:
             if not response_started:
                 await _refuse(send, 413, "The request body is too large.")
+
+
+_UNEXPECTED_ERROR = "An unexpected error occurred. Quote the request id when reporting it."
+
+
+class UnhandledErrorMiddleware:
+    """Answer an exception that no handler took with a 500 problem document.
+
+    Starlette would answer it from `ServerErrorMiddleware`, which sits outside
+    every middleware added here, so its 500 had no security headers and no
+    request id. This one runs inside the middleware that decorate responses and
+    outside those that only refuse requests, so its 500 is decorated like any other.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        # Looked up per app, not at import: a logger caches its configuration on
+        # first use, and each `create_app` configures logging afresh.
+        self._log = structlog.get_logger(__name__)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception:
+            self._log.exception("unhandled_error", path=scope["path"])
+            if response_started:
+                # Too late for a status line: the client sees the stream end early.
+                raise
+            await _refuse(send, 500, _UNEXPECTED_ERROR)
+
+
+class ClientAddressMiddleware:
+    """Settle the client address, believing X-Forwarded-For only from a trusted proxy.
+
+    Uvicorn's `--proxy-headers` trusts 127.0.0.1 unless told otherwise, so any
+    local process could choose the address the per-client throttle counts. The
+    decision is made here instead, from one operator setting that trusts nobody
+    by default. Uvicorn must run with `--no-proxy-headers`, or it decides first.
+    """
+
+    def __init__(
+        self, app: ASGIApp, trusted_proxies: Iterable[IPv4Network | IPv6Network] = ()
+    ) -> None:
+        self.app = app
+        self.trusted_proxies = tuple(trusted_proxies)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        client = scope.get("client")
+        if scope["type"] in ("http", "websocket") and client and self._is_trusted(client[0]):
+            forwarded = [
+                value.decode("latin-1")
+                for name, value in scope["headers"]
+                if name == b"x-forwarded-for"
+            ]
+            scope["client"] = (self._forwarded_client(client[0], forwarded), client[1])
+        await self.app(scope, receive, send)
+
+    def _is_trusted(self, host: str) -> bool:
+        address = _ip_address(host)
+        return address is not None and any(address in n for n in self.trusted_proxies)
+
+    def _forwarded_client(self, peer: str, headers: Iterable[str]) -> str:
+        """The nearest address that is not a trusted proxy, reading from the right.
+
+        Each proxy appends the address it received from, so anything left of the
+        rightmost untrusted entry was written by the client itself and proves nothing.
+        """
+        hops = [hop.strip() for header in headers for hop in header.split(",")]
+        nearest = peer
+        for hop in reversed(hops):
+            address = _ip_address(hop)
+            if address is None:
+                return peer
+            nearest = str(address)
+            if not any(address in n for n in self.trusted_proxies):
+                return nearest
+        return nearest
+
+
+def _ip_address(text: str) -> IPv4Address | IPv6Address | None:
+    try:
+        address = ip_address(text)
+    except ValueError:
+        return None
+    if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address

@@ -1,0 +1,131 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/mYvDmAEH8bIhnf27BKl7AnfV0Ss</id>
+  <title>arXiv Query: search_query=(ti:"chatbot" OR abs:"chatbot" OR ti:"conversational agent" OR abs:"conversational agent") AND (ti:"humanitarian" OR abs:"humanitarian" OR ti:"crisis" OR abs:"crisis")&amp;id_list=&amp;start=0&amp;max_results=3</title>
+  <updated>2026-11-03T10:07:43Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=(ti:%22chatbot%22+OR+(abs:%22chatbot%22+OR+(ti:%22conversational+agent%22+OR+abs:%22conversational+agent%22)))+AND+(ti:%22humanitarian%22+OR+(abs:%22humanitarian%22+OR+(ti:%22crisis%22+OR+abs:%22crisis%22)))&amp;start=0&amp;max_results=3&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>3</opensearch:itemsPerPage>
+  <opensearch:totalResults>34</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2610.39782v1</id>
+    <title>Assessing AI Companion Chatbot Safety for Vulnerable Users: A Crisis-Stage Multi-Platform Evaluation</title>
+    <updated>2026-10-29T10:32:06Z</updated>
+    <link href="https://arxiv.org/abs/2610.39782v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2610.39782v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>AI companion chatbots are increasingly used by vulnerable individuals, including adolescents in suicidal crisis, for emotional support. Existing safety evaluations focus on base models, leaving gaps in product-level assessment, crisis-stage sensitivity, and comparisons between companion apps and general-purpose LLMs. We introduce MIRROR-Eval (Multi-turn Interaction Risk Review: Observing suicidal-crisis Responses), a dataset of 960 annotated 20-turn conversations across eight deployed platform configurations, six clinically grounded personas, and two crisis stages: ideation and explicit planning. An LLM-as-a-Judge pipeline applies an expert-reviewed rubric covering user risk severity, chatbot risk awareness, and intervention behavior. We observe a three-tier harm structure: companion apps (Character.AI and Replika) and Grok 4.3 form a high-harm tier; Gemini 3.1 Pro is mid-range; GPT-5.5 and Claude Sonnet 5 show substantially lower harm. At planning, companion apps show increased glorification and normalisation, advancement toward harmful action, and harmful methods and instructions. Crisis recognition and empathetic language do not ensure safe responses. These findings highlight the need for product-level safety evaluation across crisis stages. Dataset and code: https://huggingface.co/datasets/imda-biztech/MIRROR-Eval. Warning: this paper includes examples that may be offensive or harmful.</summary>
+    <category term="cs.HC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-10-29T10:32:06Z</published>
+    <arxiv:comment>Accepted at the GenAI4Health Workshop at NeurIPS 2026 (non-archival)</arxiv:comment>
+    <arxiv:primary_category term="cs.HC"/>
+    <author>
+      <name>Huanyue Liao</name>
+    </author>
+    <author>
+      <name>Seok Min Lim</name>
+    </author>
+    <author>
+      <name>Yan Ling Lim</name>
+    </author>
+    <author>
+      <name>Shi Min Cheng</name>
+    </author>
+    <author>
+      <name>Kellin Pelrine</name>
+    </author>
+    <author>
+      <name>Chen Hui Ong</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2603.05647v3</id>
+    <title>From Risk Avoidance to User Empowerment in AI Mental Health Crisis Support</title>
+    <updated>2026-03-17T20:08:19Z</updated>
+    <link href="https://arxiv.org/abs/2603.05647v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2603.05647v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>People experiencing mental health crises frequently turn to open-ended generative AI (GenAI) chatbots for support. However, rather than providing immediate assistance, some GenAI chatbots are designed to respond to crisis situations in ways that minimize their developers' liability, primarily through avoidance (e.g., refusing to engage beyond templated referrals to crisis hotlines). Withholding crisis support in these cases may harm users who have no viable alternatives and reduce their motivation to seek further help. At scale, this avoidant design could undermine population mental health. We propose empowerment-oriented design principles for AI crisis support, informed by community helper models. As an initial touchpoint in help-seeking, AI chatbots can act as a supportive bridge to de-escalate crises and connect users to more reliable care. Coordination between AI developers and regulators can enable a better balance of risk mitigation and user empowerment in AI crisis support.</summary>
+    <category term="cs.CY" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.HC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-03-05T19:55:43Z</published>
+    <arxiv:primary_category term="cs.CY"/>
+    <author>
+      <name>Benjamin Kaveladze</name>
+    </author>
+    <author>
+      <name>Arka Ghosh</name>
+    </author>
+    <author>
+      <name>Leah Ajmani</name>
+    </author>
+    <author>
+      <name>Denae Ford</name>
+    </author>
+    <author>
+      <name>Peter M Gutierrez</name>
+    </author>
+    <author>
+      <name>Jetta E Hanson</name>
+    </author>
+    <author>
+      <name>Eugenia Kim</name>
+    </author>
+    <author>
+      <name>Keertana Namuduri</name>
+    </author>
+    <author>
+      <name>Theresa Nguyen</name>
+    </author>
+    <author>
+      <name>Ebele Okoli</name>
+    </author>
+    <author>
+      <name>Teresa Rexin</name>
+    </author>
+    <author>
+      <name>Jessica L Schleider</name>
+    </author>
+    <author>
+      <name>Hongyi Shen</name>
+    </author>
+    <author>
+      <name>Jina Suh</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2407.09197v3</id>
+    <title>A Chatbot for Asylum-Seeking Migrants in Europe</title>
+    <updated>2025-01-31T13:11:47Z</updated>
+    <link href="https://arxiv.org/abs/2407.09197v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2407.09197v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We present ACME: A Chatbot for asylum-seeking Migrants in Europe. ACME relies on computational argumentation and aims to help migrants identify the highest level of protection they can apply for. This would contribute to a more sustainable migration by reducing the load on territorial commissions, Courts, and humanitarian organizations supporting asylum applicants. We describe the background context, system architecture, underlying technologies, and a case study used to validate the tool with domain experts.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-07-12T11:53:40Z</published>
+    <arxiv:comment>Copyright 2024 IEEE</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <arxiv:journal_ref>2024 IEEE 36th International Conference on Tools with Artificial Intelligence (ICTAI), pp. 702-707</arxiv:journal_ref>
+    <author>
+      <name>Bettina Fazzinga</name>
+    </author>
+    <author>
+      <name>Elena Palmieri</name>
+    </author>
+    <author>
+      <name>Margherita Vestoso</name>
+    </author>
+    <author>
+      <name>Luca Bolognini</name>
+    </author>
+    <author>
+      <name>Andrea Galassi</name>
+    </author>
+    <author>
+      <name>Filippo Furfaro</name>
+    </author>
+    <author>
+      <name>Paolo Torroni</name>
+    </author>
+    <arxiv:doi>10.1109/ICTAI62512.2024.00104</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1109/ICTAI62512.2024.00104" title="doi"/>
+  </entry>
+</feed>

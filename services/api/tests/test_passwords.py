@@ -7,6 +7,7 @@ Source: NIST SP 800-63B rev 4 (password verifiers); OWASP ASVS 5.0 V6
 from __future__ import annotations
 
 import pytest
+
 from app.auth.argon2 import Argon2PasswordHasher
 from app.auth.fake import FakePasswordHasher
 from app.domain.passwords import PasswordPolicy, normalize_password

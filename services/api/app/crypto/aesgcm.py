@@ -10,7 +10,9 @@ from __future__ import annotations
 import os
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from app.domain.encryption import DecryptionError
 
@@ -37,3 +39,10 @@ class AesGcmCipher:
             return AESGCM(key).decrypt(nonce, sealed[1 + _NONCE_BYTES :], associated_data)
         except InvalidTag as exc:
             raise DecryptionError("ciphertext failed authentication") from exc
+
+    def derive_key(self, key: bytes, info: bytes) -> bytes:
+        # No salt: the input is already a uniformly random key (RFC 5869 §3.1),
+        # and `info` alone separates the purposes.
+        return HKDF(
+            algorithm=hashes.SHA256(), length=_KEY_BITS // 8, salt=None, info=info
+        ).derive(key)

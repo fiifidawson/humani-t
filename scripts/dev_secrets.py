@@ -61,6 +61,10 @@ def main() -> None:
         "HUMANI_T_SMTP_HOST=127.0.0.1\n"
         "HUMANI_T_SMTP_PORT=51025\n"
         "HUMANI_T_SMTP_STARTTLS=false\n"
+        # `ollama serve` on this machine; no token. Compose uses http://ollama:11434.
+        "HUMANI_T_INFERENCE_URL=http://127.0.0.1:11434\n"
+        "HUMANI_T_INFERENCE_MODEL=llama3.1:8b\n"
+        "HUMANI_T_PAPER_SOURCES=openalex,europepmc,arxiv\n"
     )
     _write_once(API_ENV, env)
 
