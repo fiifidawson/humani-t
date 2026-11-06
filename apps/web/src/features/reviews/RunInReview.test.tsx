@@ -294,6 +294,13 @@ describe("the run canvas (UI_UX_SPEC §6.7)", () => {
 			),
 		);
 		const canvas = await screen.findByRole("region", { name: "Run 1" });
+		// Progress is redrawn at most every 500 ms, so the second paper can land
+		// after the canvas opens; the bar reaching 2 of 3 is the sign it has.
+		expect(
+			await within(canvas).findByRole("progressbar", {
+				name: "Screen · 2 of 3",
+			}),
+		).toBeInTheDocument();
 		const papers = within(canvas).getByRole("list", {
 			name: "Screened papers",
 		});
@@ -302,9 +309,6 @@ describe("the run canvas (UI_UX_SPEC §6.7)", () => {
 		expect(rows[0]).toHaveTextContent("School meals");
 		expect(rows[0]).toHaveTextContent("intervention not matched");
 		expect(rows[1]).toHaveTextContent("Highly relevant");
-		expect(
-			within(canvas).getByRole("progressbar", { name: "Screen · 2 of 3" }),
-		).toBeInTheDocument();
 		expect(FakeEventSource.instances).toHaveLength(1);
 
 		await user.click(within(canvas).getByRole("button", { name: "Relevant" }));
