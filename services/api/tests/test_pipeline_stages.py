@@ -154,6 +154,28 @@ class TestDiscover:
         assert "could be searched" in (p.failure(run_id) or "")
         assert _run_papers(p, run_id) == []
 
+    def test_a_search_that_finds_nothing_stops_the_run_here_and_says_so(self):
+        p = make_pipeline(sources=[CorpusSource("first", ()), CorpusSource("second", ())])
+
+        run_id = _run(p)
+
+        assert p.rt.stored_run(run_id).state is RunState.FAILED
+        assert p.failure(run_id) == (
+            "The search found no papers. Ask for changes to broaden it, then run it again."
+        )
+        finished = [e.data["stage"] for e in p.rt.events(run_id) if e.name == "stage.finished"]
+        # Discover is the first stage here; nothing after it ran.
+        assert finished == []
+        assert len(p.progress(run_id, "discover")) == 2
+
+    def test_a_search_where_some_sources_find_papers_carries_on(self):
+        p = make_pipeline(sources=[CorpusSource("first", CORPUS), CorpusSource("second", ())])
+
+        run_id = _run(p, ("discover",))
+
+        assert p.rt.stored_run(run_id).state is RunState.DONE
+        assert p.summary(run_id, "discover")["after_deduplication"] == 4
+
     def test_no_sources_configured_fails_plainly(self):
         p = make_pipeline(sources=[])
 
