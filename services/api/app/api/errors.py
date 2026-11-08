@@ -36,7 +36,7 @@ from app.domain.errors import (
     RateLimiterUnavailableError,
     StorageUnavailableError,
 )
-from app.domain.inference import InferenceUnavailableError
+from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
 from app.domain.mfa import (
     EnrolmentCodeIncorrectError,
     LastAuthenticatorError,
@@ -206,6 +206,13 @@ async def _inference_unavailable(_: Request, exc: Exception) -> JSONResponse:
     return problem(502, "The model server could not be reached. Try again later.")
 
 
+async def _inference_rate_limited(_: Request, exc: Exception) -> JSONResponse:
+    _log.warning("inference_rate_limited", reason=str(exc))
+    return problem(
+        503, "The model service's rate limit was reached. Wait a minute, then try again."
+    )
+
+
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     # Reached only from the outermost middleware; a route's errors are answered
     # by UnhandledErrorMiddleware, inside the security headers and request id.
@@ -225,5 +232,6 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(InvalidTransitionError, _run_conflict)
     app.add_exception_handler(EmailDeliveryError, _email_delivery)
     app.add_exception_handler(PaperSourceUnavailableError, _paper_source_unavailable)
+    app.add_exception_handler(InferenceRateLimitedError, _inference_rate_limited)
     app.add_exception_handler(InferenceUnavailableError, _inference_unavailable)
     app.add_exception_handler(Exception, _unhandled)

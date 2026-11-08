@@ -122,6 +122,10 @@ class InferenceUnavailableError(InferenceError):
     """The model server could not be reached, refused, or does not have the model."""
 
 
+class InferenceRateLimitedError(InferenceUnavailableError):
+    """The model service refused for now: too many requests. Waiting can fix it."""
+
+
 class InvalidStructuredOutputError(InferenceError):
     """The model answered, but not with a document matching the schema."""
 

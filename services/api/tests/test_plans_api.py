@@ -19,7 +19,7 @@ from uuid import UUID
 import pytest
 
 from app.domain.encryption import KeyDestroyedError
-from app.domain.inference import InferenceUnavailableError
+from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
 from tests.plan_support import (
     DRAFT,
     REVISED,
@@ -117,6 +117,18 @@ class TestStartingAPlan:
         assert body["status"] == "new"
         assert body["current"] is None
         assert [r["delivered"] for r in body["receipts"]] == [False]
+
+    def test_a_rate_limited_model_is_named_as_such(self, team):
+        team.model.failure = InferenceRateLimitedError(
+            "the model server's rate limit was reached"
+        )
+
+        response = team.start("shallow")
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == (
+            "The model service's rate limit was reached. Wait a minute, then try again."
+        )
 
 
 class TestAnswers:

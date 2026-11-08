@@ -45,6 +45,7 @@ from app.domain.inference import (
     ChatMessage,
     ChatRequest,
     ChatRole,
+    InferenceRateLimitedError,
     InferenceUnavailableError,
     InvalidStructuredOutputError,
     PromptRefusedError,
@@ -80,6 +81,10 @@ NOTHING_MASKED = (
 MODEL_DOWN = (
     "The model server isn't answering. Papers screened so far are kept; try the run "
     "again once it is back."
+)
+MODEL_RATE_LIMITED = (
+    "The model service's rate limit was reached. Papers screened so far are kept; "
+    "wait a minute, then run it again."
 )
 
 _SYSTEM_PROMPT = """You screen research papers for a humanitarian evidence review.
@@ -395,7 +400,10 @@ class ScreenStage:
                 _refused(run, paper, attempt, exc)
                 continue
             except InferenceUnavailableError as exc:
-                raise StageFailedError(MODEL_DOWN) from exc
+                # The reason may name hosts and addresses: the operator's log only.
+                _log.warning("screening_model_unavailable", run_id=str(run.id), reason=str(exc))
+                limited = isinstance(exc, InferenceRateLimitedError)
+                raise StageFailedError(MODEL_RATE_LIMITED if limited else MODEL_DOWN) from exc
             try:
                 return self._decision(
                     run, plan, paper, result.output, result.model_id, item.masked_text

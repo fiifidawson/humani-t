@@ -18,6 +18,7 @@ from app.domain.inference import (
     ChatMessage,
     ChatRequest,
     ChatRole,
+    InferenceRateLimitedError,
     InferenceUnavailableError,
     InvalidStructuredOutputError,
     TokenUsage,
@@ -88,10 +89,39 @@ def reply(
     return FakeHttpFetcher(handler)
 
 
+class Waits:
+    """Stands in for asyncio.sleep: records each wait instead of taking it."""
+
+    def __init__(self) -> None:
+        self.seconds: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.seconds.append(seconds)
+
+
 def provider(
-    fetcher: FakeHttpFetcher, base_url: str = BASE_URL
+    fetcher: FakeHttpFetcher, base_url: str = BASE_URL, waits: Waits | None = None
 ) -> OpenAICompatibleInferenceProvider:
-    return OpenAICompatibleInferenceProvider(fetcher, base_url=base_url, model=MODEL)
+    return OpenAICompatibleInferenceProvider(
+        fetcher, base_url=base_url, model=MODEL, sleep=waits or Waits()
+    )
+
+
+def limited_then_answered(limited: int, retry_after: str | None = None) -> FakeHttpFetcher:
+    """429 for the first `limited` requests, then an answer."""
+    calls = {"n": 0}
+
+    def handler(request: FetchRequest) -> FetchResponse:
+        calls["n"] += 1
+        if calls["n"] <= limited:
+            headers = {"content-type": "application/json"}
+            if retry_after is not None:
+                headers["retry-after"] = retry_after
+            body = json.dumps({"error": {"message": "Rate limit reached"}}).encode()
+            return FetchResponse(status=429, url=request.url, headers=headers, body=body)
+        return FetchResponse.of_json(request.url, completion())
+
+    return FakeHttpFetcher(handler)
 
 
 def sent_body(fetcher: FakeHttpFetcher) -> dict[str, Any]:
@@ -299,6 +329,45 @@ class TestUnsupportedSettings:
             await provider(fetcher).chat(chat_request())
 
         assert len(fetcher.requests) == 1
+
+
+class TestRateLimits:
+    """A 429 says "not now": waiting and asking again usually works (OpenAI's own
+    clients retry it with backoff). Giving up names the rate limit, not an outage."""
+
+    async def test_a_rate_limited_call_waits_and_asks_again(self):
+        waits = Waits()
+
+        result = await provider(limited_then_answered(2), waits=waits).chat(chat_request())
+
+        assert result.output["include"] is True
+        assert waits.seconds == [2, 4]
+
+    async def test_the_wait_follows_the_servers_retry_after(self):
+        waits = Waits()
+
+        await provider(limited_then_answered(1, retry_after="3"), waits=waits).chat(
+            chat_request()
+        )
+
+        assert waits.seconds == [3]
+
+    async def test_a_long_retry_after_is_capped(self):
+        waits = Waits()
+
+        await provider(limited_then_answered(1, retry_after="600"), waits=waits).chat(
+            chat_request()
+        )
+
+        assert waits.seconds == [30]
+
+    async def test_still_limited_after_three_waits_is_reported_as_a_rate_limit(self):
+        fetcher = limited_then_answered(99)
+
+        with pytest.raises(InferenceRateLimitedError, match="rate limit"):
+            await provider(fetcher).chat(chat_request())
+
+        assert len(fetcher.requests) == 4
 
 
 class TestFailures:
