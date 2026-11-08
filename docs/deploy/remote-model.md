@@ -248,3 +248,23 @@ Finally, run a review in humani-t on a made-up question and confirm that its mod
 - **Update** Ollama (re-run its installer), Caddy and the system regularly; `unattended-upgrades` covers Ubuntu's own packages only.
 - **Re-check** test 4 after any firewall or provider change. It is the test that proves Ollama is not on the internet.
 - **Watch the bill and the load.** A model server under unexpected load is a sign that something other than humani-t is using it.
+
+## 7. A hosted model API: an opt-in
+
+Instead of a model server you run, humani-t can call a hosted API that speaks OpenAI's Chat Completions: OpenAI, Azure OpenAI, Mistral or Groq ([ADR 0010](../adr/0010-openai-compatible-models-as-an-opt-in.md)). Masked text then leaves your deployment for that provider. Decide that deliberately:
+
+- Use a data processing agreement with the provider, choose an EU region where it offers one, and choose zero data retention.
+- Masking is not anonymity: codes, rare numbers and very specific descriptions can still identify people.
+- Every privacy receipt names the model that received the text.
+
+To turn it on:
+
+1. Put the API key in `secrets/inference_token`.
+2. In `.env`, set:
+   - `HUMANI_T_INFERENCE_API=openai`
+   - `HUMANI_T_INFERENCE_URL`: the base before `/chat/completions`. For example `https://api.openai.com/v1`; for Azure, `https://<resource>.openai.azure.com/openai/v1`.
+   - `HUMANI_T_INFERENCE_MODEL`: on Azure, the deployment name.
+3. Add `HUMANI_T_ALLOW_HOSTED_INFERENCE: "true"` to `x-app-environment` in `compose.yaml` by hand. On purpose, no `.env` line can turn it on.
+4. Run `docker compose up -d`.
+
+Reasoning models (GPT-5, o-series) take only their default temperature; the provider notices and leaves it out. They can take minutes to answer, so raise the per-call timeout. A rate limit is retried a few times. If runs still stop on it, screen fewer papers at once with `HUMANI_T_SCREENING_CONCURRENCY`.
