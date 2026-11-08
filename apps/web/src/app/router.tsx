@@ -176,6 +176,15 @@ const projectHomeRoute = createRoute({
 	),
 });
 
+const projectSettingsRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "settings",
+	component: lazyRouteComponent(
+		() => import("../features/projects/ProjectSettingsPage"),
+		"ProjectSettingsPage",
+	),
+});
+
 const reviewRoute = createRoute({
 	getParentRoute: () => workspaceRoute,
 	path: "r/$reviewId",
@@ -309,6 +318,7 @@ const routeTree = rootRoute.addChildren([
 		newProjectRoute,
 		workspaceRoute.addChildren([
 			projectHomeRoute,
+			projectSettingsRoute,
 			reviewRoute.addChildren([
 				reviewChatRoute,
 				draftRoute,

@@ -1038,6 +1038,8 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
 ### 6.14 Project settings
 
+**Built so far (Wave 2):** the page at `/p/:project/settings`, opened from the settings icon ("Project settings") in the workspace header, holds the danger zone. Owners see **Delete project…**. Its dialog lists what becomes unreadable, says it can't be undone, and enables **Delete project** only once the project's name is typed exactly. A stale sign-in brings up "Sign in again" first. Afterwards the person lands on Home, and the project leaves the rail. Others read "Only owners can delete a project." General settings and members come later in Wave 2.
+
 - **General:** name, collection, tags, pinned (per user), archive.
 - **Members:** list with roles; invite by email; change role; remove. Changing members needs a recent sign-in. The last owner can't leave or be demoted (the UI explains why).
 - **Privacy:** "Review before sending" on or off; project masking rules (list, add, remove).
