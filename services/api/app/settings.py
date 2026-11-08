@@ -306,6 +306,14 @@ class Settings(BaseSettings):
             "the client."
         ),
     )
+    mask_countries_and_regions: bool = Field(
+        default=True,
+        description=(
+            "Mask country and large-region names (Mali, the Sahel) in questions and plans "
+            "like any place. False keeps them, so the search and criteria keep the "
+            "review's geography; towns, districts and camps stay masked (ADR 0011)."
+        ),
+    )
     masking_ner: Literal["auto", "spacy", "off"] = Field(
         default="auto",
         description=(
