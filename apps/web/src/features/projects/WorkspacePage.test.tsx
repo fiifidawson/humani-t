@@ -145,7 +145,7 @@ describe("starting a review from the workspace (UI_UX_SPEC §6.3, §5.3.1, §5.4
 		expect(question).toHaveTextContent("Quick search");
 	});
 
-	it("shows the question at once with Sending… while the plan is made", async () => {
+	it("shows the question at once, and what Humani-T is doing while it replies", async () => {
 		const { api, project } = signedInWith("owner");
 		let reply: (() => void) | undefined;
 		api.reviews.modelReply = new Promise<void>((resolve) => {
@@ -158,8 +158,15 @@ describe("starting a review from the workspace (UI_UX_SPEC §6.3, §5.3.1, §5.4
 			"Cash or vouchers?{Enter}",
 		);
 
-		expect(await screen.findByText("Sending…")).toBeInTheDocument();
-		expect(screen.getByText("Cash or vouchers?")).toBeInTheDocument();
+		// The workspace moves to the review's own page while the reply is pending.
+		const question = await screen.findByRole("article", { name: "Question" });
+		expect(question).toHaveTextContent("Cash or vouchers?");
+		const pending = await screen.findByText(/Reading your question/);
+		expect(pending.closest("[role=status]")).toHaveAttribute(
+			"data-role",
+			"humani-t",
+		);
+		expect(screen.queryByText("Sending…")).not.toBeInTheDocument();
 		reply?.();
 		expect(
 			await screen.findByRole("article", { name: /Search planner/ }),

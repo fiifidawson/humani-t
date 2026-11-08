@@ -34,6 +34,7 @@ import { useApi } from "../../app/api-context";
 import { planVersionQuery } from "../../app/reviewQueries";
 import { DisclosureButton } from "../../ui/DisclosureButton";
 import { linkStyle } from "../../ui/LinkButton";
+import { PendingReply } from "../chat/PendingReply";
 import { PIPELINE } from "../runs/runEvents";
 import { ChatCard, ChatLine } from "./ChatCard";
 import { modeLabel, type PlanMode, plural } from "./format";
@@ -45,16 +46,6 @@ import { useReview, type Version } from "./reviewContext";
 type Schemas = components["schemas"];
 type Receipt = Schemas["ReceiptOut"];
 type SentText = Schemas["SentTextOut"];
-
-const SENDING = "Sending…";
-
-function Sending() {
-	return (
-		<Text role="status" color="fg.muted" fontSize="xs">
-			{SENDING}
-		</Text>
-	);
-}
 
 /** A failed request as a card (§5.3.10): the API's words, a retry, and the request id. */
 export function ErrorCard({
@@ -112,17 +103,27 @@ export function ErrorCard({
 export function QuestionTurn({ isSending }: { isSending: boolean }) {
 	const { review, plan } = useReview();
 	return (
-		<ChatCard title="Question" tone="person" at={review.created_at}>
-			<Text whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="md">
-				{review.question}
-			</Text>
-			{plan.mode === null ? null : (
-				<Text color="fg.muted" fontSize="xs">
-					{modeLabel(plan.mode)}
+		<>
+			<ChatCard title="Question" tone="person" at={review.created_at}>
+				<Text whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="md">
+					{review.question}
 				</Text>
-			)}
-			{isSending ? <Sending /> : null}
-		</ChatCard>
+				{plan.mode === null ? null : (
+					<Text color="fg.muted" fontSize="xs">
+						{modeLabel(plan.mode)}
+					</Text>
+				)}
+			</ChatCard>
+			{isSending ? (
+				<PendingReply
+					doing={
+						plan.mode === "shallow"
+							? "Drafting the search plan"
+							: "Reading your question"
+					}
+				/>
+			) : null}
+		</>
 	);
 }
 
@@ -345,73 +346,80 @@ export function ClarifyCard({ draft }: { draft: string }) {
 	};
 
 	return (
-		<ChatCard
-			title={`Search planner · ${plural(total, "question")} before the search`}
-			actions={
-				canManage ? (
-					<>
-						<Button
-							size="sm"
-							disabled={draft.trim() === "" || actions.answer.isPending}
-							onClick={send}
-						>
-							Answer
-						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={actions.answer.isPending}
-							onClick={() =>
-								actions.answer.mutate({ questionId: question.id, answer: null })
-							}
-						>
-							<SkipForward />
-							Skip this one
-						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={actions.answer.isPending}
-							onClick={() => actions.answer.mutate({ draftNow: true })}
-						>
-							<FastForward />
-							Skip all and draft now
-						</Button>
-					</>
-				) : undefined
-			}
-		>
-			<Text fontSize="md">
-				<Text as="span" color="fg.muted" fontSize="sm" mr="2">
-					{index + 1} of {total}
+		<>
+			<ChatCard
+				title={`Search planner · ${plural(total, "question")} before the search`}
+				actions={
+					canManage ? (
+						<>
+							<Button
+								size="sm"
+								disabled={draft.trim() === "" || actions.answer.isPending}
+								onClick={send}
+							>
+								Answer
+							</Button>
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={actions.answer.isPending}
+								onClick={() =>
+									actions.answer.mutate({
+										questionId: question.id,
+										answer: null,
+									})
+								}
+							>
+								<SkipForward />
+								Skip this one
+							</Button>
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={actions.answer.isPending}
+								onClick={() => actions.answer.mutate({ draftNow: true })}
+							>
+								<FastForward />
+								Skip all and draft now
+							</Button>
+						</>
+					) : undefined
+				}
+			>
+				<Text fontSize="md">
+					<Text as="span" color="fg.muted" fontSize="sm" mr="2">
+						{index + 1} of {total}
+					</Text>
+					{question.text}
 				</Text>
-				{question.text}
-			</Text>
-			{canManage && question.suggestions.length > 0 ? (
-				<Box display="flex" flexWrap="wrap" gap="2">
-					{question.suggestions.map((suggestion) => (
-						<Chip
-							key={suggestion}
-							type="button"
-							onClick={() => pick(suggestion)}
-						>
-							{suggestion}
+				{canManage && question.suggestions.length > 0 ? (
+					<Box display="flex" flexWrap="wrap" gap="2">
+						{question.suggestions.map((suggestion) => (
+							<Chip
+								key={suggestion}
+								type="button"
+								onClick={() => pick(suggestion)}
+							>
+								{suggestion}
+							</Chip>
+						))}
+						<Chip type="button" onClick={() => pick("")}>
+							Other…
 						</Chip>
-					))}
-					<Chip type="button" onClick={() => pick("")}>
-						Other…
-					</Chip>
-				</Box>
+					</Box>
+				) : null}
+				{pending !== undefined && "answer" in pending ? (
+					<Text color="fg.muted">
+						{pending.answer === null
+							? "Skipping…"
+							: `Your answer: ${pending.answer}`}
+					</Text>
+				) : null}
+			</ChatCard>
+			{actions.answer.isPending ? (
+				<PendingReply doing="Reading your answer" />
 			) : null}
-			{pending !== undefined && "answer" in pending ? (
-				<Text color="fg.muted">
-					{pending.answer === null
-						? "Skipping…"
-						: `Your answer: ${pending.answer}`}
-				</Text>
-			) : null}
-			{actions.answer.isPending ? <Sending /> : null}
-		</ChatCard>
+		</>
 	);
 }
 
@@ -479,12 +487,14 @@ export function ChangeTurn({
 	isSending?: boolean;
 }) {
 	return (
-		<ChatCard title="Change request" tone="person" at={at}>
-			<Text whiteSpace="pre-wrap" overflowWrap="anywhere">
-				{text}
-			</Text>
-			{isSending ? <Sending /> : null}
-		</ChatCard>
+		<>
+			<ChatCard title="Change request" tone="person" at={at}>
+				<Text whiteSpace="pre-wrap" overflowWrap="anywhere">
+					{text}
+				</Text>
+			</ChatCard>
+			{isSending ? <PendingReply doing="Revising the draft" /> : null}
+		</>
 	);
 }
 
