@@ -212,8 +212,19 @@ class TestOllama:
             ],
             "format": SCHEMA,
             "stream": False,
+            "think": False,
             "options": {"temperature": 0.0, "seed": 7},
         }
+
+    async def test_it_asks_a_reasoning_model_to_answer_without_thinking_first(self):
+        # Every answer is a schema-checked object and the reasoning is discarded.
+        # On a CPU, qwen3.5:9b took 308 s with its thinking and 11 s without it,
+        # past the 300 s limit for a plan.
+        fetcher = ollama_reply()
+
+        await ollama(fetcher).chat(chat_request())
+
+        assert sent_body(fetcher)["think"] is False
 
     async def test_a_base_url_with_a_path_prefix_is_kept(self):
         fetcher = ollama_reply()
