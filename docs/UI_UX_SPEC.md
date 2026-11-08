@@ -204,6 +204,25 @@ Inside the canvas, a **source panel** can slide over from the right edge (400 px
 
 **Resizable panels.** On screens 1024px and wider, a handle between the chat and an open canvas resizes the chat: 440px to 960px of the zoomed page (330px to 720px on screen), 640px (480px on screen) at first. On screens 768px and wider, a handle on the source panel's left edge resizes it: 320px to 640px, 400px at first. The pointer shows ↔ over a handle. Drag it, or focus it and use the arrow keys (16px a step), Home and End. A double click restores the first width. Each width is kept in this browser only (`humani-t:width:chat`, `humani-t:width:source`). Narrower screens have no handles.
 
+**Chat roles.** Readers tell the speakers apart at a glance, and colour is never the only sign:
+
+- **The person's own words** (the question, change requests) sit on the right as a tinted bubble marked "You".
+- **Humani-T's cards** sit on the left, plain.
+- **What needs the person** has a blue bar on the left and a hand icon.
+- **A problem** has a purple bar, an alert icon and the word "Problem".
+
+Yellow marks a caution only as an icon or a bar, never as text colour: yellow text is hard to read on white.
+
+**Wording.** System text is short and plain, like a person would say it: "Double-check codes and numbers.", "Sent, but no answer came back." Masked words show as a small tinted tag reading "Location 1"; screen readers hear "masked location 1".
+
+**Run stages** are a vertical stepper. Each stage has a marker joined to the next by a line: filled with a tick when done, a spinning ring while running, a blue hand when waiting for the person, purple with a cross when stopped, and hollow and numbered before it starts. The current stage carries `aria-current="step"`.
+
+**Paper labels** are small tinted tags with an icon and a word: Highly relevant (badge tick), Relevant (circled tick), Possibly relevant (circled dot), Uncertain (circled question mark), Excluded (circled minus), Not screened (dashed circle).
+
+**Full width.** On screens 1024px and wider, a panel's header has a Full width toggle that hides the chat so the panel takes the workspace. Esc gives the chat back first, and closes the panel on a second press.
+
+**PRISMA flow.** The papers panel opens on the PRISMA 2020 flow: Identified → Unique → Screened → Included. Each step shows what left beneath it. Included, excluded, uncertain and not screened are buttons that filter the table, which keeps its rows while a new filter loads.
+
 **Controls.**
 
 - **Card actions:** a card's main action is a solid button; its other actions are outlined buttons with an icon, on one row.

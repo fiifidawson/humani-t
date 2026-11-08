@@ -167,6 +167,10 @@ export function AppShell() {
 					overflowY="auto"
 				>
 					<SignedOutBanner />
+					{/* A workspace is exactly as tall as the window, and its chat and canvas
+					    scroll inside it. Without minH 0 it grows to fit a long table, and
+					    the whole workspace scrolls, composer included. Other pages grow,
+					    and this column scrolls them. */}
 					<Box
 						as="main"
 						id="main"
@@ -174,6 +178,8 @@ export function AppShell() {
 						flex="1"
 						display="flex"
 						flexDirection="column"
+						minH={isWorkspace ? "0" : undefined}
+						overflow={isWorkspace ? "hidden" : undefined}
 					>
 						<Outlet />
 					</Box>

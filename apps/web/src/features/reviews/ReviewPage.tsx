@@ -11,7 +11,14 @@
 import { Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import { type ReactNode, useCallback, useEffect, useId, useMemo } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useState,
+} from "react";
 import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
 import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
@@ -26,8 +33,8 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
-
 import { Composer } from "../chat/Composer";
+import { CanvasWidthProvider } from "./canvasWidth";
 import { LiveRunProvider } from "./liveRun";
 import { totalMasked } from "./masking";
 import {
@@ -317,12 +324,24 @@ function ReviewLayout({
 	const chatId = useId();
 	const [chatWidth, setChatWidth] = usePanelWidth("chat");
 	const isWide = useMediaQuery(WIDE_SCREEN);
+	const [isFullWidth, setFullWidth] = useState(false);
+	const canvasWidth = useMemo(
+		() => ({ isFullWidth, setFullWidth }),
+		[isFullWidth],
+	);
+	// Full width means something only while a canvas is open beside the chat.
+	const isChatHidden = isFullWidth && isCanvasOpen && isWide;
+	useEffect(() => {
+		if (!isCanvasOpen) {
+			setFullWidth(false);
+		}
+	}, [isCanvasOpen]);
 
 	return (
 		<Flex flex="1" minH="0">
 			<Box
 				id={chatId}
-				display="flex"
+				display={isChatHidden ? "none" : "flex"}
 				minW="0"
 				minH="0"
 				flex={isCanvasOpen ? { base: "1", lg: `0 0 ${chatWidth}px` } : "1"}
@@ -371,7 +390,7 @@ function ReviewLayout({
 					)}
 				</Flex>
 			</Box>
-			{isCanvasOpen && isWide ? (
+			{isCanvasOpen && isWide && !isChatHidden ? (
 				<ResizeHandle
 					label="Resize the conversation"
 					controls={chatId}
@@ -381,7 +400,9 @@ function ReviewLayout({
 					onResize={setChatWidth}
 				/>
 			) : null}
-			<Outlet />
+			<CanvasWidthProvider value={canvasWidth}>
+				<Outlet />
+			</CanvasWidthProvider>
 		</Flex>
 	);
 }

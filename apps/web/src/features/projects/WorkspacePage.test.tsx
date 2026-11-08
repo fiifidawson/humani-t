@@ -180,6 +180,8 @@ describe("starting a review from the workspace (UI_UX_SPEC §6.3, §5.3.1, §5.4
 			name: "The search plan couldn't be made",
 		});
 		expect(card).toHaveTextContent("The model server isn't answering.");
+		expect(card).toHaveAttribute("data-role", "problem");
+		expect(within(card).getByText("Problem")).toBeInTheDocument();
 		expect(screen.getByRole("article", { name: "Question" })).toHaveTextContent(
 			"Cash or vouchers?",
 		);

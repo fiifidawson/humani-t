@@ -34,15 +34,24 @@ export const modeLabel = (mode: PlanMode): string =>
 	mode === "deep" ? "Deep search" : "Quick search";
 
 /** A tier's word, and the tone and shape that repeat it (§9.2.3): never colour alone. */
+/** Each label's word, its icon's colour (`tone`) and its tag's fill (`fill`). */
 export const TIERS: Readonly<
-	Record<Tier | "unscreened", { word: string; tone: string }>
+	Record<Tier | "unscreened", { word: string; tone: string; fill: string }>
 > = {
-	highly_relevant: { word: "Highly relevant", tone: "benefit.fg" },
-	relevant: { word: "Relevant", tone: "benefit.fg" },
-	possibly_relevant: { word: "Possibly relevant", tone: "risk.fg" },
-	uncertain: { word: "Uncertain", tone: "caveat.fg" },
-	excluded: { word: "Excluded", tone: "fg.muted" },
-	unscreened: { word: "Not screened", tone: "fg.muted" },
+	highly_relevant: {
+		word: "Highly relevant",
+		tone: "benefit.fg",
+		fill: "benefit.bg",
+	},
+	relevant: { word: "Relevant", tone: "benefit.fg", fill: "benefit.bg" },
+	possibly_relevant: {
+		word: "Possibly relevant",
+		tone: "masked.fg",
+		fill: "masked.bg",
+	},
+	uncertain: { word: "Uncertain", tone: "caveat.solid", fill: "caveat.subtle" },
+	excluded: { word: "Excluded", tone: "fg.muted", fill: "bg.muted" },
+	unscreened: { word: "Not screened", tone: "fg.muted", fill: "transparent" },
 };
 
 export const TIER_ORDER: readonly (Tier | "unscreened")[] = [

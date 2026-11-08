@@ -19,15 +19,19 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
+	BadgeCheck,
 	Check,
 	ChevronDown,
 	ChevronRight,
+	CircleCheck,
+	CircleDashed,
+	CircleDot,
+	CircleMinus,
+	CircleQuestionMark,
 	FileText,
 	Library,
 	Minus,
 	Square,
-	Triangle,
-	TriangleAlert,
 	X,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
@@ -339,12 +343,12 @@ export function GateCard({ live }: { live: LiveRun }) {
 }
 
 const TIER_ICONS: Readonly<Record<Tier | "unscreened", ReactNode>> = {
-	highly_relevant: <Triangle size={14} fill="currentColor" />,
-	relevant: <Triangle size={14} fill="currentColor" />,
-	possibly_relevant: <Triangle size={14} />,
-	uncertain: <TriangleAlert size={14} />,
-	excluded: <X size={14} />,
-	unscreened: <Minus size={14} />,
+	highly_relevant: <BadgeCheck size={14} />,
+	relevant: <CircleCheck size={14} />,
+	possibly_relevant: <CircleDot size={14} />,
+	uncertain: <CircleQuestionMark size={14} />,
+	excluded: <CircleMinus size={14} />,
+	unscreened: <CircleDashed size={14} />,
 };
 
 /** A screening label as the word and its icon (§10.2 `LabelBadge`); colour only repeats them. */
@@ -355,7 +359,16 @@ export function LabelBadge({ tier }: { tier: Tier | "unscreened" }) {
 			display="inline-flex"
 			align="center"
 			gap="1.5"
+			px="2"
+			py="0.5"
+			rounded="sm"
+			bg={TIERS[tier].fill}
+			borderWidth={tier === "unscreened" ? "1px" : "0"}
+			borderColor="border"
 			color={TIERS[tier].tone}
+			fontSize="xs"
+			fontWeight="medium"
+			whiteSpace="nowrap"
 		>
 			{TIER_ICONS[tier]}
 			<Text as="span" color="fg">
