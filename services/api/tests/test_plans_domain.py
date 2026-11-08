@@ -27,6 +27,7 @@ from app.domain.plans import (
     ReviewPlan,
     VocabularyFormat,
     diff_plans,
+    first_stage_to_redo,
     number_criteria,
     parse_strict_vocabulary,
     revision_from_gate,
@@ -494,3 +495,57 @@ class TestReviewStates:
             next_review_status(status, ReviewTrigger.REQUEST_CHANGES)
             is ReviewStatus.CHANGES_REQUESTED
         )
+
+
+class TestWhereARunAfterAChangeStarts:
+    """Prompt-first changes after a run (Wave 2): the person only says what to
+    change, and the next run starts from the earliest stage the change affects.
+    A changed search finds different papers, so it starts again from the search;
+    changed criteria re-judge the papers already found; nothing changed, nothing
+    to redo.
+    """
+
+    def test_an_added_term_searches_again(self):
+        before = draft()
+        after = draft(
+            Concept(
+                "cash transfers", ("cash assistance", "mobile money"), theme="intervention"
+            ),
+            FOOD,
+            version=2,
+        )
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_a_removed_concept_searches_again(self):
+        before = draft(CASH, FOOD, Concept("Tigray", (), theme="setting"))
+        after = draft(CASH, FOOD, version=2)
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_changed_criteria_alone_rescreen_the_papers_already_found(self):
+        before = draft()
+        stricter = number_criteria(
+            [
+                (CriterionKind.INCLUSION, "Studies of cash or voucher programmes"),
+                (CriterionKind.EXCLUSION, "Opinion pieces"),
+                (CriterionKind.EXCLUSION, "Published before 2015"),
+            ]
+        )
+        after = draft(version=2, criteria=stricter)
+
+        assert first_stage_to_redo(before, after) == "screen"
+
+    def test_a_change_to_terms_and_criteria_searches_again(self):
+        before = draft()
+        after = draft(
+            CASH,
+            Concept("food security", ("hunger", "dietary diversity"), theme="outcome"),
+            version=2,
+            criteria=number_criteria([(CriterionKind.INCLUSION, "Any cash study")]),
+        )
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_nothing_changed_redoes_nothing(self):
+        assert first_stage_to_redo(draft(), draft(version=2)) is None
