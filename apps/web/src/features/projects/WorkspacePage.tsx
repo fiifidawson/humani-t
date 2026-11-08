@@ -33,13 +33,12 @@ import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
 import { keys, projectQuery } from "../../app/queries";
 import { reviewsQuery } from "../../app/reviewQueries";
-import { HEADER_HEIGHT } from "../../shell/railStyles";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Page } from "../../ui/Page";
 import { PageHeading } from "../../ui/PageHeading";
-import { ChatZone } from "../chat/ChatZone";
+
 import { Composer } from "../chat/Composer";
 import { ChatCard } from "../reviews/ChatCard";
 import { modeLabel, type PlanMode } from "../reviews/format";
@@ -209,9 +208,9 @@ export function ProjectHome() {
 		);
 	}
 	return (
-		<ChatZone direction="column" flex="1" minH="0" bg="bg.subtle">
+		<Flex direction="column" flex="1" minH="0" bg="bg.subtle">
 			<StartReview project={project.data} />
-		</ChatZone>
+		</Flex>
 	);
 }
 
@@ -255,7 +254,7 @@ export function WorkspacePage() {
 			as="section"
 			aria-labelledby="workspace-title"
 			direction="column"
-			h={`calc(100vh - ${HEADER_HEIGHT})`}
+			flex="1"
 			minH="0"
 		>
 			<Flex

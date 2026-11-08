@@ -1,5 +1,6 @@
 import { Dialog as ChakraDialog, Portal } from "@chakra-ui/react";
 import type { ReactNode } from "react";
+import { COMPACT_ZOOM } from "../shell/railStyles";
 
 interface DialogProps {
 	isOpen: boolean;
@@ -25,7 +26,9 @@ export function Dialog({ isOpen, title, onClose, children }: DialogProps) {
 		>
 			<Portal>
 				<ChakraDialog.Backdrop bg="scrim" />
-				<ChakraDialog.Positioner px="4">
+				{/* The portal renders outside AppShell's zoom, so it takes the zoom itself.
+				    Every dialog opens after sign-in. */}
+				<ChakraDialog.Positioner px="4" css={{ zoom: COMPACT_ZOOM }}>
 					<ChakraDialog.Content bg="bg.panel" rounded="card" p="2" maxW="md">
 						<ChakraDialog.Header>
 							<ChakraDialog.Title

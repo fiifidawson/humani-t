@@ -26,7 +26,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
-import { ChatZone } from "../chat/ChatZone";
+
 import { Composer } from "../chat/Composer";
 import { LiveRunProvider } from "./liveRun";
 import { totalMasked } from "./masking";
@@ -320,8 +320,6 @@ function ReviewLayout({
 
 	return (
 		<Flex flex="1" minH="0">
-			{/* The width sits outside the chat's zoom, so it is in the pixels the
-			    pointer moves in. */}
 			<Box
 				id={chatId}
 				display="flex"
@@ -330,7 +328,7 @@ function ReviewLayout({
 				flex={isCanvasOpen ? { base: "1", lg: `0 0 ${chatWidth}px` } : "1"}
 				maxW={isCanvasOpen ? { lg: "calc(100% - 480px)" } : undefined}
 			>
-				<ChatZone direction="column" flex="1" minW="0" minH="0" bg="bg.subtle">
+				<Flex direction="column" flex="1" minW="0" minH="0" bg="bg.subtle">
 					{/* position: relative keeps visually hidden text, which is absolutely
 					    positioned, inside this scroller; without it the page itself scrolls. */}
 					<Flex
@@ -371,7 +369,7 @@ function ReviewLayout({
 							Only owners and reviewers can change or accept the search plan.
 						</Text>
 					)}
-				</ChatZone>
+				</Flex>
 			</Box>
 			{isCanvasOpen && isWide ? (
 				<ResizeHandle
