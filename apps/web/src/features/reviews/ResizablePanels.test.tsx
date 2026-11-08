@@ -1,4 +1,4 @@
-import { act, cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import { renderApp } from "../../test/render";
@@ -48,9 +48,9 @@ describe("resizing the chat beside a canvas", () => {
 		const { handle, container } = await chatHandle(path);
 
 		expect(handle).toHaveAttribute("aria-orientation", "vertical");
-		expect(width(handle)).toBe(480);
-		expect(handle).toHaveAttribute("aria-valuemin", "320");
-		expect(handle).toHaveAttribute("aria-valuemax", "720");
+		expect(width(handle)).toBe(640);
+		expect(handle).toHaveAttribute("aria-valuemin", "440");
+		expect(handle).toHaveAttribute("aria-valuemax", "960");
 		await expectNoAccessibilityViolations(container);
 	});
 
@@ -71,11 +71,11 @@ describe("resizing the chat beside a canvas", () => {
 		act(() => handle.focus());
 
 		await user.keyboard("{ArrowRight}");
-		expect(width(handle)).toBe(496);
+		expect(width(handle)).toBe(656);
 		await user.keyboard("{End}{ArrowRight}");
-		expect(width(handle)).toBe(720);
+		expect(width(handle)).toBe(960);
 		await user.keyboard("{Home}{ArrowLeft}");
-		expect(width(handle)).toBe(320);
+		expect(width(handle)).toBe(440);
 	});
 
 	it("follows the pointer when dragged, within its limits", async () => {
@@ -87,13 +87,28 @@ describe("resizing the chat beside a canvas", () => {
 			{ coords: { clientX: 580 } },
 			{ keys: "[/MouseLeft]" },
 		]);
-		expect(width(handle)).toBe(560);
+		expect(width(handle)).toBe(720);
 
 		await user.pointer([
 			{ keys: "[MouseLeft>]", target: handle, coords: { clientX: 560 } },
 			{ coords: { clientX: 2000 } },
 			{ keys: "[/MouseLeft]" },
 		]);
+		expect(width(handle)).toBe(960);
+	});
+
+	it("stays under the pointer when the page is zoomed", async () => {
+		const { path } = planned();
+		const { user, handle } = await chatHandle(path);
+		// The signed-in app is drawn at 75%: 60 screen pixels are 80 of the page's.
+		Object.defineProperty(handle, "currentCSSZoom", { value: 0.75 });
+
+		await user.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: { clientX: 500 } },
+			{ coords: { clientX: 560 } },
+			{ keys: "[/MouseLeft]" },
+		]);
+
 		expect(width(handle)).toBe(720);
 	});
 
@@ -105,10 +120,10 @@ describe("resizing the chat beside a canvas", () => {
 		cleanup();
 
 		const { user, handle } = await chatHandle(path);
-		expect(width(handle)).toBe(720);
+		expect(width(handle)).toBe(960);
 
 		await user.dblClick(handle);
-		expect(width(handle)).toBe(480);
+		expect(width(handle)).toBe(640);
 	});
 });
 
@@ -134,5 +149,65 @@ describe("resizing the source panel", () => {
 
 		await user.keyboard("{End}");
 		expect(width(handle)).toBe(640);
+	});
+});
+
+describe("a panel at full width", () => {
+	it("takes the whole workspace and gives the chat back", async () => {
+		const { path } = planned();
+		const { user } = renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+		const toggle = within(canvas).getByRole("button", { name: "Full width" });
+		expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+		await user.click(toggle);
+
+		expect(toggle).toHaveAttribute("aria-pressed", "true");
+		expect(
+			screen.queryByRole("log", { name: "Project conversation" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+
+		await user.click(toggle);
+
+		expect(
+			screen.getByRole("log", { name: "Project conversation" }),
+		).toBeInTheDocument();
+	});
+
+	it("gives the chat back on Esc before closing the panel on a second Esc", async () => {
+		const { path } = planned();
+		const { user } = renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+		await user.click(
+			within(canvas).getByRole("button", { name: "Full width" }),
+		);
+
+		await user.keyboard("{Escape}");
+
+		expect(
+			screen.getByRole("region", { name: /Search draft/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("log", { name: "Project conversation" }),
+		).toBeInTheDocument();
+
+		await user.keyboard("{Escape}");
+
+		await screen.findByRole("log", { name: "Project conversation" });
+		expect(
+			screen.queryByRole("region", { name: /Search draft/ }),
+		).not.toBeInTheDocument();
+	});
+
+	it("is not offered on a phone, where the panel already fills the screen", async () => {
+		setScreenWidth(400);
+		const { path } = planned();
+		renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+
+		expect(
+			within(canvas).queryByRole("button", { name: "Full width" }),
+		).not.toBeInTheDocument();
 	});
 });

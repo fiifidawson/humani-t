@@ -58,6 +58,14 @@ Migration `0010` creates both, after `0009` creates `papers`. `paper_masks.paper
 - **Where:** [`app/application/masking.py`](../../services/api/app/application/masking.py), [`app/storage/postgres/masking.py`](../../services/api/app/storage/postgres/masking.py).
 - **Proven by:** `tests/test_mask_stage.py::TestReRuns`, `tests/test_masking_storage_contract.py::TestPaperMasks`.
 
+### D10.5 Country and large-region names, as an operator setting (2026-11-08)
+
+- **Decision:** `mask_countries_and_regions`, `true` by default. When it is `false`, the planning sanitiser keeps a reported name if the whole name is on built-in lists of countries and multi-country regions. Everything smaller stays masked, and project rules still win. Uploaded documents and papers are unaffected.
+- **Why:** `en_core_web_sm` labels "Sahel" and "Niger" as people. Masking any place removes a review's geography from the plan, the search and the criteria.
+- **Rejected and costs:** see [ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md).
+- **Where:** [`app/domain/geography.py`](../../services/api/app/domain/geography.py), [`app/privacy/sanitizer.py`](../../services/api/app/privacy/sanitizer.py), [`app/api/dependencies.py`](../../services/api/app/api/dependencies.py) (`planning_sanitizer`).
+- **Proven by:** `tests/test_geography_domain.py`, `tests/test_privacy_sanitizer.py::TestCountriesAndRegions`.
+
 ## Libraries
 
 ### spaCy 3.8.18 and en_core_web_sm 3.8.0 (optional `ner` extra)

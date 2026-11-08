@@ -368,6 +368,35 @@ pnpm --filter @humani-t/web dev
 
 Open `http://localhost:5173` (not `127.0.0.1`), sign in as `dev@example.org`, set up a second factor (an authenticator app or a passkey; it is lost when the API stops, so remove the old one from the app afterwards), then create a project, ask a question, choose Quick, accept the draft and start the run. To use your own Ollama instead of the demo model, leave out `HUMANI_T_DEMO_INFERENCE` and set `$env:HUMANI_T_INFERENCE_URL = 'http://127.0.0.1:11434'`.
 
+### S0.13b Real mode on this machine: a real model and real paper sources
+
+Everything goes in `services\api\.env`, which git ignores. Each line is read whenever a window starts the API or the worker.
+
+- **Your own Ollama:** `HUMANI_T_INFERENCE_URL=http://127.0.0.1:11434` and `HUMANI_T_INFERENCE_MODEL=qwen3.5:9b`. On a laptop CPU, also set `HUMANI_T_SCREENING_CONCURRENCY=1` and `HUMANI_T_INFERENCE_TIMEOUT_SECONDS=900`. Ollama answers one request at a time, and a queued request's time limit runs while it waits.
+- **A hosted model**, for fictional questions only ([ADR 0010](../adr/0010-openai-compatible-models-as-an-opt-in.md)):
+  - `HUMANI_T_INFERENCE_API=openai`
+  - `HUMANI_T_INFERENCE_URL=https://api.openai.com/v1`
+  - `HUMANI_T_INFERENCE_MODEL=gpt-5-mini`
+  - `HUMANI_T_INFERENCE_TOKEN=<key>`
+  - `HUMANI_T_ALLOW_HOSTED_INFERENCE=true`
+  - `HUMANI_T_INFERENCE_TIMEOUT_SECONDS=400` (a reasoning model sometimes takes minutes)
+  - `HUMANI_T_SCREENING_CONCURRENCY=2` (more can hit the rate limit)
+- **Paper sources:** `HUMANI_T_PAPER_SOURCES=openalex,europepmc,arxiv`. Empty searches nothing.
+- **Geography:** `HUMANI_T_MASK_COUNTRIES_AND_REGIONS=false` keeps "the Sahel" or "Mali" in the question, so the search keeps them ([ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md)).
+
+Do not type `$env:HUMANI_T_…` lines into a window for these. A setting typed into a window overrides `.env` until the window closes, and it reaches only programs started afterwards from that same window. Both have caused hard-to-see failures: a worker without paper sources, and an API still sending OpenAI-format requests to Ollama. To clear them, run `Remove-Item Env:HUMANI_T_* -ErrorAction SilentlyContinue`, or open a new window. The privacy receipt's "Sent to …" line shows which model was really used.
+
+**If Valkey's port is refused on Windows:** Hyper-V can reserve port 56379 at boot (`netsh interface ipv4 show excludedportrange protocol=tcp`). Save this as `compose.valkey-port.local` (git ignores `*.local`):
+
+```yaml
+services:
+  valkey:
+    ports: !override
+      - "127.0.0.1:6390:6379"
+```
+
+Start the services with `docker compose -f compose.dev.yaml -f compose.valkey-port.local up -d`, and change `:56379/` to `:6390/` in `HUMANI_T_VALKEY_URL` in `services\api\.env`.
+
 ### S0.14 Troubleshooting
 
 | Symptom | Likely cause | Fix |

@@ -262,12 +262,34 @@ def reasonable_answer(request: ChatRequest) -> dict[str, Any]:
     """What a sensible model says about the corpus above, in the prompt's own criterion ids."""
     text = paper_text_in(request)
     if "stable urban" in text:
-        return answer("exclude", "low", ["I2", "E1"])
+        return with_answers(request, answer("exclude", "low", ["I2", "E1"]))
     if "Vouchers" in text:
-        return answer("include", "medium", ["I1", "I2"])
+        return with_answers(request, answer("include", "medium", ["I1", "I2"]))
     if "displaced" in text.lower():
-        return answer("include", "high", ["I1", "I2"], score=0.95)
-    return answer("uncertain", "low")
+        return with_answers(request, answer("include", "high", ["I1", "I2"], score=0.95))
+    return with_answers(request, answer("uncertain", "low"))
+
+
+def with_answers(
+    request: ChatRequest, base: dict[str, Any], quote_from: str | None = None
+) -> dict[str, Any]:
+    """`base` plus an answer for every criterion, quoting the text it was sent where met.
+
+    The quote is an excerpt, as a real one is: never the whole abstract.
+    """
+    text = paper_text_in(request)
+    quote = quote_from if quote_from is not None else text.split(";")[0].split(".")[0][:40]
+    return {
+        **base,
+        "answers": [
+            {
+                "id": criterion,
+                "answer": "yes" if criterion in base["criteria_matched"] else "no",
+                "quote": quote if criterion in base["criteria_matched"] else None,
+            }
+            for criterion in criteria_ids_in(request)
+        ],
+    }
 
 
 class ObservedInference:

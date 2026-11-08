@@ -16,6 +16,7 @@ from app.application.brief_loop import (
     CRITIC_PROMPT_VERSION,
     PLANNER_PROMPT_VERSION,
     WRITER_PROMPT_VERSION,
+    WRITER_SCHEMA,
     BriefLoop,
     LoopFailedError,
     LoopResult,
@@ -23,8 +24,14 @@ from app.application.brief_loop import (
 from app.application.inference import GuardedInference
 from app.briefs.bm25 import Bm25Retriever
 from app.domain.briefs import AgentStep, CriticScores, StopReason
-from app.domain.inference import ChatRequest, ChatResult, InferenceUnavailableError
+from app.domain.inference import (
+    ChatRequest,
+    ChatResult,
+    InferenceUnavailableError,
+    InvalidStructuredOutputError,
+)
 from app.inference.fake import FakeInferenceProvider, FakePromptGuard
+from app.inference.schema import validate_output
 from tests.brief_support import (
     CORPUS,
     INVALID,
@@ -378,6 +385,59 @@ class TestNoProgress:
         result = await Harness(script, max_rounds=3).run()
 
         assert (result.stopped_because, result.rounds) == (StopReason.ACCEPTED, 3)
+
+
+class TestWriterFormat:
+    """The honesty rules live in the answer format, so a strict model cannot break them.
+
+    A claim is evidence that cites a passage, or a hypothesis, the model's own
+    reasoning, that cites none (UI_UX_SPEC §8.2); what a conflict means is always
+    a hypothesis. Found 2026-11-08: gpt-5-mini broke both twice in a row.
+    """
+
+    @staticmethod
+    def _claim_ok(claim: dict) -> bool:
+        brief = {**writer_answer(), "bottom_line": [claim, claim]}
+        try:
+            validate_output(brief, WRITER_SCHEMA)
+        except InvalidStructuredOutputError:
+            return False
+        return True
+
+    def test_evidence_must_cite_and_a_hypothesis_must_not(self):
+        assert self._claim_ok(
+            {"text": "Prices rose.", "support": "evidence", "citations": ["P1"]}
+        )
+        assert self._claim_ok({"text": "Likely so.", "support": "hypothesis", "citations": []})
+        assert not self._claim_ok(
+            {"text": "Prices rose.", "support": "evidence", "citations": []}
+        )
+        assert not self._claim_ok(
+            {"text": "Likely so.", "support": "hypothesis", "citations": ["P1"]}
+        )
+
+    def test_what_a_conflict_means_can_only_be_a_hypothesis_or_nothing(self):
+        def conflict(meaning: dict | None) -> dict:
+            position = {"text": "A says so.", "support": "evidence", "citations": ["P1"]}
+            return {
+                "question": "Does cash raise prices?",
+                "type": "context",
+                "positions": [position, position],
+                "meaning": meaning,
+            }
+
+        def ok(meaning: dict | None) -> bool:
+            try:
+                validate_output(
+                    {**writer_answer(), "conflicts": [conflict(meaning)]}, WRITER_SCHEMA
+                )
+            except InvalidStructuredOutputError:
+                return False
+            return True
+
+        assert ok(None)
+        assert ok({"text": "Context differs.", "support": "hypothesis", "citations": []})
+        assert not ok({"text": "Context differs.", "support": "evidence", "citations": ["P1"]})
 
 
 class TestInvalidOutput:

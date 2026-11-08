@@ -99,4 +99,5 @@ desktop.ini
 # --- Local scratch ----------------------------------------------------------
 *.local
 .cache/
+.vscode/settings.json
 tmp/

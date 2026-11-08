@@ -111,6 +111,21 @@ The app role has no `UPDATE` on `screening_decisions`: a decision is provenance 
 - **Rejected:** `ScreeningProvider.screen(paper, criteria)` as in §3.8.
 - **Where:** [`application/screening.py`](../../services/api/app/application/screening.py). Recorded in [`architecture.md` §4.2](../architecture.md#42-reviews).
 
+### D11.10 Every criterion is answered, and a refused answer says why (2026-11-08)
+
+- **Decision:**
+  - the screening schema requires `answers`, exactly one per criterion (`minItems` = `maxItems`);
+  - each refused answer is logged as `screening_answer_refused` with the run id, paper id, attempt and reason, never the paper's text or the model's words;
+  - a model that is still rate limited after its retries stops the stage with its own message: "The model service's rate limit was reached. Papers screened so far are kept; wait a minute, then run it again.";
+  - any other unavailable model is logged with its reason, for the operator only.
+- **Why:**
+  - with ten criteria, `gpt-4o-mini` answered four;
+  - refusals were silent, which made 32 "uncertain" papers impossible to explain;
+  - a burst of four concurrent calls hit a rate limit and was reported as "isn't answering".
+- **Where:** [`application/screening.py`](../../services/api/app/application/screening.py).
+- **Proven by:** `tests/test_pipeline_stages.py::TestScreen::test_the_answer_format_asks_for_exactly_one_answer_per_criterion`, `…::test_a_refused_answer_is_logged_with_its_reason_and_never_the_text`, `…::test_a_rate_limited_model_stops_screening_saying_so_and_keeps_decisions`, `tests/test_papers_api.py::TestCriterionAnswers`.
+- **Still open:** a hosted model often joins quotes with "…", changes a capital letter, or quotes past 300 characters. Such quotes are refused as before.
+
 ### Deliberately not used
 
 | Approach | Why not |

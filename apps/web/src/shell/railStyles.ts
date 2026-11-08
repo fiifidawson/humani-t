@@ -9,7 +9,11 @@ import type { SystemStyleObject } from "@chakra-ui/react";
 
 export const HEADER_HEIGHT = "64px";
 
-/** The chat and the rail are drawn at 75%: the owner's chosen density. */
+/**
+ * The signed-in app is drawn at 75%, the owner's chosen density; sign-in and
+ * enrolment pages, outside AppShell, stay full size. Lengths inside it are in
+ * the zoomed page's pixels: the rail's 240px shows as 180px.
+ */
 export const COMPACT_ZOOM = 0.75;
 
 const visuallyHidden: SystemStyleObject = {
@@ -58,22 +62,16 @@ export const rail: SystemStyleObject = {
 	display: "flex",
 	flexDirection: "column",
 	gap: "1",
-	w: "180px",
-	h: `calc(100vh - ${HEADER_HEIGHT})`,
-	position: "sticky",
-	top: HEADER_HEIGHT,
+	w: "240px",
 	px: "3",
 	py: "4",
 	overflowY: "auto",
 	borderRightWidth: "1px",
 	borderColor: "border",
 	bg: "bg",
-	"&.is-folded": { w: "54px", ...iconOnly },
-	// Zoom what is inside, not the rail itself: zoom on the rail would also
-	// shrink its sticky offset and height, leaving a gap under the header.
-	"& > *": { zoom: COMPACT_ZOOM },
+	"&.is-folded": { w: "72px", ...iconOnly },
 	"@media (min-width: 1024px) and (max-width: 1279px)": {
-		w: "54px",
+		w: "72px",
 		...iconOnly,
 		"& .rail-fold": { display: "none" },
 	},
@@ -83,13 +81,13 @@ export const rail: SystemStyleObject = {
 		left: "0",
 		zIndex: "40",
 		h: "auto",
-		w: "210px",
+		w: "280px",
 		bg: "bg.panel",
 		boxShadow: "lg",
 		transform: "translateX(-105%)",
 		visibility: "hidden",
 		transition: "transform 0.2s ease, visibility 0.2s",
-		"&.is-folded": { w: "210px" },
+		"&.is-folded": { w: "280px" },
 		"&.is-folded .rail-label": {
 			position: "static",
 			width: "auto",

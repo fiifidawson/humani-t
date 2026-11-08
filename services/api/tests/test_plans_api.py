@@ -14,12 +14,15 @@ nothing in this file can reach a network.
 from __future__ import annotations
 
 import asyncio
+from typing import Any, ClassVar
 from uuid import UUID
 
 import pytest
+import structlog
 
+from app.application import planning
 from app.domain.encryption import KeyDestroyedError
-from app.domain.inference import InferenceUnavailableError
+from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
 from tests.plan_support import (
     DRAFT,
     REVISED,
@@ -117,6 +120,62 @@ class TestStartingAPlan:
         assert body["status"] == "new"
         assert body["current"] is None
         assert [r["delivered"] for r in body["receipts"]] == [False]
+
+    def test_a_rate_limited_model_is_named_as_such(self, team):
+        team.model.failure = InferenceRateLimitedError(
+            "the model server's rate limit was reached"
+        )
+
+        response = team.start("shallow")
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == (
+            "The model service's rate limit was reached. Wait a minute, then try again."
+        )
+
+
+class TestUnusableAnswers:
+    """A reasoning model's answers vary; an unusable one is asked for again once.
+
+    Every attempt sent text, so every attempt leaves its own receipt (brief rule 2).
+    """
+
+    UNUSABLE: ClassVar[dict[str, Any]] = {
+        "themes": [],
+        "criteria": {"inclusion": ["Reports an outcome"], "exclusion": []},
+    }
+
+    def test_an_unusable_draft_is_asked_for_again_and_each_call_leaves_a_receipt(self, team):
+        team.model.drafts = [self.UNUSABLE, DRAFT]
+
+        response = team.start("shallow")
+
+        assert response.status_code < 300
+        body = team.plan()
+        assert body["current"] is not None
+        assert [r["delivered"] for r in body["receipts"]] == [False, True]
+
+    def test_two_unusable_answers_give_up_with_both_receipts(self, team):
+        team.model.drafts = [self.UNUSABLE, self.UNUSABLE]
+
+        response = team.start("shallow")
+
+        assert response.status_code == 502
+        assert len(team.model.requests) == 2
+        assert [r["delivered"] for r in team.plan()["receipts"]] == [False, False]
+
+    def test_the_reason_is_logged_without_any_text(self, team, monkeypatch):
+        team.model.drafts = [self.UNUSABLE, self.UNUSABLE]
+
+        with structlog.testing.capture_logs() as logs:
+            # Loggers are cached on first use; a fresh one reports to this capture.
+            monkeypatch.setattr(planning, "_log", structlog.get_logger(planning.__name__))
+            team.start("shallow")
+
+        refused = [e for e in logs if e["event"] == "plan_answer_refused"]
+        assert [e["attempt"] for e in refused] == [1, 2]
+        assert all("themes" in e["reason"] for e in refused)
+        assert not any("Reports an outcome" in str(e) for e in refused)
 
 
 class TestAnswers:

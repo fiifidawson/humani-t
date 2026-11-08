@@ -97,6 +97,11 @@ class TestAnyEnvironment:
         assert "pw@" not in repr(settings)
 
 
+class TestCountriesAndRegionsSetting:
+    def test_countries_and_regions_are_masked_unless_the_operator_says_otherwise(self):
+        assert Settings(environment=Environment.TEST).mask_countries_and_regions is True
+
+
 class TestInferenceDestination:
     """The model server is the operator's choice, and a hosted API is never a default."""
 
@@ -125,6 +130,26 @@ class TestInferenceDestination:
             Settings(environment=Environment.DEVELOPMENT, inference_url=url)
         with pytest.raises(ValidationError, match="hosted"):
             production_settings(inference_url=url)
+
+    def test_the_wire_format_defaults_to_ollama(self):
+        assert Settings(environment=Environment.TEST).inference_api == "ollama"
+
+    def test_the_openai_wire_format_is_accepted(self):
+        settings = Settings(environment=Environment.TEST, inference_api="openai")
+
+        assert settings.inference_api == "openai"
+
+    def test_an_unknown_wire_format_is_refused(self):
+        with pytest.raises(ValidationError, match="inference_api"):
+            Settings.model_validate({"environment": "test", "inference_api": "anthropic"})
+
+    def test_choosing_the_openai_format_does_not_open_hosted_apis(self):
+        with pytest.raises(ValidationError, match="hosted"):
+            Settings(
+                environment=Environment.DEVELOPMENT,
+                inference_api="openai",
+                inference_url="https://api.openai.com/v1",
+            )
 
     def test_a_hosted_api_is_accepted_only_when_the_operator_opts_in(self):
         settings = production_settings(

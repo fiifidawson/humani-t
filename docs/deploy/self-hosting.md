@@ -99,6 +99,9 @@ cp .env.example .env
 | `HUMANI_T_SECRETS_DIR` | `/etc/humani-t/secrets` (the `--dir` you used). |
 | `COMPOSE_PROFILES` | Empty, or `local-model` to run Ollama in the stack. `local-mail` only for a trial. |
 | `HUMANI_T_INFERENCE_URL`, `HUMANI_T_INFERENCE_MODEL` | The model server and model. The default is the bundled Ollama. To run the model on another machine, see [Running the model on another machine](remote-model.md). |
+| `HUMANI_T_INFERENCE_API` | `ollama` (the default), or `openai` for a server that speaks OpenAI's Chat Completions: vLLM or llama.cpp on your own machine, or a hosted API (see [Running the model on another machine](remote-model.md#7-a-hosted-model-api-an-opt-in)). |
+| `HUMANI_T_PAPER_SOURCES` | Where papers are searched, comma-separated: `openalex`, `europepmc`, `arxiv`. Empty searches nothing outside the deployment. |
+| `HUMANI_T_MASK_COUNTRIES_AND_REGIONS` | `true` (the default) masks country and large-region names in questions like any place. `false` keeps them, so the search and the criteria keep the review's geography; towns, districts and camps stay masked ([ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md)). |
 
 For a trial on one machine with no mail server, use the bundled Mailpit: `COMPOSE_PROFILES=local-mail`, `HUMANI_T_SMTP_HOST=mailpit`, `HUMANI_T_SMTP_PORT=1025`, `HUMANI_T_SMTP_STARTTLS=false`. Emails then appear at http://127.0.0.1:8025.
 

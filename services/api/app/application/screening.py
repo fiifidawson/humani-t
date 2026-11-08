@@ -45,6 +45,7 @@ from app.domain.inference import (
     ChatMessage,
     ChatRequest,
     ChatRole,
+    InferenceRateLimitedError,
     InferenceUnavailableError,
     InvalidStructuredOutputError,
     PromptRefusedError,
@@ -80,6 +81,10 @@ NOTHING_MASKED = (
 MODEL_DOWN = (
     "The model server isn't answering. Papers screened so far are kept; try the run "
     "again once it is back."
+)
+MODEL_RATE_LIMITED = (
+    "The model service's rate limit was reached. Papers screened so far are kept; "
+    "wait a minute, then run it again."
 )
 
 _SYSTEM_PROMPT = """You screen research papers for a humanitarian evidence review.
@@ -132,7 +137,7 @@ def screening_schema(criterion_ids: Sequence[str]) -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["label", "score", "priority", "rationale", "criteria_matched"],
+        "required": ["label", "score", "priority", "rationale", "criteria_matched", "answers"],
         "properties": {
             "label": {"enum": [label.value for label in ScreeningLabel]},
             "score": {"type": "number", "minimum": 0, "maximum": 1},
@@ -143,10 +148,11 @@ def screening_schema(criterion_ids: Sequence[str]) -> dict[str, Any]:
                 "items": {"enum": list(criterion_ids)},
                 "uniqueItems": True,
             },
-            # Not required: an answer without it is still a decision, shown
-            # with its rationale and no per-criterion quotes.
+            # One per criterion, so a reviewer sees every criterion's verdict. A
+            # model told this exactly (strict structured output) cannot skip one.
             "answers": {
                 "type": "array",
+                "minItems": len(criterion_ids),
                 "maxItems": len(criterion_ids),
                 "items": {
                     "type": "object",
@@ -387,18 +393,23 @@ class ScreenStage:
         self, run: Run, plan: ReviewPlan, item: _Work, request: ChatRequest
     ) -> ScreeningDecision:
         paper = item.paper
-        for _ in range(2):
+        for attempt in (1, 2):
             try:
                 result = await self._inference.chat(request)
-            except InvalidStructuredOutputError:
+            except InvalidStructuredOutputError as exc:
+                _refused(run, paper, attempt, exc)
                 continue
             except InferenceUnavailableError as exc:
-                raise StageFailedError(MODEL_DOWN) from exc
+                # The reason may name hosts and addresses: the operator's log only.
+                _log.warning("screening_model_unavailable", run_id=str(run.id), reason=str(exc))
+                limited = isinstance(exc, InferenceRateLimitedError)
+                raise StageFailedError(MODEL_RATE_LIMITED if limited else MODEL_DOWN) from exc
             try:
                 return self._decision(
                     run, plan, paper, result.output, result.model_id, item.masked_text
                 )
-            except ValueError:
+            except ValueError as exc:
+                _refused(run, paper, attempt, exc)
                 continue
         return ScreeningDecision.unreadable(
             run_id=run.id,
@@ -445,6 +456,18 @@ class ScreenStage:
             decided_at=self._clock(),
             criterion_answers=answers,
         )
+
+
+def _refused(run: Run, paper: RunPaper, attempt: int, error: Exception) -> None:
+    # Ids and our own messages only: they name a schema path or a criterion id,
+    # never the paper's text or the model's words.
+    _log.warning(
+        "screening_answer_refused",
+        run_id=str(run.id),
+        paper_id=str(paper.paper_id),
+        attempt=attempt,
+        reason=str(error),
+    )
 
 
 def _criterion_answers(plan: ReviewPlan, given: Any) -> tuple[CriterionAnswer, ...]:

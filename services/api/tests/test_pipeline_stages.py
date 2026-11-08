@@ -14,9 +14,12 @@ from collections.abc import Mapping
 from uuid import UUID
 
 import pytest
+import structlog
 
+from app.application import screening
 from app.domain.discovery import TextKind
 from app.domain.encryption import KeyDestroyedError
+from app.domain.inference import InferenceRateLimitedError
 from app.domain.runs import JsonValue, RunState
 from app.domain.screening import (
     UNREADABLE_RATIONALE,
@@ -151,6 +154,28 @@ class TestDiscover:
         assert p.rt.stored_run(run_id).state is RunState.FAILED
         assert "could be searched" in (p.failure(run_id) or "")
         assert _run_papers(p, run_id) == []
+
+    def test_a_search_that_finds_nothing_stops_the_run_here_and_says_so(self):
+        p = make_pipeline(sources=[CorpusSource("first", ()), CorpusSource("second", ())])
+
+        run_id = _run(p)
+
+        assert p.rt.stored_run(run_id).state is RunState.FAILED
+        assert p.failure(run_id) == (
+            "The search found no papers. Ask for changes to broaden it, then run it again."
+        )
+        finished = [e.data["stage"] for e in p.rt.events(run_id) if e.name == "stage.finished"]
+        # Discover is the first stage here; nothing after it ran.
+        assert finished == []
+        assert len(p.progress(run_id, "discover")) == 2
+
+    def test_a_search_where_some_sources_find_papers_carries_on(self):
+        p = make_pipeline(sources=[CorpusSource("first", CORPUS), CorpusSource("second", ())])
+
+        run_id = _run(p, ("discover",))
+
+        assert p.rt.stored_run(run_id).state is RunState.DONE
+        assert p.summary(run_id, "discover")["after_deduplication"] == 4
 
     def test_no_sources_configured_fails_plainly(self):
         p = make_pipeline(sources=[])
@@ -445,12 +470,59 @@ class TestScreen:
         assert len(p.model.requests) == 8
         assert p.summary(run_id, "screen")["tiers"]["uncertain"] == 4
 
+    def test_the_answer_format_asks_for_exactly_one_answer_per_criterion(self):
+        p = make_pipeline()
+
+        _run(p)
+
+        schema = p.model.requests[0].output_schema
+        criteria = criteria_ids_in(p.model.requests[0])
+        assert "answers" in schema["required"]
+        answers = schema["properties"]["answers"]
+        assert answers["minItems"] == answers["maxItems"] == len(criteria)
+
+    def test_a_refused_answer_is_logged_with_its_reason_and_never_the_text(self, monkeypatch):
+        p = make_pipeline(script=lambda request: {"label": "maybe"})
+
+        with structlog.testing.capture_logs() as logs:
+            # Loggers are cached on first use (observability.py); a fresh one
+            # reports to this capture whatever ran before.
+            monkeypatch.setattr(screening, "_log", structlog.get_logger(screening.__name__))
+            _run(p)
+
+        refused = [entry for entry in logs if entry["event"] == "screening_answer_refused"]
+        assert len(refused) == len(p.model.requests) == 8
+        assert {entry["attempt"] for entry in refused} == {1, 2}
+        assert all(entry["reason"] for entry in refused)
+        assert all(
+            set(entry) <= {"event", "log_level", "reason", "attempt", "run_id", "paper_id"}
+            for entry in refused
+        )
+        written = " ".join(str(entry) for entry in refused)
+        assert not any(record.abstract and record.abstract[:30] in written for record in CORPUS)
+
     def test_an_answer_that_contradicts_its_criteria_counts_as_unreadable(self):
         p = make_pipeline(script=lambda request: answer("include", "high", ["I1", "E1"]))
 
         run_id = _run(p)
 
         assert all(d.is_unreadable for d in _decisions(p, run_id))
+
+    def test_a_rate_limited_model_stops_screening_saying_so_and_keeps_decisions(self):
+        p = make_pipeline()
+        p.model = ObservedInference(
+            reasonable_answer,
+            fail_with=InferenceRateLimitedError("the model server's rate limit was reached"),
+            fail_after=2,
+        )
+
+        run_id = _run(p)
+
+        assert p.failure(run_id) == (
+            "The model service's rate limit was reached. Papers screened so far are kept; "
+            "wait a minute, then run it again."
+        )
+        assert len(_decisions(p, run_id)) == 2
 
     def test_a_model_server_that_is_down_fails_the_stage_plainly_and_keeps_decisions(self):
         p = make_pipeline()
@@ -585,6 +657,24 @@ class TestEvidence:
             positions[x.paper_id] for x in passages
         )
         assert all(x.tag == f"P{positions[x.paper_id]}" for x in passages)
+
+    def test_a_run_that_did_not_screen_uses_the_newest_screening_of_its_papers(self):
+        """A retry from Brief is a new run; its evidence is what screening included."""
+        p = make_pipeline()
+        screened = _run(p)
+        retry = _run(p, ("export",))
+
+        async def read() -> tuple:
+            async with p.rt.harness.providers.storage.unit_of_work() as uow:
+                return await p.evidence.included_passages(
+                    uow, UUID(p.rt.review_id), UUID(retry)
+                )
+
+        included = {
+            d.paper_id for d in _decisions(p, screened) if d.label is ScreeningLabel.INCLUDE
+        }
+        assert included
+        assert {x.paper_id for x in asyncio.run(read())} == included
 
     def test_another_reviews_run_yields_nothing(self):
         p = make_pipeline()

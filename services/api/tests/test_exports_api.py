@@ -23,7 +23,7 @@ import pytest
 from app.domain.briefs import CAVEAT
 from app.domain.inference import ChatRequest
 from tests.brief_support import MASKED_PLACE, write_brief
-from tests.pipeline_support import ALL_STAGES, PLACE, Pipeline, make_pipeline
+from tests.pipeline_support import ALL_STAGES, PLACE, Pipeline, make_pipeline, with_answers
 from tests.project_support import project_events
 from tests.run_support import run_until_idle
 
@@ -75,13 +75,14 @@ class TestDataset:
 
     def test_a_cell_a_spreadsheet_would_run_is_neutralised(self, p):
         def formula_answer(request: ChatRequest) -> dict[str, Any]:
-            return {
+            base = {
                 "label": "include",
                 "score": 0.9,
                 "priority": "high",
                 "rationale": '=HYPERLINK("http://evil.example","click")',
                 "criteria_matched": ["I1", "I2"],
             }
+            return with_answers(request, base)
 
         pipeline = make_pipeline(script=formula_answer)
         pipeline.rt.start_run(list(ALL_STAGES))

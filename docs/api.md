@@ -465,7 +465,7 @@ A review's plan is its vocabulary and its screening criteria, in numbered versio
 
 All paths name a review. **Who:** any member reads; owners and reviewers change. A non-member gets the same `404` as a missing review, before the body is read. Planning is refused with `409` while a run is going.
 
-The question, every answer and every change request are masked before any model call, and each call is checked again by the prompt guard. A call the guard refuses sends nothing and answers `422`; an unusable model answer is `502`; an unreachable model server is `502`.
+The question, every answer and every change request are masked before any model call, and each call is checked again by the prompt guard. A call the guard refuses sends nothing and answers `422`; an unusable model answer is `502`; an unreachable model server is `502`; a model service that is still rate limited after the provider's retries is `503`, "The model service's rate limit was reached. Wait a minute, then try again."
 
 ### `PlanOut`
 
@@ -835,7 +835,7 @@ MFA is required. Once an account has a second factor, sign-in has two steps, and
 | `409` | the record changed while you were editing it; reload and retry. Also: already a member, `last_owner`, the last second factor, an authenticator that is already enrolled, a run already going for the review, a gate already decided, a run that has finished or stopped waiting, disabling your own account, or `last_admin` |
 | `413` | the request body is over 1 MiB |
 | `502` | an email (an invitation) could not be sent, and the action itself was saved; or a paper source (with its `source_id`) or the model server could not be reached. The message never names a host, an address or the upstream's own error |
-| `503` | the service is saturated, the database is unreachable, or the rate limiter is (sign-in fails closed); `Retry-After` says when to retry |
+| `503` | the service is saturated, the database is unreachable, or the rate limiter is (sign-in fails closed); `Retry-After` says when to retry. Also a hosted model service's rate limit, still reached after the provider's retries |
 
 ---
 

@@ -283,26 +283,51 @@ describe("the papers canvas (UI_UX_SPEC §6.8)", () => {
 		expect(details).not.toHaveTextContent(/\b[IE]\d\b/);
 	});
 
-	it("shows the PRISMA counts as a table", async () => {
+	it("opens on the PRISMA flow, from what was found to what was included", async () => {
+		const { path } = screenedReview();
+		renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		const flow = await within(canvas).findByRole("list", {
+			name: "PRISMA flow",
+		});
+		const steps = within(flow).getAllByRole("listitem");
+		expect(
+			steps.map((step) => step.querySelector("[data-step]")?.textContent),
+		).toEqual(["Identified7", "Unique4", "Screened3", "Included2"]);
+		const filters = within(canvas).getByRole("group", { name: "Show" });
+		expect(
+			flow.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
+	it("filters the table from a step of the flow", async () => {
 		const { path } = screenedReview();
 		const { user } = renderApp(`${path}/papers`);
 		const canvas = await screen.findByRole("region", {
 			name: "Papers · run 1",
 		});
+		const flow = await within(canvas).findByRole("list", {
+			name: "PRISMA flow",
+		});
 
-		await user.click(
-			await within(canvas).findByRole("button", { name: "Show PRISMA counts" }),
+		await user.click(within(flow).getByRole("button", { name: /excluded/ }));
+
+		await waitFor(() =>
+			expect(
+				within(canvas).getByRole("button", { name: "Excluded 1" }),
+			).toHaveAttribute("aria-pressed", "true"),
 		);
 
-		const prisma = await within(canvas).findByRole("table", {
-			name: "PRISMA counts",
-		});
-		expect(
-			within(prisma).getByRole("row", { name: "Identified 7" }),
-		).toBeInTheDocument();
-		expect(
-			within(prisma).getByRole("row", { name: "Included 2" }),
-		).toBeInTheDocument();
+		await user.click(within(flow).getByRole("button", { name: /^Included/ }));
+
+		await waitFor(() =>
+			expect(
+				within(canvas).getByRole("button", { name: "Included 2" }),
+			).toHaveAttribute("aria-pressed", "true"),
+		);
 	});
 
 	it("has no accessibility violations", async () => {
