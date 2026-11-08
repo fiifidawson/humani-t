@@ -54,6 +54,7 @@ ALL_SOURCES_FAILED = (
     "None of the paper sources could be searched just now. Nothing was stored; try the "
     "run again later."
 )
+NOTHING_FOUND = "The search found no papers. Ask for changes to broaden it, then run it again."
 NO_PAPERS = "This review has no papers yet. Run Discover first."
 
 FULL_TEXT_GAP = (
@@ -134,6 +135,10 @@ class DiscoverStage:
         found, failed = await self._search(context, plan)
         if not found:
             raise StageFailedError(ALL_SOURCES_FAILED)
+        # Stopping here names the real problem. Carrying on, every later stage works
+        # on nothing and the brief reports it as a screening result.
+        if not any(records for _, records in found):
+            raise StageFailedError(NOTHING_FOUND)
         async with self._storage.unit_of_work() as uow:
             if await self._store_found(uow, run, plan, found, failed):
                 await uow.commit()
