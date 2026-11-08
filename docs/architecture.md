@@ -73,7 +73,7 @@ Each seam is a `Protocol` in `services/api/app/<area>/base.py`, with a default i
 
 | Interface | Default implementation | Fake |
 | --- | --- | --- |
-| `InferenceProvider` | Ollama, run by the operator (native `/api/chat`, JSON-schema output) | scripted answers, validated against the schema |
+| `InferenceProvider` | Ollama, run by the operator (native `/api/chat`, JSON-schema output); or, with `inference_api=openai`, any server speaking OpenAI's Chat Completions. A hosted one only with `allow_hosted_inference` (ADR 0010) | scripted answers, validated against the schema |
 | `PromptGuard` | leak check from the masking stage (today: allows everything) | allows, refuses or fails on demand |
 | `StorageProvider` | `PostgresStorage` (SQLAlchemy 2, async) | in-memory repositories |
 | `FileStore` | a local volume, ciphertext only ([ADR-0008](adr/0008-uploaded-files-on-a-sealed-volume.md)) | in-memory |

@@ -234,17 +234,29 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_sender: str = "humani-t <no-reply@localhost>"
     smtp_starttls: bool = True
+    inference_api: Literal["ollama", "openai"] = Field(
+        default="ollama",
+        description=(
+            "What the model server speaks: Ollama's own API, or OpenAI's Chat Completions "
+            "(OpenAI, Azure OpenAI, Mistral, Groq, vLLM…). A hosted one still needs "
+            "allow_hosted_inference."
+        ),
+    )
     inference_url: str = Field(
         default="http://ollama:11434",
         description=(
-            "The Ollama server the operator runs. Plain http only to a host inside the "
-            "deployment in production; https with inference_token for a remote one."
+            "The model server. Plain http only to a host inside the deployment in "
+            "production; https with inference_token for a remote one. For the openai "
+            "format, the base URL that ends before /chat/completions."
         ),
     )
     inference_model: str = Field(default="llama3.1:8b", min_length=1)
     inference_token: SecretStr | None = Field(
         default=None,
-        description="Bearer token for a model server behind an authenticating proxy.",
+        description=(
+            "Bearer token: a hosted API's key, or a token for a model server behind an "
+            "authenticating proxy."
+        ),
     )
     inference_timeout_seconds: float = Field(
         default=300,

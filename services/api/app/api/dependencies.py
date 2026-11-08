@@ -72,9 +72,10 @@ from app.extraction.isolated import IsolatedDocumentExtractor
 from app.files.base import FileStore
 from app.files.memory import MemoryFileStore
 from app.files.volume import LocalVolumeFileStore
-from app.inference.base import PromptGuard
+from app.inference.base import InferenceProvider, PromptGuard
 from app.inference.demo import DemoInferenceProvider
 from app.inference.ollama import OllamaInferenceProvider
+from app.inference.openai_compatible import OpenAICompatibleInferenceProvider
 from app.malware.base import MalwareScanner
 from app.malware.clamd import ClamdAddress, ClamdScanner
 from app.malware.skip import NoMalwareScanner
@@ -251,10 +252,18 @@ def _inference(settings: Settings) -> tuple[GuardedInference, HttpFetcher | None
             total_timeout_seconds=timeout,
         )
     )
-    provider = OllamaInferenceProvider(
+    return GuardedInference(inference_provider(settings, fetcher), prompt_guard()), fetcher
+
+
+def inference_provider(settings: Settings, fetcher: HttpFetcher) -> InferenceProvider:
+    """The model server's wire format, as the operator set it. Ollama unless told otherwise."""
+    if settings.inference_api == "openai":
+        return OpenAICompatibleInferenceProvider(
+            fetcher, base_url=settings.inference_url, model=settings.inference_model
+        )
+    return OllamaInferenceProvider(
         fetcher, base_url=settings.inference_url, model=settings.inference_model
     )
-    return GuardedInference(provider, prompt_guard()), fetcher
 
 
 def prompt_guard() -> PromptGuard:
