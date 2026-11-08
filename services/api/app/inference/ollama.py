@@ -80,6 +80,10 @@ class OllamaInferenceProvider:
             ],
             "format": dict(request.output_schema),
             "stream": False,
+            # A reasoning model (qwen3.5, deepseek-r1) otherwise thinks before every
+            # answer: 28 times the tokens on a CPU, all discarded, since only the
+            # schema-checked answer is kept. Models that cannot think ignore it.
+            "think": False,
             "options": options,
         }
 
