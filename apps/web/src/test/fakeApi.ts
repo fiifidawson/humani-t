@@ -689,6 +689,26 @@ export class FakeApi {
 					: HttpResponse.json(project);
 			}),
 
+			http.delete(`${API}/projects/:projectId`, ({ params }) => {
+				const refused = this.refuseUnlessSignedIn();
+				if (refused !== null) {
+					return refused;
+				}
+				const project = this.projects.find((p) => p.id === params["projectId"]);
+				if (project === undefined) {
+					return problem(404, "Not Found");
+				}
+				if (project.role !== "owner") {
+					return problem(403, "Only owners can delete a project.");
+				}
+				const stale = this.refuseUnlessRecent();
+				if (stale !== null) {
+					return stale;
+				}
+				this.projects.splice(this.projects.indexOf(project), 1);
+				return new HttpResponse(null, { status: 204 });
+			}),
+
 			...this.reviews.handlers(),
 		];
 	}
