@@ -178,6 +178,58 @@ class TestUnusableAnswers:
         assert not any("Reports an outcome" in str(e) for e in refused)
 
 
+class TestWhereTheNextRunStarts:
+    """Prompt-first changes after a run (Wave 2): the plan says where a run of its
+    current version would start, so the person never picks stages."""
+
+    def test_a_first_plan_runs_the_whole_pipeline(self, team):
+        team.start("shallow")
+
+        assert team.plan()["rerun_from"] == "queries"
+
+    def test_a_change_to_the_search_after_an_accepted_plan_searches_again(self, team):
+        team.start("shallow")
+        team.accept(1)
+
+        team.change("add mobile money", based_on_version=1)
+
+        assert team.plan()["rerun_from"] == "queries"
+
+    def test_a_change_to_the_criteria_alone_rescreens(self, team):
+        stricter = {
+            **DRAFT,
+            "criteria": {
+                "inclusion": DRAFT["criteria"]["inclusion"],
+                "exclusion": [*DRAFT["criteria"]["exclusion"], "Published before 2015"],
+            },
+        }
+        team.model.drafts = [DRAFT, stricter]
+        team.start("shallow")
+        team.accept(1)
+
+        team.change("only studies from 2015 onwards", based_on_version=1)
+
+        assert team.plan()["rerun_from"] == "screen"
+
+    def test_a_change_that_alters_nothing_has_nothing_to_run_again(self, team):
+        team.model.drafts = [DRAFT, DRAFT]
+        team.start("shallow")
+        team.accept(1)
+
+        team.change("keep it as it is", based_on_version=1)
+
+        assert team.plan()["rerun_from"] is None
+
+    def test_once_accepted_the_answer_still_compares_with_the_version_before(self, team):
+        team.start("shallow")
+        team.accept(1)
+        team.change("add mobile money", based_on_version=1)
+
+        team.accept(2)
+
+        assert team.plan()["rerun_from"] == "queries"
+
+
 class TestAnswers:
     def test_answers_are_kept_until_every_question_is_settled(self, team):
         ids = [q["id"] for q in team.start("deep").json()["questions"]]
