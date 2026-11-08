@@ -658,6 +658,24 @@ class TestEvidence:
         )
         assert all(x.tag == f"P{positions[x.paper_id]}" for x in passages)
 
+    def test_a_run_that_did_not_screen_uses_the_newest_screening_of_its_papers(self):
+        """A retry from Brief is a new run; its evidence is what screening included."""
+        p = make_pipeline()
+        screened = _run(p)
+        retry = _run(p, ("export",))
+
+        async def read() -> tuple:
+            async with p.rt.harness.providers.storage.unit_of_work() as uow:
+                return await p.evidence.included_passages(
+                    uow, UUID(p.rt.review_id), UUID(retry)
+                )
+
+        included = {
+            d.paper_id for d in _decisions(p, screened) if d.label is ScreeningLabel.INCLUDE
+        }
+        assert included
+        assert {x.paper_id for x in asyncio.run(read())} == included
+
     def test_another_reviews_run_yields_nothing(self):
         p = make_pipeline()
         run_id = _run(p)

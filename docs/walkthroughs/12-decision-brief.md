@@ -67,6 +67,17 @@ Before this phase a run's last stage, `answer`, was a stand-in that reported a f
 - **Decision:** evidence comes through `EvidenceSource` and `Passage` in `domain/screening.py` (`ScreenedEvidence` in production); the question is masked by the question `Sanitizer` with `MaskingRuleService.rules_for`. Source details come through this lane's `SourceCatalogue` (`ScreenedSources` reads the paper record and the run's screening decision).
 - **Rejected:** a separate passage type and masking seam for the brief (two contracts for one thing).
 
+### D12.7 The honesty rule is in the answer format; a retry from Brief uses the last screening (2026-11-08)
+
+- **Decision:**
+  - A claim's format is one of two shapes: evidence that cites at least one passage, or a hypothesis, the model's own reasoning, that cites none. What a conflict means can only be a hypothesis or nothing. The follow-up answer loop shares the claim format.
+  - A run that did not screen (a retry from Brief) takes its included papers from the newest earlier run of the review that screened the same paper set (`PaperStore.screened_by`).
+- **Why:**
+  - Left to the domain check alone, `gpt-5-mini` broke the rule twice in a row ("Claim.citations must be empty for a hypothesis"; "Conflict.meaning is the model's reasoning"), and the brief failed. In the format, OpenAI's strict mode makes the rule impossible to break; the domain check stays as the guard.
+  - Decisions belong to the run that made them (ADR 0006), so a retry from Brief found none and said "No papers were included", although screening had included three.
+- **Where:** [`app/application/brief_loop.py`](../../services/api/app/application/brief_loop.py) (`EVIDENCE_CLAIM_SCHEMA`, `HYPOTHESIS_CLAIM_SCHEMA`), [`app/application/papers.py`](../../services/api/app/application/papers.py) (`screened_by`).
+- **Proven by:** `tests/test_briefs_loop.py::TestWriterFormat`, `tests/test_pipeline_stages.py::TestEvidence::test_a_run_that_did_not_screen_uses_the_newest_screening_of_its_papers`.
+
 ## Libraries
 
 No new library. BM25 is about forty lines of standard-library Python ([ADR-0007](../adr/0007-bm25-retrieval-for-the-brief.md)).

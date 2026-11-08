@@ -93,20 +93,28 @@ _INVALID_STEP = "The model's answer did not match the expected format."
 
 TEXT_SCHEMA = {"type": "string", "minLength": 1, "maxLength": 600}
 SHORT_SCHEMA = {"type": "string", "minLength": 1, "maxLength": 200}
-CLAIM_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["text", "support", "citations"],
-    "properties": {
-        "text": TEXT_SCHEMA,
-        "support": {"enum": [s.value for s in ClaimSupport]},
-        "citations": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {"type": "string", "minLength": 1, "maxLength": 32},
+_CITATION = {"type": "string", "minLength": 1, "maxLength": 32}
+
+
+def _claim_schema(support: ClaimSupport, citations: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["text", "support", "citations"],
+        "properties": {
+            "text": TEXT_SCHEMA,
+            "support": {"enum": [support.value]},
+            "citations": {"type": "array", "items": _CITATION, **citations},
         },
-    },
-}
+    }
+
+
+# The honesty rule lives in the format, so a strict model cannot break it: evidence
+# cites at least one passage, and a hypothesis, the model's own reasoning, cites
+# none. Left to the domain check alone, gpt-5-mini broke it twice in a row.
+EVIDENCE_CLAIM_SCHEMA = _claim_schema(ClaimSupport.EVIDENCE, {"minItems": 1, "maxItems": 8})
+HYPOTHESIS_CLAIM_SCHEMA = _claim_schema(ClaimSupport.HYPOTHESIS, {"maxItems": 0})
+CLAIM_SCHEMA: dict[str, Any] = {"anyOf": [EVIDENCE_CLAIM_SCHEMA, HYPOTHESIS_CLAIM_SCHEMA]}
 
 
 def array_schema(items: Mapping[str, Any], low: int, high: int) -> dict[str, Any]:
@@ -157,7 +165,8 @@ WRITER_SCHEMA = object_schema(
             question=SHORT_SCHEMA,
             type={"enum": [t.value for t in ConflictType]},
             positions=array_schema(CLAIM_SCHEMA, 2, 4),
-            meaning={"anyOf": [CLAIM_SCHEMA, {"type": "null"}]},
+            # What a disagreement means is always the model's reasoning.
+            meaning={"anyOf": [HYPOTHESIS_CLAIM_SCHEMA, {"type": "null"}]},
         ),
         0,
         5,

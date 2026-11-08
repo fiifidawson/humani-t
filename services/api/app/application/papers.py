@@ -206,6 +206,33 @@ class PaperStore:
                 return adopted
         return None
 
+    async def screened_by(self, uow: UnitOfWork, run: Run) -> Run:
+        """The run whose screening decisions apply to `run`'s papers.
+
+        The run itself if it screened. Otherwise (a retry from Brief, say) the
+        newest earlier run of the review that screened the same paper set; the run
+        itself when there is none, which then has no decisions.
+        """
+        if "screen" in run.stages:
+            return run
+        own = await uow.papers.get_set(run.id)
+        if own is None:
+            return run
+        for earlier in await uow.runs.list_for_review(run.review_id):
+            # As in `adopt`: only later runs are skipped, so equal times still count.
+            if earlier.id == run.id or earlier.created_at > run.created_at:
+                continue
+            if "screen" not in earlier.stages:
+                continue
+            found = await uow.papers.get_set(earlier.id)
+            if (
+                found is not None
+                and found.basis_run_id == own.basis_run_id
+                and await uow.screening.list_for_run(earlier.id)
+            ):
+                return earlier
+        return run
+
     async def run_papers(self, uow: UnitOfWork, run: Run) -> list[RunPaper]:
         """The papers the run works from, by position; empty before it has any."""
         paper_set = await uow.papers.get_set(run.id)
@@ -291,9 +318,10 @@ class ScreenedEvidence:
         run = await uow.runs.get(run_id)
         if run is None or run.review_id != review_id:
             return ()
+        decided_by = await self._store.screened_by(uow, run)
         included = {
             d.paper_id
-            for d in await uow.screening.list_for_run(run_id)
+            for d in await uow.screening.list_for_run(decided_by.id)
             if d.label is ScreeningLabel.INCLUDE
         }
         passages: list[Passage] = []
