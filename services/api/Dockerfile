@@ -50,9 +50,11 @@ LABEL org.opencontainers.image.title="humani-t API" \
       org.opencontainers.image.source="https://github.com/fiifidawson/humani-t" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# pip is a package installer, which nothing at runtime needs; removing it shrinks
-# what an attacker inside the container could use and what scanners must track.
-RUN python -m pip uninstall --yes --quiet pip \
+# Debian's security fixes land days before the Python image is rebuilt on them, so
+# the image takes them itself. The digest pins the base; the fixes are as of the
+# build. pip is a package installer, which nothing at runtime needs; removing it
+# shrinks what an attacker inside the container could use and scanners must track.
+RUN apt-get update     && apt-get upgrade --yes --no-install-recommends     && rm -rf /var/lib/apt/lists/*     && python -m pip uninstall --yes --quiet pip \
     && groupadd --system --gid 10001 humani \
     && useradd --system --uid 10001 --gid humani --no-create-home --home-dir /nonexistent \
         --shell /usr/sbin/nologin humani

@@ -43,7 +43,7 @@ ARG CADDY_VERSION=v2.11.7
 # Dependencies raised above what Caddy's go.mod asks for, each fixing a HIGH
 # vulnerability Trivy reports in the release build. Remove an entry once Caddy's
 # own go.mod requires that version or newer.
-ARG DEPENDENCY_FIXES="golang.org/x/net@v0.60.0 github.com/go-jose/go-jose/v4@v4.1.6"
+ARG DEPENDENCY_FIXES="golang.org/x/net@v0.62.0 github.com/go-jose/go-jose/v4@v4.1.6"
 
 WORKDIR /src
 COPY infrastructure/caddy/main.go ./
