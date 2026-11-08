@@ -32,6 +32,7 @@ class OpenAICompatibleInferenceProvider:
         self._fetcher = fetcher
         self._chat_url = base_url.rstrip("/") + "/chat/completions"
         self._model = model
+        self._refused_settings: set[str] = set()
 
     @property
     def model_id(self) -> str:
@@ -39,14 +40,10 @@ class OpenAICompatibleInferenceProvider:
 
     async def chat(self, request: ChatRequest) -> ChatResult:
         check_schema(request.output_schema)
-        try:
-            response = await self._fetcher.fetch(
-                FetchRequest.post_json(self._chat_url, self._body(request))
-            )
-        except OutboundError as exc:
-            raise InferenceUnavailableError(
-                f"the model server could not be reached: {type(exc).__name__}"
-            ) from exc
+        response = await self._post(request)
+        while (refused := _refused_setting(response)) and refused not in self._refused_settings:
+            self._refused_settings.add(refused)
+            response = await self._post(request)
         payload = self._payload(response)
         choice = _first_choice(payload)
         if choice.get("finish_reason") == "length":
@@ -64,26 +61,32 @@ class OpenAICompatibleInferenceProvider:
             ),
         )
 
+    async def _post(self, request: ChatRequest) -> FetchResponse:
+        try:
+            return await self._fetcher.fetch(
+                FetchRequest.post_json(self._chat_url, self._body(request))
+            )
+        except OutboundError as exc:
+            raise InferenceUnavailableError(
+                f"the model server could not be reached: {type(exc).__name__}"
+            ) from exc
+
     def _body(self, request: ChatRequest) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self._model,
             "messages": [
                 {"role": m.role.value, "content": m.content} for m in request.messages
             ],
-            # Not strict: strict mode rejects schemas with optional properties or
-            # `minLength`, which ours use. The answer is validated below either way.
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "answer",
-                    "schema": dict(request.output_schema),
-                    "strict": False,
-                },
+                "json_schema": _response_schema(request),
             },
             "temperature": request.temperature,
         }
         if request.seed is not None:
             body["seed"] = request.seed
+        for setting in self._refused_settings:
+            body.pop(setting, None)
         return body
 
     def _payload(self, response: FetchResponse) -> Mapping[str, Any]:
@@ -103,6 +106,101 @@ class OpenAICompatibleInferenceProvider:
         if not isinstance(payload, dict):
             raise InferenceUnavailableError("the model server's answer is not a JSON object")
         return payload
+
+
+# Sampling settings a model may refuse: OpenAI's reasoning models (GPT-5, o-series)
+# take only their default temperature. Such a setting is left out from then on;
+# the answer is less repeatable, and the RunManifest still names the model.
+_DROPPABLE_SETTINGS = frozenset({"temperature", "seed"})
+
+
+def _refused_setting(response: FetchResponse) -> str | None:
+    """The sampling setting a 400 answer names as unsupported, if that is all it says."""
+    if response.status != 400:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return None
+    param = error.get("param")
+    if param in _DROPPABLE_SETTINGS and error.get("code") in (
+        "unsupported_value",
+        "unsupported_parameter",
+    ):
+        return str(param)
+    return None
+
+
+# Keywords strict structured outputs refuse (platform.openai.com/docs/guides/
+# structured-outputs, "Supported schemas", checked 2026-11-08). They are left out
+# of what is sent and still enforced, since every answer is validated against the
+# full schema.
+_NOT_IN_STRICT = frozenset(
+    {
+        "minLength",
+        "maxLength",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+        "patternProperties",
+        "contains",
+        "minContains",
+        "maxContains",
+    }
+)
+# Keywords whose meaning strict mode cannot express at all: such a schema is sent
+# without strict mode rather than changed into a different one.
+_BLOCKS_STRICT = frozenset({"oneOf", "allOf", "not", "if", "then", "else"})
+
+
+def _response_schema(request: ChatRequest) -> dict[str, Any]:
+    """Strict when the schema allows it, so the model cannot skip a required field."""
+    schema = dict(request.output_schema)
+    strict = _strict_copy(schema)
+    if strict is None:
+        return {"name": "answer", "schema": schema, "strict": False}
+    return {"name": "answer", "schema": strict, "strict": True}
+
+
+def _strict_copy(node: Any) -> Any:
+    """`node` without the keywords strict mode refuses, or None if it cannot be strict.
+
+    Strict mode also needs every object to list all its properties as required
+    and to forbid any others.
+    """
+    if isinstance(node, list):
+        items = [_strict_copy(item) for item in node]
+        return None if any(item is None for item in items) else items
+    if not isinstance(node, Mapping):
+        return node
+    if _BLOCKS_STRICT & node.keys():
+        return None
+    if node.get("type") == "object" or "properties" in node:
+        properties = node.get("properties", {})
+        if node.get("additionalProperties") is not False or set(
+            node.get("required", ())
+        ) != set(properties):
+            return None
+    copy: dict[str, Any] = {}
+    for key, value in node.items():
+        if key in _NOT_IN_STRICT:
+            continue
+        if key in ("properties", "$defs"):
+            children = {name: _strict_copy(child) for name, child in value.items()}
+            if any(child is None for child in children.values()):
+                return None
+            copy[key] = children
+        elif key in ("items", "anyOf"):
+            child = _strict_copy(value)
+            if child is None:
+                return None
+            copy[key] = child
+        else:
+            copy[key] = value
+    return copy
 
 
 def _first_choice(payload: Mapping[str, Any]) -> Mapping[str, Any]:
