@@ -141,14 +141,53 @@ function composerFor(
 				actions.change.mutate({ request: text, basedOn: current.version }),
 		};
 	}
+	// After a plan is accepted, and after a run, a message changes the search: the
+	// next draft shows what changed, and accepting it runs from the stage it affects.
 	const isRunGoing = runs[0] !== undefined && runs[0].outcome === null;
+	const label = "Change the search";
+	const placeholder =
+		"Say what to change, for example: make it general, any refugees, not only Tigray";
+	if (current === null) {
+		return {
+			label,
+			placeholder,
+			unavailableReason: "There is no plan yet.",
+			onSend: ignore,
+		};
+	}
+	if (isRunGoing) {
+		return {
+			label,
+			placeholder,
+			unavailableReason:
+				"Wait for the run to finish, or cancel it, to change the search.",
+			onSend: ignore,
+		};
+	}
+	if (plan.pending_change !== null) {
+		return {
+			label,
+			placeholder,
+			unavailableReason: "The search planner is drafting the next version.",
+			onSend: ignore,
+		};
+	}
+	if (current.is_strict) {
+		return {
+			label,
+			placeholder,
+			unavailableReason:
+				"Your own terms are used exactly as given, so the model doesn't change them.",
+			onSend: ignore,
+		};
+	}
 	return {
-		label: "Ask a follow-up",
-		placeholder: isRunGoing
-			? "Ask about what's already indexed, or wait for the brief"
-			: "Ask a follow-up",
-		unavailableReason: "Follow-up questions arrive with the decision brief.",
-		onSend: ignore,
+		label,
+		placeholder,
+		note: "A change makes a new draft. Nothing runs until you accept it.",
+		...busy,
+		onSend: (text) =>
+			actions.change.mutate({ request: text, basedOn: current.version }),
 	};
 }
 
@@ -175,59 +214,73 @@ function Conversation({
 	const current = plan.current;
 	const pendingChange = change.isPending ? change.variables : undefined;
 
-	const turns: ReactNode[] = [];
+	// Drafts and runs in the order they happened: a draft asked for after Run 1
+	// sits below it. Within one draft, its turns keep the order they were added.
+	const turns: { at: string; node: ReactNode }[] = [];
 	let revision = 0;
 	plan.versions.forEach((summary, index) => {
 		const next = plan.versions[index + 1];
 		const isCurrent = current !== null && current.version === summary.version;
 		if (summary.version > 1 && summary.origin === "llm_assisted") {
 			const request = isCurrent ? current.change_request : null;
-			turns.push(
-				request === null ? (
-					<PastChangeTurn
-						key={`change-${summary.version}`}
-						version={summary.version}
-					/>
-				) : (
-					<ChangeTurn
-						key={`change-${summary.version}`}
-						text={request.text}
-						at={request.requested_at}
-					/>
-				),
-			);
+			turns.push({
+				at: summary.created_at,
+				node:
+					request === null ? (
+						<PastChangeTurn
+							key={`change-${summary.version}`}
+							version={summary.version}
+						/>
+					) : (
+						<ChangeTurn
+							key={`change-${summary.version}`}
+							text={request.text}
+							at={request.requested_at}
+						/>
+					),
+			});
 			// Receipts carry no version, so the n-th revision's receipt is the n-th
 			// "revise" call. A call that failed before drafting would shift this.
 			const receipt = revisions[revision];
 			const item = receipt?.items.find((i) => i.kind === "change_request");
 			revision += 1;
 			if (receipt !== undefined && item !== undefined) {
-				turns.push(
-					<PrivacyReceipt
-						key={`receipt-${receipt.id}`}
-						receipt={receipt}
-						item={item}
-						isOpenAtFirst={opensAtFirst(item.counts, false)}
-					/>,
-				);
+				turns.push({
+					at: summary.created_at,
+					node: (
+						<PrivacyReceipt
+							key={`receipt-${receipt.id}`}
+							receipt={receipt}
+							item={item}
+							isOpenAtFirst={opensAtFirst(item.counts, false)}
+						/>
+					),
+				});
 			}
 		}
 		if (next !== undefined) {
-			turns.push(
-				<ReplacedDraftLine
-					key={`draft-${summary.version}`}
-					version={summary.version}
-					by={next.version}
-				/>,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: (
+					<ReplacedDraftLine
+						key={`draft-${summary.version}`}
+						version={summary.version}
+						by={next.version}
+					/>
+				),
+			});
 		} else if (isCurrent && current.accepted_at !== null) {
-			turns.push(
-				<AcceptedLine key={`draft-${summary.version}`} version={current} />,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: (
+					<AcceptedLine key={`draft-${summary.version}`} version={current} />
+				),
+			});
 		} else if (isCurrent) {
-			turns.push(
-				<DraftCard key={`draft-${summary.version}`} version={current} />,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: <DraftCard key={`draft-${summary.version}`} version={current} />,
+			});
 		}
 	});
 
@@ -271,7 +324,23 @@ function Conversation({
 					}}
 				/>
 			) : null}
-			{turns}
+			{[
+				...turns,
+				...runs.slice(1).map((run) => ({
+					at: run.created_at,
+					node: <PastRunLine key={run.id} run={run} />,
+				})),
+				...(runs[0] === undefined
+					? []
+					: [
+							{
+								at: runs[0].created_at,
+								node: <LatestRunCards key="latest-run" />,
+							},
+						]),
+			]
+				.sort((a, b) => a.at.localeCompare(b.at))
+				.map((item) => item.node)}
 			{pendingChange === undefined ? null : (
 				<ChangeTurn text={pendingChange.request} isSending />
 			)}
@@ -297,13 +366,6 @@ function Conversation({
 					}}
 				/>
 			) : null}
-			{runs
-				.slice(1)
-				.reverse()
-				.map((run) => (
-					<PastRunLine key={run.id} run={run} />
-				))}
-			<LatestRunCards />
 		</>
 	);
 }
