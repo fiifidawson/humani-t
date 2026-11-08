@@ -14,7 +14,9 @@ from collections.abc import Mapping
 from uuid import UUID
 
 import pytest
+import structlog
 
+from app.application import screening
 from app.domain.discovery import TextKind
 from app.domain.encryption import KeyDestroyedError
 from app.domain.runs import JsonValue, RunState
@@ -444,6 +446,37 @@ class TestScreen:
         assert all(d.rationale == UNREADABLE_RATIONALE for d in decisions)
         assert len(p.model.requests) == 8
         assert p.summary(run_id, "screen")["tiers"]["uncertain"] == 4
+
+    def test_the_answer_format_asks_for_exactly_one_answer_per_criterion(self):
+        p = make_pipeline()
+
+        _run(p)
+
+        schema = p.model.requests[0].output_schema
+        criteria = criteria_ids_in(p.model.requests[0])
+        assert "answers" in schema["required"]
+        answers = schema["properties"]["answers"]
+        assert answers["minItems"] == answers["maxItems"] == len(criteria)
+
+    def test_a_refused_answer_is_logged_with_its_reason_and_never_the_text(self, monkeypatch):
+        p = make_pipeline(script=lambda request: {"label": "maybe"})
+
+        with structlog.testing.capture_logs() as logs:
+            # Loggers are cached on first use (observability.py); a fresh one
+            # reports to this capture whatever ran before.
+            monkeypatch.setattr(screening, "_log", structlog.get_logger(screening.__name__))
+            _run(p)
+
+        refused = [entry for entry in logs if entry["event"] == "screening_answer_refused"]
+        assert len(refused) == len(p.model.requests) == 8
+        assert {entry["attempt"] for entry in refused} == {1, 2}
+        assert all(entry["reason"] for entry in refused)
+        assert all(
+            set(entry) <= {"event", "log_level", "reason", "attempt", "run_id", "paper_id"}
+            for entry in refused
+        )
+        written = " ".join(str(entry) for entry in refused)
+        assert not any(record.abstract and record.abstract[:30] in written for record in CORPUS)
 
     def test_an_answer_that_contradicts_its_criteria_counts_as_unreadable(self):
         p = make_pipeline(script=lambda request: answer("include", "high", ["I1", "E1"]))

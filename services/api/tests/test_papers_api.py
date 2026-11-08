@@ -24,10 +24,9 @@ from tests.pipeline_support import (
     MASKED_PLACE,
     PLACE,
     Pipeline,
-    criteria_ids_in,
     make_pipeline,
-    paper_text_in,
     reasonable_answer,
+    with_answers,
 )
 from tests.project_support import PROJECTS, send
 from tests.run_support import run_until_idle
@@ -264,19 +263,8 @@ class TestDeletedProject:
 
 
 def _with_answers(request: ChatRequest, quote_from: str | None = None) -> dict[str, Any]:
-    """`reasonable_answer`, plus an answer per criterion quoting the text it was sent."""
-    base = reasonable_answer(request)
-    text = paper_text_in(request)
-    quote = quote_from if quote_from is not None else text.split(";")[0].split(".")[0]
-    base["answers"] = [
-        {
-            "id": criterion,
-            "answer": "yes" if criterion in base["criteria_matched"] else "no",
-            "quote": quote if criterion in base["criteria_matched"] else None,
-        }
-        for criterion in criteria_ids_in(request)
-    ]
-    return base
+    """`reasonable_answer`, its quotes taken from `quote_from` when given."""
+    return with_answers(request, reasonable_answer(request), quote_from)
 
 
 def _screen(script: Any = reasonable_answer, guard: FakePromptGuard | None = None) -> Pipeline:
@@ -415,12 +403,30 @@ class TestCriterionAnswers:
         decided = [r["decision"] for r in _papers(p).json()["papers"] if r["decision"]]
         assert [d for d in decided if d["label"] == "include"] == []
 
-    def test_a_decision_made_without_answers_has_none(self, screened):
-        p, _ = screened
+    def test_an_answer_that_skips_a_criterion_is_refused_and_asked_again(self):
+        def skipping(request: ChatRequest) -> dict[str, Any]:
+            answer = _with_answers(request)
+            answer["answers"] = answer["answers"][:-1]
+            return answer
 
-        rows = _papers(p).json()["papers"]
+        p = _screen(skipping)
 
-        assert all(r["decision"]["criteria"] == [] for r in rows if r["decision"])
+        decided = [r["decision"] for r in _papers(p).json()["papers"] if r["decision"]]
+        assert len(decided) == 4
+        assert all(d["is_unreadable"] for d in decided)
+        assert len(p.model.requests) == 2 * len(decided)
+
+    def test_an_answer_without_per_criterion_answers_is_refused(self):
+        def unanswered(request: ChatRequest) -> dict[str, Any]:
+            answer = _with_answers(request)
+            del answer["answers"]
+            return answer
+
+        p = _screen(unanswered)
+
+        decided = [r["decision"] for r in _papers(p).json()["papers"] if r["decision"]]
+        assert decided
+        assert all(d["is_unreadable"] for d in decided)
 
     def test_the_answers_are_stored_sealed(self):
         p = _screen(_with_answers)

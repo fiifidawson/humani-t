@@ -54,15 +54,10 @@ def chat_request(**overrides: Any) -> ChatRequest:
     return ChatRequest(**values)
 
 
-def reply(
-    content: str | None = ANSWER,
-    *,
-    status: int = 200,
-    finish_reason: str = "stop",
-    refusal: str | None = None,
-    body: Mapping[str, Any] | None = None,
-) -> FakeHttpFetcher:
-    payload = body or {
+def completion(
+    content: str | None = ANSWER, finish_reason: str = "stop", refusal: str | None = None
+) -> dict[str, Any]:
+    return {
         "id": "chatcmpl-1",
         "object": "chat.completion",
         "model": f"{MODEL}-2026-08-07",
@@ -75,6 +70,17 @@ def reply(
         ],
         "usage": {"prompt_tokens": 42, "completion_tokens": 17, "total_tokens": 59},
     }
+
+
+def reply(
+    content: str | None = ANSWER,
+    *,
+    status: int = 200,
+    finish_reason: str = "stop",
+    refusal: str | None = None,
+    body: Mapping[str, Any] | None = None,
+) -> FakeHttpFetcher:
+    payload = body or completion(content, finish_reason, refusal)
 
     def handler(request: FetchRequest) -> FetchResponse:
         return FetchResponse.of_json(request.url, payload, status=status)
@@ -115,7 +121,21 @@ class TestRequest:
             ],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "answer", "schema": dict(SCHEMA), "strict": False},
+                "json_schema": {
+                    "name": "answer",
+                    # minLength is dropped: strict mode refuses it. It is still
+                    # checked on the answer (TestStrictMode).
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "include": {"type": "boolean"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["include", "reason"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                },
             },
             "temperature": 0.0,
             "seed": 7,
@@ -145,6 +165,61 @@ class TestRequest:
         )
 
 
+class TestStrictMode:
+    """Strict structured outputs make the model fill every required field.
+
+    OpenAI accepts strict mode only when every object lists all its properties
+    as required and forbids others, and only some keywords (checked 2026-11-08).
+    """
+
+    async def test_a_schema_with_an_optional_property_is_sent_without_strict_mode(self):
+        optional = {**SCHEMA, "required": ["include"]}
+        fetcher = reply()
+
+        await provider(fetcher).chat(chat_request(output_schema=optional))
+
+        sent = sent_body(fetcher)["response_format"]["json_schema"]
+        assert sent["strict"] is False
+        assert sent["schema"] == optional
+
+    async def test_strict_mode_drops_keywords_it_refuses_at_every_depth(self):
+        nested = {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "uniqueItems": True,
+                    "minItems": 2,
+                    "items": {
+                        "anyOf": [
+                            {"type": "string", "minLength": 1, "maxLength": 9},
+                            {"type": "null"},
+                        ]
+                    },
+                },
+            },
+            "required": ["tags"],
+            "additionalProperties": False,
+        }
+        fetcher = reply('{"tags": ["a", "b"]}')
+
+        await provider(fetcher).chat(chat_request(output_schema=nested))
+
+        sent = sent_body(fetcher)["response_format"]["json_schema"]
+        assert sent["strict"] is True
+        assert sent["schema"]["properties"]["tags"] == {
+            "type": "array",
+            "minItems": 2,
+            "items": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        }
+
+    async def test_a_dropped_keyword_is_still_enforced_on_the_answer(self):
+        fetcher = reply('{"include": true, "reason": ""}')
+
+        with pytest.raises(InvalidStructuredOutputError):
+            await provider(fetcher).chat(chat_request())
+
+
 class TestAnswer:
     async def test_the_result_carries_the_output_the_serving_model_and_token_usage(self):
         result = await provider(reply()).chat(chat_request())
@@ -172,6 +247,58 @@ class TestAnswer:
 
         with pytest.raises(InvalidStructuredOutputError, match="refused"):
             await provider(fetcher).chat(chat_request())
+
+
+def refusing(param: str) -> FakeHttpFetcher:
+    """A server that, like OpenAI's reasoning models, refuses one sampling setting."""
+
+    def handler(request: FetchRequest) -> FetchResponse:
+        assert request.body is not None
+        if param in json.loads(request.body):
+            error = {
+                "message": f"Unsupported value: '{param}' does not support 0.0.",
+                "type": "invalid_request_error",
+                "param": param,
+                "code": "unsupported_value",
+            }
+            return FetchResponse.of_json(request.url, {"error": error}, status=400)
+        return FetchResponse.of_json(request.url, completion())
+
+    return FakeHttpFetcher(handler)
+
+
+class TestUnsupportedSettings:
+    """GPT-5 and o-series models take only their default temperature (checked 2026-11-08)."""
+
+    @pytest.mark.parametrize("param", ["temperature", "seed"])
+    async def test_a_refused_setting_is_dropped_and_the_question_asked_again(self, param):
+        fetcher = refusing(param)
+
+        result = await provider(fetcher).chat(chat_request(seed=7))
+
+        assert result.output["include"] is True
+        first, second = (json.loads(r.body or "{}") for r in fetcher.requests)
+        assert param in first
+        assert param not in second
+
+    async def test_the_model_is_not_asked_with_the_refused_setting_again(self):
+        fetcher = refusing("temperature")
+        model = provider(fetcher)
+
+        await model.chat(chat_request())
+        await model.chat(chat_request())
+
+        assert len(fetcher.requests) == 3
+        assert "temperature" not in json.loads(fetcher.requests[2].body or "{}")
+
+    async def test_a_bad_request_about_anything_else_is_reported_as_unavailable(self):
+        error = {"param": "messages", "code": "invalid_value", "message": "bad"}
+        fetcher = reply(status=400, body={"error": error})
+
+        with pytest.raises(InferenceUnavailableError, match="400"):
+            await provider(fetcher).chat(chat_request())
+
+        assert len(fetcher.requests) == 1
 
 
 class TestFailures:
