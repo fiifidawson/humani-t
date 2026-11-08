@@ -40,6 +40,7 @@ import { Page } from "../../ui/Page";
 import { PageHeading } from "../../ui/PageHeading";
 
 import { Composer } from "../chat/Composer";
+import { PendingReply } from "../chat/PendingReply";
 import { ChatCard } from "../reviews/ChatCard";
 import { modeLabel, type PlanMode } from "../reviews/format";
 import { ModeChoice } from "../reviews/ModeChoice";
@@ -138,10 +139,8 @@ function StartReview({ project }: { project: Project }) {
 							<Text color="fg.muted" fontSize="xs">
 								{modeLabel(sending.mode)}
 							</Text>
-							<Text role="status" color="fg.muted" fontSize="xs">
-								Sending…
-							</Text>
 						</ChatCard>
+						<PendingReply doing="Reading your question" />
 					</Stack>
 				)}
 			</Flex>
@@ -152,7 +151,11 @@ function StartReview({ project }: { project: Project }) {
 					draft={draft}
 					onDraftChange={setDraft}
 					onSend={(question) => create.mutate({ question, mode })}
-					unavailableReason={create.isPending ? "Sending…" : undefined}
+					unavailableReason={
+						create.isPending
+							? "Humani-T is replying to your question."
+							: undefined
+					}
 				/>
 			) : (
 				<Text
