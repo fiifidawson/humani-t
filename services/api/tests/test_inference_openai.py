@@ -240,8 +240,42 @@ class TestStrictMode:
         assert sent["schema"]["properties"]["tags"] == {
             "type": "array",
             "minItems": 2,
-            "items": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            "items": {
+                "anyOf": [
+                    {"type": "string", "description": "At most 9 characters."},
+                    {"type": "null"},
+                ]
+            },
+            "description": "No item repeated.",
         }
+
+    async def test_a_dropped_limit_is_told_to_the_model_in_words(self):
+        limited = {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "minLength": 20, "maxLength": 300},
+                "tags": {
+                    "type": "array",
+                    "uniqueItems": True,
+                    "items": {"type": "string", "description": "A topic."},
+                },
+                "note": {"type": "string", "maxLength": 40, "description": "Optional."},
+            },
+            "required": ["summary", "tags", "note"],
+            "additionalProperties": False,
+        }
+        fetcher = reply('{"summary": "x", "tags": [], "note": ""}')
+
+        with pytest.raises(InvalidStructuredOutputError):
+            await provider(fetcher).chat(chat_request(output_schema=limited))
+
+        sent = sent_body(fetcher)["response_format"]["json_schema"]["schema"]["properties"]
+        assert sent["summary"] == {
+            "type": "string",
+            "description": "At least 20 characters. At most 300 characters.",
+        }
+        assert sent["tags"]["description"] == "No item repeated."
+        assert sent["note"]["description"] == "Optional. At most 40 characters."
 
     async def test_a_dropped_keyword_is_still_enforced_on_the_answer(self):
         fetcher = reply('{"include": true, "reason": ""}')

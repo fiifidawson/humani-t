@@ -221,7 +221,7 @@ def _strict_copy(node: Any) -> Any:
             return None
     copy: dict[str, Any] = {}
     for key, value in node.items():
-        if key in _NOT_IN_STRICT:
+        if key in _NOT_IN_STRICT or key == "description":
             continue
         if key in ("properties", "$defs"):
             children = {name: _strict_copy(child) for name, child in value.items()}
@@ -235,7 +235,23 @@ def _strict_copy(node: Any) -> Any:
             copy[key] = child
         else:
             copy[key] = value
+    # The model reads descriptions, so a limit strict mode cannot carry is told in
+    # words; without it, gpt-5-mini wrote 724-character criteria against a 300 limit.
+    told = " ".join(part for part in (node.get("description"), *_limits_in_words(node)) if part)
+    if told:
+        copy["description"] = told
     return copy
+
+
+def _limits_in_words(node: Mapping[str, Any]) -> list[str]:
+    words: list[str] = []
+    if isinstance(node.get("minLength"), int) and node["minLength"] > 1:
+        words.append(f"At least {node['minLength']} characters.")
+    if isinstance(node.get("maxLength"), int):
+        words.append(f"At most {node['maxLength']} characters.")
+    if node.get("uniqueItems") is True:
+        words.append("No item repeated.")
+    return words
 
 
 def _first_choice(payload: Mapping[str, Any]) -> Mapping[str, Any]:
