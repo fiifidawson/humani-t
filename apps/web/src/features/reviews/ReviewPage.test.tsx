@@ -35,12 +35,27 @@ describe("the privacy receipt (UI_UX_SPEC §5.3.2, §8.5)", () => {
 		});
 
 		expect(screen.getByText("Sent with 1 item masked")).toBeInTheDocument();
+		expect(receipt).toHaveTextContent(/Sent to \S+/);
+		expect(within(receipt).getByText("Location 1")).toBeInTheDocument();
 		expect(within(receipt).getByText("masked location 1")).toBeInTheDocument();
+		expect(receipt).not.toHaveTextContent(/[⟨⟩]/);
 		expect(
-			within(receipt).getByText("Masked: 1 location."),
-		).toBeInTheDocument();
-		expect(receipt).toHaveTextContent("Masking is not anonymity");
+			within(receipt).getByRole("list", { name: "Masked" }),
+		).toHaveTextContent("1 location");
+		expect(receipt).toHaveTextContent("Double-check codes and numbers.");
 		expect(receipt).not.toHaveTextContent("Gao");
+	});
+
+	it("says plainly when the text went out but no answer came back", async () => {
+		const { api, review, path } = reviewIn("deep");
+		api.reviews.failDelivery(review);
+		renderApp(path);
+
+		const receipt = await screen.findByRole("region", {
+			name: "What the model received",
+		});
+
+		expect(receipt).toHaveTextContent("Sent, but no answer came back.");
 	});
 
 	it("says the text was sent as written when nothing was masked, folded to one line", async () => {
@@ -63,6 +78,22 @@ describe("the privacy receipt (UI_UX_SPEC §5.3.2, §8.5)", () => {
 		expect(
 			screen.getByRole("region", { name: "What the model received" }),
 		).toHaveTextContent("Do vouchers cost more to run?");
+	});
+});
+
+describe("who said what in the chat", () => {
+	it("marks the person's own question as theirs, and the planner's cards as the planner's", async () => {
+		const { path } = reviewIn("deep");
+		renderApp(path);
+
+		const question = await screen.findByRole("article", { name: "Question" });
+		const planner = await screen.findByRole("article", {
+			name: "Search planner · 2 questions before the search",
+		});
+
+		expect(question).toHaveAttribute("data-role", "person");
+		expect(within(question).getByText("You")).toBeInTheDocument();
+		expect(planner).toHaveAttribute("data-role", "humani-t");
 	});
 });
 

@@ -93,6 +93,9 @@ describe("the run strip in the chat (UI_UX_SPEC §5.3.5, §11.2)", () => {
 		expect(rows[1]).toHaveTextContent("Discover · Running");
 		expect(rows[2]).toHaveTextContent("Ingest · Not started");
 		expect(rows).toHaveLength(8);
+		expect(rows[1]).toHaveAttribute("aria-current", "step");
+		expect(rows[0]).not.toHaveAttribute("aria-current");
+		expect(rows[2]).not.toHaveAttribute("aria-current");
 		expect(
 			within(card).getByRole("link", { name: "Open run details" }),
 		).toBeInTheDocument();

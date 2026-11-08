@@ -8,9 +8,11 @@
 
 import { Box, Flex, Heading, IconButton } from "@chakra-ui/react";
 import { useNavigate } from "@tanstack/react-router";
-import { X } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useRef } from "react";
 import { HEADER_HEIGHT } from "../../shell/railStyles";
+import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
+import { useCanvasWidth } from "./canvasWidth";
 import { useReview } from "./reviewContext";
 
 /** Esc inside a dialog belongs to the dialog. */
@@ -31,6 +33,8 @@ export function Canvas({
 	const navigate = useNavigate();
 	const heading = useRef<HTMLHeadingElement>(null);
 	const id = useId();
+	const { isFullWidth, setFullWidth } = useCanvasWidth();
+	const isWide = useMediaQuery(WIDE_SCREEN);
 
 	const close = useCallback(
 		() =>
@@ -52,12 +56,17 @@ export function Canvas({
 				!event.defaultPrevented &&
 				!isInDialog(event.target)
 			) {
-				close();
+				// At full width, Esc gives the chat back first.
+				if (isFullWidth) {
+					setFullWidth(false);
+				} else {
+					close();
+				}
 			}
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [close]);
+	}, [close, isFullWidth, setFullWidth]);
 
 	return (
 		<Flex
@@ -101,6 +110,19 @@ export function Canvas({
 				>
 					{title}
 				</Heading>
+				{isWide ? (
+					<IconButton
+						variant="ghost"
+						rounded="card"
+						size="sm"
+						aria-label="Full width"
+						aria-pressed={isFullWidth}
+						title={isFullWidth ? "Show the chat again" : "Use the full width"}
+						onClick={() => setFullWidth(!isFullWidth)}
+					>
+						{isFullWidth ? <Minimize2 /> : <Maximize2 />}
+					</IconButton>
+				) : null}
 				<IconButton
 					variant="ghost"
 					rounded="card"

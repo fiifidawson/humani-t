@@ -65,25 +65,31 @@ export function spokenPlaceholder({ type, number }: Placeholder): string {
 	return `masked ${type.toLowerCase().replaceAll("_", " ")} ${number}`;
 }
 
-/** "LOCATION 1": what the pill shows. */
+/** "Location 1", "Medical record 2": what the pill shows. */
 export function shownPlaceholder({ type, number }: Placeholder): string {
-	return `${type.replaceAll("_", " ")} ${number}`;
+	const words = type.toLowerCase().replaceAll("_", " ");
+	return `${words.charAt(0).toUpperCase()}${words.slice(1)} ${number}`;
 }
 
 const LIST = new Intl.ListFormat("en-GB", { type: "conjunction" });
 
+/** Each type's count in words: ["1 location", "2 people"]. */
+export function maskedCountList(
+	counts: Readonly<Record<string, number>>,
+): string[] {
+	return Object.entries(counts)
+		.filter(([, count]) => count > 0)
+		.map(([type, count]) => {
+			const [one, many] = isEntityType(type)
+				? WORDS[type]
+				: [type.toLowerCase(), type.toLowerCase()];
+			return `${count} ${count === 1 ? one : many}`;
+		});
+}
+
 /** Counts by type in words: "1 location, 2 people and 1 phone number". */
 export function maskedCounts(counts: Readonly<Record<string, number>>): string {
-	return LIST.format(
-		Object.entries(counts)
-			.filter(([, count]) => count > 0)
-			.map(([type, count]) => {
-				const [one, many] = isEntityType(type)
-					? WORDS[type]
-					: [type.toLowerCase(), type.toLowerCase()];
-				return `${count} ${count === 1 ? one : many}`;
-			}),
-	);
+	return LIST.format(maskedCountList(counts));
 }
 
 export const totalMasked = (counts: Readonly<Record<string, number>>): number =>

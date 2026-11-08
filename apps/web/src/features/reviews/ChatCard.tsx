@@ -2,9 +2,15 @@
  * The frame every chat card shares (UI_UX_SPEC §5.2, §10.2 `ChatTurn`): a
  * heading that names the card, who made it, when, the body, and at most one
  * main action and two others. One-line forms (L0) use `ChatLine` instead.
+ *
+ * The tone says who is speaking, so a reader can tell them apart at a glance
+ * (UI_UX_SPEC §4.1 "Chat roles"): the person's own words on the right; what
+ * needs them with a blue bar; a problem with a purple bar and the word; the
+ * rest is Humani-T. Colour is never the only sign: an icon or a word goes too.
  */
 
 import { Box, Flex, Heading, Text, VisuallyHidden } from "@chakra-ui/react";
+import { CircleAlert, Hand } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { fullDate } from "../projects/format";
 import { relativeTime } from "./format";
@@ -20,11 +26,63 @@ interface ChatCardProps {
 }
 
 const TONES = {
-	plain: { bg: "bg.panel", borderColor: "border" },
-	person: { bg: "bg.muted", borderColor: "border" },
-	warning: { bg: "caveat.subtle", borderColor: "border.warning" },
-	error: { bg: "danger.subtle", borderColor: "border.error" },
+	plain: { role: "humani-t", bg: "bg.panel", borderColor: "border" },
+	person: {
+		role: "person",
+		bg: "benefit.bg",
+		borderColor: "transparent",
+		ms: "auto",
+		maxW: "85%",
+	},
+	warning: {
+		role: "needs-you",
+		bg: "bg.panel",
+		borderColor: "border",
+		borderStartWidth: "4px",
+		borderStartColor: "brand.solid",
+	},
+	error: {
+		role: "problem",
+		bg: "bg.panel",
+		borderColor: "border",
+		borderStartWidth: "4px",
+		borderStartColor: "danger.solid",
+	},
 } as const;
+
+function RoleMark({ tone }: { tone: keyof typeof TONES }) {
+	if (tone === "person") {
+		return (
+			<Text as="span" fontSize="xs" fontWeight="semibold" color="fg">
+				You
+			</Text>
+		);
+	}
+	if (tone === "warning") {
+		return (
+			<Box as="span" color="brand.fg" aria-hidden="true" alignSelf="center">
+				<Hand size={14} />
+			</Box>
+		);
+	}
+	if (tone === "error") {
+		return (
+			<Flex
+				as="span"
+				align="center"
+				gap="1"
+				color="danger.fg"
+				fontSize="xs"
+				fontWeight="semibold"
+				alignSelf="center"
+			>
+				<CircleAlert size={14} aria-hidden="true" />
+				Problem
+			</Flex>
+		);
+	}
+	return null;
+}
 
 /** "5 min ago" to see, the full date and time on hover and for screen readers (§5.2). */
 export function When({ at }: { at: string }) {
@@ -45,17 +103,20 @@ export function ChatCard({
 	actions,
 }: ChatCardProps) {
 	const id = useId();
+	const { role, ...look } = TONES[tone];
 	return (
 		<Box
 			as="article"
 			aria-labelledby={id}
+			data-role={role}
 			px="4"
 			py="3"
 			rounded="card"
 			borderWidth="1px"
-			{...TONES[tone]}
+			{...look}
 		>
 			<Flex as="header" align="baseline" gap="2" wrap="wrap" mb="1.5">
+				<RoleMark tone={tone} />
 				<Heading
 					as="h2"
 					id={id}

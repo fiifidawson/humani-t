@@ -1,4 +1,4 @@
-import { act, cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import { renderApp } from "../../test/render";
@@ -149,5 +149,65 @@ describe("resizing the source panel", () => {
 
 		await user.keyboard("{End}");
 		expect(width(handle)).toBe(640);
+	});
+});
+
+describe("a panel at full width", () => {
+	it("takes the whole workspace and gives the chat back", async () => {
+		const { path } = planned();
+		const { user } = renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+		const toggle = within(canvas).getByRole("button", { name: "Full width" });
+		expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+		await user.click(toggle);
+
+		expect(toggle).toHaveAttribute("aria-pressed", "true");
+		expect(
+			screen.queryByRole("log", { name: "Project conversation" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+
+		await user.click(toggle);
+
+		expect(
+			screen.getByRole("log", { name: "Project conversation" }),
+		).toBeInTheDocument();
+	});
+
+	it("gives the chat back on Esc before closing the panel on a second Esc", async () => {
+		const { path } = planned();
+		const { user } = renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+		await user.click(
+			within(canvas).getByRole("button", { name: "Full width" }),
+		);
+
+		await user.keyboard("{Escape}");
+
+		expect(
+			screen.getByRole("region", { name: /Search draft/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("log", { name: "Project conversation" }),
+		).toBeInTheDocument();
+
+		await user.keyboard("{Escape}");
+
+		await screen.findByRole("log", { name: "Project conversation" });
+		expect(
+			screen.queryByRole("region", { name: /Search draft/ }),
+		).not.toBeInTheDocument();
+	});
+
+	it("is not offered on a phone, where the panel already fills the screen", async () => {
+		setScreenWidth(400);
+		const { path } = planned();
+		renderApp(`${path}/draft`);
+		const canvas = await screen.findByRole("region", { name: /Search draft/ });
+
+		expect(
+			within(canvas).queryByRole("button", { name: "Full width" }),
+		).not.toBeInTheDocument();
 	});
 });

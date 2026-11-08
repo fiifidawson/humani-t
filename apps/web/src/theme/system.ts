@@ -204,10 +204,12 @@ const config = defineConfig({
 					emphasized: ["#E8BDCB", "#521B33"],
 					focusRing: [BRAND.lightPurple, "#F08BA8"],
 				}),
+				// Yellow marks a caution with an icon or a bar, never the words: ink
+				// text reads better, and yellow text fails contrast on white.
 				caveat: palette({
 					solid: [BRAND.darkYellow, BRAND.darkYellow],
 					contrast: ["#0A1633", "#06102A"],
-					fg: ["#5C3D00", BRAND.lightYellow],
+					fg: ["#0A1633", BRAND.eggshell],
 					subtle: ["#FDF4DC", "#241D08"],
 					muted: ["#FAE8B8", "#3A2E0C"],
 					emphasized: ["#F6D54D", "#4D3D10"],
@@ -219,7 +221,7 @@ const config = defineConfig({
 					line: mode(BRAND.darkBlue, BRAND.lightBlue),
 				},
 				risk: {
-					fg: mode("#7A4800", BRAND.darkYellow),
+					fg: mode("#0A1633", BRAND.eggshell),
 					bg: mode("#FBEFDA", "#2A1E08"),
 					line: mode(BRAND.darkYellow, BRAND.darkYellow),
 				},

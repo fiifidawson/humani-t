@@ -16,9 +16,9 @@ import {
 	Table,
 	Text,
 } from "@chakra-ui/react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -235,66 +235,224 @@ function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 	);
 }
 
-const PRISMA_ROWS: readonly [keyof Schemas["PrismaOut"], string][] = [
-	["identified", "Identified"],
-	["duplicates_removed", "Duplicates removed"],
-	["after_deduplication", "After removing duplicates"],
-	["screened", "Screened"],
-	["included", "Included"],
-	["excluded", "Excluded"],
-	["uncertain", "Uncertain"],
-	["not_screened", "Not screened (skipped or failed)"],
-];
+interface FlowNote {
+	text: string;
+	count: number;
+	/** The table filter this count opens, if any. */
+	label?: PaperLabel;
+}
 
-function PrismaCounts({ runId }: { runId: string }) {
+/**
+ * The PRISMA 2020 flow (prisma-statement.org/prisma-2020-flow-diagram): each
+ * step's count, and what left the review at that step beneath it. The steps and
+ * the counts that match a filter are buttons that show those papers.
+ */
+function PrismaFlow({
+	runId,
+	onShow,
+}: {
+	runId: string;
+	onShow: (label: PaperLabel) => void;
+}) {
 	const api = useApi();
 	const { review } = useReview();
-	const [isOpen, setOpen] = useState(false);
 	const id = useId();
-	const prisma = useQuery({
-		...prismaQuery(api, review.id, runId),
-		enabled: isOpen,
-	});
+	const prisma = useQuery(prismaQuery(api, review.id, runId));
+	if (prisma.isError) {
+		return <ErrorNotice error={prisma.error} />;
+	}
+	if (prisma.data === undefined) {
+		return <Loading what="the PRISMA counts" />;
+	}
+	const counts = prisma.data;
+	const steps: {
+		name: string;
+		count: number;
+		label?: PaperLabel;
+		notes: FlowNote[];
+	}[] = [
+		{ name: "Identified", count: counts.identified, notes: [] },
+		{
+			name: "Unique",
+			count: counts.after_deduplication,
+			notes: [
+				{
+					text: `${plural(counts.duplicates_removed, "duplicate")} removed`,
+					count: counts.duplicates_removed,
+				},
+			],
+		},
+		{
+			name: "Screened",
+			count: counts.screened,
+			notes: [
+				{
+					text: `${counts.not_screened} not screened`,
+					count: counts.not_screened,
+					label: "unscreened",
+				},
+			],
+		},
+		{
+			name: "Included",
+			count: counts.included,
+			label: "include",
+			notes: [
+				{
+					text: `${counts.excluded} excluded`,
+					count: counts.excluded,
+					label: "exclude",
+				},
+				{
+					text: `${counts.uncertain} uncertain`,
+					count: counts.uncertain,
+					label: "uncertain",
+				},
+			],
+		},
+	];
 	return (
-		<Box mt="6">
-			<DisclosureButton
-				isOpen={isOpen}
-				controls={id}
-				onToggle={() => setOpen(!isOpen)}
+		<Box
+			as="section"
+			aria-labelledby={id}
+			mb="5"
+			p="4"
+			rounded="card"
+			borderWidth="1px"
+			borderColor="border"
+			bg="bg.subtle"
+		>
+			<Text id={id} fontSize="xs" fontWeight="semibold" color="fg.muted" mb="3">
+				PRISMA flow
+			</Text>
+			<chakra.ol
+				aria-labelledby={id}
+				display="flex"
+				alignItems="flex-start"
+				listStyleType="none"
+				p="0"
+				m="0"
 			>
-				Show PRISMA counts
-			</DisclosureButton>
-			{isOpen ? (
-				<Box id={id} mt="3">
-					{prisma.isError ? (
-						<ErrorNotice error={prisma.error} />
-					) : prisma.data === undefined ? (
-						<Loading what="the PRISMA counts" />
-					) : (
-						<Table.Root size="sm" maxW="md">
-							<Table.Caption captionSide="top" textAlign="start" mb="2">
-								PRISMA counts
-							</Table.Caption>
-							<Table.Body>
-								{PRISMA_ROWS.map(([key, name]) => (
-									<Table.Row key={key}>
-										<Table.Cell as="th" scope="row" fontWeight="normal">
-											{name}
-										</Table.Cell>
-										<Table.Cell
-											textAlign="end"
-											fontVariantNumeric="tabular-nums"
-										>
-											{String(prisma.data[key])}
-										</Table.Cell>
-									</Table.Row>
+				{steps.map((step, index) => (
+					<chakra.li
+						key={step.name}
+						display="flex"
+						alignItems="flex-start"
+						flex="1"
+						minW="0"
+					>
+						{index > 0 ? (
+							<Flex
+								aria-hidden="true"
+								flex="none"
+								h="16"
+								px="1.5"
+								align="center"
+								color="fg.muted"
+							>
+								<ArrowRight size={16} />
+							</Flex>
+						) : null}
+						<Box flex="1" minW="0">
+							<FlowBox step={step} onShow={onShow} />
+							<Flex direction="column" align="flex-start" gap="1" mt="2">
+								{step.notes.map((note) => (
+									<FlowNoteItem key={note.text} note={note} onShow={onShow} />
 								))}
-							</Table.Body>
-						</Table.Root>
-					)}
-				</Box>
-			) : null}
+							</Flex>
+						</Box>
+					</chakra.li>
+				))}
+			</chakra.ol>
 		</Box>
+	);
+}
+
+function FlowBox({
+	step,
+	onShow,
+}: {
+	step: { name: string; count: number; label?: PaperLabel };
+	onShow: (label: PaperLabel) => void;
+}) {
+	const isFilter = step.label !== undefined;
+	const box = (
+		<Flex
+			data-step=""
+			direction="column-reverse"
+			justify="center"
+			minH="16"
+			px="3"
+			py="2"
+			rounded="card"
+			borderWidth="1px"
+			borderColor={isFilter ? "brand.solid" : "border"}
+			bg={isFilter ? "benefit.bg" : "bg.panel"}
+			textAlign="start"
+			transition="background-color 0.15s ease"
+			_hover={isFilter ? { bg: "bg.muted" } : {}}
+		>
+			<Text as="span" fontSize="xs" color="fg.muted" lineHeight="1.3">
+				{step.name}
+			</Text>
+			<Text
+				as="span"
+				fontSize="xl"
+				fontWeight="semibold"
+				lineHeight="1.2"
+				fontVariantNumeric="tabular-nums"
+			>
+				{step.count}
+			</Text>
+		</Flex>
+	);
+	if (step.label === undefined) {
+		return box;
+	}
+	const label = step.label;
+	return (
+		<chakra.button
+			type="button"
+			display="block"
+			w="full"
+			p="0"
+			bg="transparent"
+			border="0"
+			cursor="pointer"
+			aria-label={`${step.name} ${step.count}: show these papers`}
+			onClick={() => onShow(label)}
+		>
+			{box}
+		</chakra.button>
+	);
+}
+
+function FlowNoteItem({
+	note,
+	onShow,
+}: {
+	note: FlowNote;
+	onShow: (label: PaperLabel) => void;
+}) {
+	const label = note.label;
+	if (label === undefined || note.count === 0) {
+		return (
+			<Text fontSize="xs" color="fg.muted" ps="1">
+				{note.text}
+			</Text>
+		);
+	}
+	return (
+		<Button
+			size="2xs"
+			variant="outline"
+			rounded="pill"
+			fontWeight="normal"
+			onClick={() => onShow(label)}
+		>
+			{note.text}
+			<ChevronRight />
+		</Button>
 	);
 }
 
@@ -310,6 +468,9 @@ export function PapersCanvas() {
 	const papers = useQuery({
 		...papersQuery(api, review.id, { runId: runId ?? "", label, page }),
 		enabled: runId !== undefined,
+		// A new filter or page keeps the current rows until its own arrive, so
+		// the panel does not flash empty with every click.
+		placeholderData: keepPreviousData,
 	});
 
 	if (runId === undefined) {
@@ -355,6 +516,10 @@ export function PapersCanvas() {
 
 	return (
 		<Canvas title={title}>
+			<PrismaFlow
+				runId={papers.data.run_id}
+				onShow={(shown) => go({ label: shown, page: undefined })}
+			/>
 			<Flex role="group" aria-label="Show" gap="2" wrap="wrap">
 				{FILTERS.map((filter) => (
 					<Button
@@ -432,7 +597,6 @@ export function PapersCanvas() {
 				Each paper's abstract was screened against the plan's criteria by the
 				model. Open a row to see why it got its label.
 			</Text>
-			<PrismaCounts runId={papers.data.run_id} />
 		</Canvas>
 	);
 }

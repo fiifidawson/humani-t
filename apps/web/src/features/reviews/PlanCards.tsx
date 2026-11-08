@@ -10,12 +10,15 @@ import {
 	Button,
 	Link as ChakraLink,
 	chakra,
+	Flex,
+	Stack,
 	Text,
 } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
 	Check,
+	CircleAlert,
 	FastForward,
 	FileText,
 	Info,
@@ -36,7 +39,7 @@ import { ChatCard, ChatLine } from "./ChatCard";
 import { modeLabel, type PlanMode, plural } from "./format";
 import { MaskedText } from "./MaskedText";
 import { ModeChoice } from "./ModeChoice";
-import { maskedCounts, totalMasked } from "./masking";
+import { maskedCountList, totalMasked } from "./masking";
 import { useReview, type Version } from "./reviewContext";
 
 type Schemas = components["schemas"];
@@ -165,39 +168,109 @@ export function PrivacyReceipt({
 					id={`${id}-sent`}
 					aria-labelledby={`${id}-title`}
 					mt="2"
-					px="4"
-					py="3"
 					rounded="card"
 					borderWidth="1px"
 					borderColor="border"
 					bg="bg.panel"
 					fontSize="sm"
-					css={{ "& > * + *": { mt: "2" } }}
+					overflow="hidden"
 				>
-					<Text id={`${id}-title`} fontWeight="medium">
-						What the model received
-					</Text>
-					<MaskedText text={item.sent} />
-					{total > 0 ? (
-						<>
-							<Text>Masked: {maskedCounts(item.counts)}.</Text>
-							<Text color="caveat.fg">
-								Masking is not anonymity: check codes and numbers yourself.
-							</Text>
-						</>
-					) : null}
-					{receipt.delivered ? null : (
-						<Text color="caveat.fg">
-							The call to the model failed after the text was sent, so it may
-							still have been read.
+					<Flex
+						align="center"
+						justify="space-between"
+						gap="3"
+						wrap="wrap"
+						px="4"
+						py="2"
+						bg="bg.subtle"
+						borderBottomWidth="1px"
+						borderColor="border"
+					>
+						<Text id={`${id}-title`} fontWeight="semibold">
+							What the model received
 						</Text>
-					)}
-					<Text fontSize="xs" color="fg.muted">
-						Sent to {receipt.model_id}
-					</Text>
+						<Text fontSize="xs" color="fg.muted">
+							Sent to {receipt.model_id}
+						</Text>
+					</Flex>
+					<Stack gap="3" px="4" py="3">
+						<Box
+							ps="3"
+							borderStartWidth="3px"
+							borderColor="border.emphasized"
+							color="fg"
+						>
+							<MaskedText text={item.sent} />
+						</Box>
+						{total > 0 ? <MaskedCounts counts={item.counts} /> : null}
+						{total > 0 ? (
+							<Note icon={<Info size={14} />}>
+								Double-check codes and numbers.
+							</Note>
+						) : null}
+						{receipt.delivered ? null : (
+							<Note icon={<CircleAlert size={14} />}>
+								Sent, but no answer came back.
+							</Note>
+						)}
+					</Stack>
 				</Box>
 			) : null}
 		</Box>
+	);
+}
+
+function Note({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+	return (
+		<Text
+			display="flex"
+			gap="1.5"
+			alignItems="center"
+			fontSize="xs"
+			color="fg.muted"
+		>
+			{icon}
+			{children}
+		</Text>
+	);
+}
+
+function MaskedCounts({
+	counts,
+}: {
+	counts: Readonly<Record<string, number>>;
+}) {
+	const id = useId();
+	return (
+		<Flex align="center" gap="2" wrap="wrap">
+			<Text id={id} fontSize="xs" color="fg.muted">
+				Masked
+			</Text>
+			<chakra.ul
+				role="list"
+				aria-labelledby={id}
+				display="flex"
+				flexWrap="wrap"
+				gap="1.5"
+				listStyleType="none"
+				p="0"
+				m="0"
+			>
+				{maskedCountList(counts).map((words) => (
+					<chakra.li
+						key={words}
+						px="2"
+						rounded="sm"
+						bg="masked.bg"
+						color="masked.fg"
+						fontSize="xs"
+						fontWeight="semibold"
+					>
+						{words}
+					</chakra.li>
+				))}
+			</chakra.ul>
+		</Flex>
 	);
 }
 

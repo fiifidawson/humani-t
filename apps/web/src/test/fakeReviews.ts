@@ -301,6 +301,13 @@ export class FakeReviews {
 		return version;
 	}
 
+	/** The model call behind every receipt so far failed after the text was sent. */
+	failDelivery(review: Review): void {
+		for (const receipt of this.plans.get(review.id)?.receipts ?? []) {
+			receipt.delivered = false;
+		}
+	}
+
 	accept(review: Review): void {
 		const current = this.plans.get(review.id)?.versions.at(-1);
 		if (current !== undefined) {

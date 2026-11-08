@@ -1,6 +1,6 @@
 /**
- * Masked text with each placeholder drawn as a pill (UI_UX_SPEC §5.3.2, §8.5):
- * a dashed border and the type spelled out, read as "masked location 1".
+ * Masked text with each placeholder drawn as a small tag (UI_UX_SPEC §5.3.2,
+ * §8.5): "Location 1" on a tinted rectangle, read as "masked location 1".
  */
 
 import { chakra, Text, VisuallyHidden } from "@chakra-ui/react";
@@ -11,16 +11,14 @@ const Pill = chakra("span", {
 		display: "inline-block",
 		px: "1.5",
 		mx: "0.5",
-		rounded: "pill",
-		borderWidth: "1px",
-		borderStyle: "dashed",
-		borderColor: "masked.line",
+		rounded: "sm",
 		bg: "masked.bg",
 		color: "masked.fg",
 		fontSize: "0.85em",
-		fontWeight: "medium",
+		fontWeight: "semibold",
 		lineHeight: "1.5",
 		whiteSpace: "nowrap",
+		verticalAlign: "baseline",
 	},
 });
 
@@ -44,7 +42,7 @@ export function MaskedText({
 				) : (
 					// biome-ignore lint/suspicious/noArrayIndexKey: parts have no identity but their place
 					<Pill key={index}>
-						<span aria-hidden="true">⟨{shownPlaceholder(part)}⟩</span>
+						<span aria-hidden="true">{shownPlaceholder(part)}</span>
 						<VisuallyHidden>{spokenPlaceholder(part)}</VisuallyHidden>
 					</Pill>
 				),

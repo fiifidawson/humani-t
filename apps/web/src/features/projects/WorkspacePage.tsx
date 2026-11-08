@@ -275,7 +275,13 @@ export function WorkspacePage() {
 						size="workspace"
 					/>
 				</Box>
-				<Badge variant="outline" colorPalette="gray" flex="none">
+				<Badge
+					variant="outline"
+					colorPalette="gray"
+					color="fg"
+					borderColor="border.emphasized"
+					flex="none"
+				>
 					{roleLabel(project.data.role)}
 				</Badge>
 			</Flex>
