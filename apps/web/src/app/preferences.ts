@@ -116,11 +116,11 @@ export interface PanelLimits {
 }
 
 /**
- * Widths in CSS pixels. The chat's are as drawn, after its 75% zoom; the most
- * it can take still leaves the canvas room for a readable column.
+ * Widths in the zoomed page's CSS pixels (COMPACT_ZOOM): the chat's 640 shows
+ * as 480 on screen. The most it can take still leaves the canvas a readable column.
  */
 export const PANEL_LIMITS: Readonly<Record<PanelName, PanelLimits>> = {
-	chat: { initial: 480, min: 320, max: 720 },
+	chat: { initial: 640, min: 440, max: 960 },
 	source: { initial: 400, min: 320, max: 640 },
 };
 

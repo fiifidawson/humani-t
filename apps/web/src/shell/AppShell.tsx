@@ -22,7 +22,7 @@ import { LabMark, ProjectMark } from "../ui/Brand";
 import { SiteFooter } from "../ui/SiteFooter";
 import { SkipLink } from "../ui/SkipLink";
 import { Rail } from "./Rail";
-import { HEADER_HEIGHT } from "./railStyles";
+import { COMPACT_ZOOM, HEADER_HEIGHT } from "./railStyles";
 import { useShortcuts } from "./useShortcuts";
 
 function SignedOutBanner() {
@@ -70,8 +70,7 @@ function Header({ isDrawerOpen, onOpenMenu }: HeaderProps) {
 	return (
 		<Flex
 			as="header"
-			position="sticky"
-			top="0"
+			flex="none"
 			zIndex="20"
 			h={HEADER_HEIGHT}
 			px={{ base: "4", md: "6" }}
@@ -125,13 +124,21 @@ export function AppShell() {
 	const isWorkspace = location.pathname.startsWith("/p/");
 
 	return (
-		<Flex direction="column" minH="100%">
+		// One zoom for the signed-in app (COMPACT_ZOOM). Heights are percentages of
+		// the window, never 100vh: zoom scales viewport units too, which would leave
+		// a gap at the bottom. The page itself never scrolls; its content area does.
+		<Flex
+			direction="column"
+			h="100%"
+			overflow="hidden"
+			css={{ zoom: COMPACT_ZOOM }}
+		>
 			<SkipLink href="#main">Skip to main content</SkipLink>
 			<Header
 				isDrawerOpen={isDrawerOpen}
 				onOpenMenu={() => setDrawerOpen(true)}
 			/>
-			<Flex flex="1">
+			<Flex flex="1" minH="0">
 				<Rail
 					isFolded={isFolded}
 					isDrawerOpen={isDrawerOpen}
@@ -152,7 +159,13 @@ export function AppShell() {
 						onClick={closeDrawer}
 					/>
 				) : null}
-				<Flex direction="column" flex="1" minW="0">
+				<Flex
+					direction="column"
+					flex="1"
+					minW="0"
+					position="relative"
+					overflowY="auto"
+				>
 					<SignedOutBanner />
 					<Box
 						as="main"

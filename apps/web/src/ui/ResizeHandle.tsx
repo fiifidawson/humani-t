@@ -17,6 +17,12 @@ import { clampWidth, type PanelLimits } from "../app/preferences";
 
 const KEY_STEP = 16;
 
+/** The CSS zoom in effect on an element; 1 where the browser cannot say. */
+function zoomOf(element: Element): number {
+	const zoom: unknown = Reflect.get(element, "currentCSSZoom");
+	return typeof zoom === "number" && zoom > 0 ? zoom : 1;
+}
+
 const Handle = chakra("div", {
 	base: {
 		position: "relative",
@@ -80,9 +86,14 @@ export function ResizeHandle({
 		event.preventDefault();
 		const startX = event.clientX;
 		const startWidth = width;
+		// The pointer moves in screen pixels; the width is in the zoomed page's.
+		const scale = zoomOf(event.currentTarget);
 		const move = (moved: globalThis.PointerEvent) =>
 			onResize(
-				clampWidth(startWidth + outwards * (moved.clientX - startX), limits),
+				clampWidth(
+					startWidth + (outwards * (moved.clientX - startX)) / scale,
+					limits,
+				),
 			);
 		const stop = () => {
 			window.removeEventListener("pointermove", move);
