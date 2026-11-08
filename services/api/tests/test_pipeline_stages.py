@@ -19,6 +19,7 @@ import structlog
 from app.application import screening
 from app.domain.discovery import TextKind
 from app.domain.encryption import KeyDestroyedError
+from app.domain.inference import InferenceRateLimitedError
 from app.domain.runs import JsonValue, RunState
 from app.domain.screening import (
     UNREADABLE_RATIONALE,
@@ -506,6 +507,22 @@ class TestScreen:
         run_id = _run(p)
 
         assert all(d.is_unreadable for d in _decisions(p, run_id))
+
+    def test_a_rate_limited_model_stops_screening_saying_so_and_keeps_decisions(self):
+        p = make_pipeline()
+        p.model = ObservedInference(
+            reasonable_answer,
+            fail_with=InferenceRateLimitedError("the model server's rate limit was reached"),
+            fail_after=2,
+        )
+
+        run_id = _run(p)
+
+        assert p.failure(run_id) == (
+            "The model service's rate limit was reached. Papers screened so far are kept; "
+            "wait a minute, then run it again."
+        )
+        assert len(_decisions(p, run_id)) == 2
 
     def test_a_model_server_that_is_down_fails_the_stage_plainly_and_keeps_decisions(self):
         p = make_pipeline()

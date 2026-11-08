@@ -12,13 +12,15 @@ the fetcher attaches for the one configured host.
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from app.domain.inference import (
     ChatRequest,
     ChatResult,
+    InferenceRateLimitedError,
     InferenceUnavailableError,
     InvalidStructuredOutputError,
     TokenUsage,
@@ -28,10 +30,18 @@ from app.net.base import FetchRequest, FetchResponse, HttpFetcher, OutboundError
 
 
 class OpenAICompatibleInferenceProvider:
-    def __init__(self, fetcher: HttpFetcher, *, base_url: str, model: str) -> None:
+    def __init__(
+        self,
+        fetcher: HttpFetcher,
+        *,
+        base_url: str,
+        model: str,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self._fetcher = fetcher
         self._chat_url = base_url.rstrip("/") + "/chat/completions"
         self._model = model
+        self._sleep = sleep
         self._refused_settings: set[str] = set()
 
     @property
@@ -40,10 +50,10 @@ class OpenAICompatibleInferenceProvider:
 
     async def chat(self, request: ChatRequest) -> ChatResult:
         check_schema(request.output_schema)
-        response = await self._post(request)
+        response = await self._post_patiently(request)
         while (refused := _refused_setting(response)) and refused not in self._refused_settings:
             self._refused_settings.add(refused)
-            response = await self._post(request)
+            response = await self._post_patiently(request)
         payload = self._payload(response)
         choice = _first_choice(payload)
         if choice.get("finish_reason") == "length":
@@ -60,6 +70,15 @@ class OpenAICompatibleInferenceProvider:
                 completion_tokens=_count(counts.get("completion_tokens")),
             ),
         )
+
+    async def _post_patiently(self, request: ChatRequest) -> FetchResponse:
+        """Post, and on a rate limit wait and post again, a few times at most."""
+        for attempt in range(_RATE_LIMIT_RETRIES + 1):
+            response = await self._post(request)
+            if response.status != 429 or attempt == _RATE_LIMIT_RETRIES:
+                return response
+            await self._sleep(_wait_before_retry(response, attempt))
+        raise AssertionError("unreachable: the last attempt returns")
 
     async def _post(self, request: ChatRequest) -> FetchResponse:
         try:
@@ -100,12 +119,28 @@ class OpenAICompatibleInferenceProvider:
         if response.status == 404:
             raise InferenceUnavailableError(f"the model server does not have {self._model!r}")
         if response.status == 429:
-            raise InferenceUnavailableError("the model server's rate limit was reached")
+            raise InferenceRateLimitedError("the model server's rate limit was reached")
         if not response.is_success:
             raise InferenceUnavailableError(f"the model server answered HTTP {response.status}")
         if not isinstance(payload, dict):
             raise InferenceUnavailableError("the model server's answer is not a JSON object")
         return payload
+
+
+# A rate limit is "not now": OpenAI's own clients wait and retry. Its Retry-After
+# hint is followed up to a cap, so one long hint cannot stall a run for minutes.
+_RATE_LIMIT_RETRIES = 3
+_LONGEST_WAIT_SECONDS = 30.0
+
+
+def _wait_before_retry(response: FetchResponse, attempt: int) -> float:
+    """The server's Retry-After if it gives one, else 2, 4, 8 seconds."""
+    hint = response.headers.get("retry-after")
+    try:
+        seconds = float(hint) if hint is not None else float(2 ** (attempt + 1))
+    except ValueError:
+        seconds = float(2 ** (attempt + 1))
+    return min(max(seconds, 0.0), _LONGEST_WAIT_SECONDS)
 
 
 # Sampling settings a model may refuse: OpenAI's reasoning models (GPT-5, o-series)
