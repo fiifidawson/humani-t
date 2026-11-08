@@ -131,6 +131,32 @@ This phase gives humani-t its way out to the world, and makes it safe. Every req
 - **Why:** a test suite that calls the internet is slow, flaky and itself an outbound leak. A fake that returns a fixed list proves nothing; recorded bodies keep each source's real shape.
 - **Costs:** recordings age. The live test is how we notice.
 
+### D9.15 Reasoning models answer without thinking first (2026-11-08)
+
+- **Decision:** the Ollama request carries `"think": false`.
+- **Why:** reasoning models such as `qwen3.5` think before every answer by default. Only the schema-checked answer is kept, so the reasoning is discarded. On a laptop CPU, a five-term answer took 308 s with thinking and 11 s without it, and planning failed at the 300 s limit. Models that cannot think accept the flag (checked with `smollm2`).
+- **Where:** [`app/inference/ollama.py`](../../services/api/app/inference/ollama.py).
+- **Proven by:** `tests/test_inference.py::TestOllama::test_it_asks_a_reasoning_model_to_answer_without_thinking_first`.
+
+### D9.16 OpenAI-compatible model servers, a hosted one as an opt-in (2026-11-08)
+
+- **Decision:** `inference_api` chooses Ollama's API (the default) or OpenAI's Chat Completions, which covers OpenAI, Azure OpenAI, Mistral, Groq, vLLM and llama.cpp. A hosted host still needs `allow_hosted_inference`. The provider:
+  - uses **strict structured output** whenever a schema allows it;
+  - leaves out the keywords strict mode refuses (`minLength`, `maxLength`, `uniqueItems`), but **states them in the field's description** ("At most 300 characters."), and still enforces them on the answer;
+  - **drops a sampling setting the model refuses** (GPT-5 takes only its default temperature) and remembers that for later calls;
+  - **waits and retries on a rate limit**, up to three times, following `Retry-After` up to 30 s, then raises `InferenceRateLimitedError`.
+- **Why:** a laptop CPU took one to three minutes per screened paper. Without the description, `gpt-5-mini` wrote 724-character criteria against a 300-character limit, failing two drafts in three.
+- **Rejected and costs:** see [ADR 0010](../adr/0010-openai-compatible-models-as-an-opt-in.md).
+- **Where:** [`app/inference/openai_compatible.py`](../../services/api/app/inference/openai_compatible.py), [`app/api/dependencies.py`](../../services/api/app/api/dependencies.py) (`inference_provider`).
+- **Proven by:** `tests/test_inference_openai.py`, `tests/test_outbound_wiring.py::TestInference`, `tests/test_settings.py::TestInferenceDestination`.
+
+### D9.17 A search that finds nothing stops the run at Discover (2026-11-08)
+
+- **Decision:** when the sources answer but return no papers, Discover fails with "The search found no papers. Ask for changes to broaden it, then run it again."
+- **Why:** the run used to carry on with nothing, and the brief reported it as a screening result. It happened when a masked place ("[PERSON_1]" for the Sahel) led the planner to invent an unmatched geography term.
+- **Where:** [`app/application/pipeline.py`](../../services/api/app/application/pipeline.py) (`NOTHING_FOUND`).
+- **Proven by:** `tests/test_pipeline_stages.py::TestDiscover::test_a_search_that_finds_nothing_stops_the_run_here_and_says_so`.
+
 ## Libraries
 
 ### httpx2 2.12.0 (with httpcore2 2.12.0)
