@@ -97,6 +97,11 @@ class TestAnyEnvironment:
         assert "pw@" not in repr(settings)
 
 
+class TestCountriesAndRegionsSetting:
+    def test_countries_and_regions_are_masked_unless_the_operator_says_otherwise(self):
+        assert Settings(environment=Environment.TEST).mask_countries_and_regions is True
+
+
 class TestInferenceDestination:
     """The model server is the operator's choice, and a hosted API is never a default."""
 

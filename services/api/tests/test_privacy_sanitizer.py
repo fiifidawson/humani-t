@@ -15,7 +15,7 @@ from typing import ClassVar
 
 import pytest
 
-from app.api.dependencies import ner_detectors, prompt_guard
+from app.api.dependencies import ner_detectors, planning_sanitizer, prompt_guard
 from app.application.inference import GuardedInference
 from app.domain.inference import ChatMessage, ChatRequest, ChatRole, PromptRefusedError
 from app.domain.masking import (
@@ -65,6 +65,63 @@ NAMES = FakeDetector(
 
 def sanitizer(entity_types=QUESTION_ENTITY_TYPES) -> DetectorSanitizer:
     return DetectorSanitizer([PatternDetector(), NAMES], entity_types=entity_types)
+
+
+# The local name model labels "Sahel" and "Niger" as people (checked 2026-11-08
+# with en_core_web_sm); the fake reproduces that.
+PLACES = FakeDetector(
+    {
+        "Sahel": EntityType.PERSON,
+        "Mali": EntityType.LOCATION,
+        "Kakuma": EntityType.LOCATION,
+        "Amina Yusuf": EntityType.PERSON,
+    }
+)
+QUESTION = "Did cash help Amina Yusuf in Kakuma, Mali, and across the Sahel?"
+
+
+class TestCountriesAndRegions:
+    """An operator setting, off by default (ADR 0011)."""
+
+    async def test_by_default_countries_and_regions_are_masked_like_any_place(self):
+        masker = DetectorSanitizer([PLACES], entity_types=QUESTION_ENTITY_TYPES)
+
+        result = await masker.mask(QUESTION, rules=[])
+
+        assert "Mali" not in result.masked
+        assert "Sahel" not in result.masked
+
+    async def test_when_kept_countries_and_regions_stay_and_everything_smaller_is_masked(self):
+        masker = DetectorSanitizer(
+            [PLACES], entity_types=QUESTION_ENTITY_TYPES, keeps_countries_and_regions=True
+        )
+
+        result = await masker.mask(QUESTION, rules=[])
+
+        assert result.masked == (
+            "Did cash help [PERSON_1] in [LOCATION_1], Mali, and across the Sahel?"
+        )
+
+    async def test_a_project_rule_still_masks_a_kept_name(self):
+        masker = DetectorSanitizer(
+            [PLACES], entity_types=QUESTION_ENTITY_TYPES, keeps_countries_and_regions=True
+        )
+
+        result = await masker.mask(QUESTION, rules=[rule("Mali", EntityType.LOCATION)])
+
+        assert "Mali" not in result.masked
+        assert "Sahel" in result.masked
+
+    @pytest.mark.parametrize("is_kept", [False, True])
+    def test_the_planning_sanitizer_follows_the_operators_setting(self, is_kept):
+        settings = Settings(
+            environment=Environment.TEST, mask_countries_and_regions=not is_kept
+        )
+
+        masker = planning_sanitizer(settings, (PLACES,))
+
+        assert isinstance(masker, DetectorSanitizer)
+        assert masker.keeps_countries_and_regions is is_kept
 
 
 class TestFakeDetector:

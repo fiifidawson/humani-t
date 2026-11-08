@@ -361,8 +361,13 @@ _QUERY_COMPILERS: Mapping[str, QueryCompiler] = {
 }
 
 
-def _planning_sanitizer(ner: tuple[Detector, ...]) -> Sanitizer:
-    return DetectorSanitizer((PatternDetector(), *ner), entity_types=QUESTION_ENTITY_TYPES)
+def planning_sanitizer(settings: Settings, ner: tuple[Detector, ...]) -> Sanitizer:
+    """Questions, answers and change requests: the question list, places as the operator set."""
+    return DetectorSanitizer(
+        (PatternDetector(), *ner),
+        entity_types=QUESTION_ENTITY_TYPES,
+        keeps_countries_and_regions=not settings.mask_countries_and_regions,
+    )
 
 
 def _mask_stage(
@@ -467,7 +472,7 @@ def build_providers(
         encryption=encryption,
         audit=audit,
         inference=inference,
-        sanitizer=_planning_sanitizer(ner),
+        sanitizer=planning_sanitizer(settings, ner),
         rules=masking_rules,
         clock=clock,
     )
@@ -497,7 +502,7 @@ def build_providers(
             retriever=Bm25Retriever(),
             evidence=ScreenedEvidence(pipeline.store, pipeline.masked, document_evidence),
             catalogue=ScreenedSources(pipeline.store),
-            sanitizer=_planning_sanitizer(ner),
+            sanitizer=planning_sanitizer(settings, ner),
             rules=masking_rules,
             max_rounds=settings.brief_max_rounds,
             clock=clock,
@@ -563,7 +568,7 @@ def build_providers(
             storage=storage,
             encryption=encryption,
             audit=audit,
-            sanitizer=_planning_sanitizer(ner),
+            sanitizer=planning_sanitizer(settings, ner),
             rules=masking_rules,
             signals=signals,
             clock=clock,
