@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+import structlog
+
 from app.application.accounts import Current
 from app.application.audit import SYSTEM, Actor, AuditLog
 from app.application.encryption import ScopeEncryption
@@ -115,6 +117,8 @@ REVISE_PROMPT = (
 
 _TEXT = {"type": "string", "minLength": 1, "maxLength": 300}
 _TERM = {"type": "string", "minLength": 1, "maxLength": 120}
+
+_log = structlog.get_logger(__name__)
 
 CLARIFY_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -726,26 +730,42 @@ class PlanService:
         if purpose is not ModelCallPurpose.CLARIFY:
             drafting = 1 if current_plan is None else current_plan.version + 1
         links = _ReceiptLinks(drafting, change_request_id)
-        try:
-            result = await self._inference.chat(request)
-        except PromptRefusedError:
-            raise
-        except InferenceError:
+        # A reasoning model's answers vary, so an unusable one is asked for again
+        # once. Each attempt sent the text, so each leaves its own receipt.
+        for attempt in (1, 2):
+            try:
+                result = await self._inference.chat(request)
+            except PromptRefusedError:
+                raise
+            except InferenceError as exc:
+                await self._store_receipt(
+                    review,
+                    purpose,
+                    prompt_version,
+                    masked,
+                    by,
+                    self._inference.model_id,
+                    False,
+                    links,
+                )
+                if not isinstance(exc, InvalidStructuredOutputError):
+                    raise
+                # The reason names a schema path and rule, never the text.
+                _log.warning(
+                    "plan_answer_refused",
+                    review_id=str(review.id),
+                    purpose=purpose.value,
+                    attempt=attempt,
+                    reason=str(exc),
+                )
+                if attempt == 2:
+                    raise
+                continue
             await self._store_receipt(
-                review,
-                purpose,
-                prompt_version,
-                masked,
-                by,
-                self._inference.model_id,
-                False,
-                links,
+                review, purpose, prompt_version, masked, by, result.model_id, True, links
             )
-            raise
-        await self._store_receipt(
-            review, purpose, prompt_version, masked, by, result.model_id, True, links
-        )
-        return result
+            return result
+        raise AssertionError("unreachable: the second attempt returns or raises")
 
     async def _store_receipt(
         self,
