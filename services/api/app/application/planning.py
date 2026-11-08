@@ -62,6 +62,7 @@ from app.domain.plans import (
     PlanDiff,
     PlanMode,
     PrivacyReceipt,
+    RedoStage,
     ReviewPlan,
     SentText,
     SentTextKind,
@@ -73,6 +74,7 @@ from app.domain.plans import (
     VocabularyFormat,
     diff_plans,
     first_plan,
+    first_stage_to_redo,
     number_criteria,
     parse_strict_vocabulary,
     revision_from_gate,
@@ -251,6 +253,20 @@ class PlanView:
     def accepted_version(self) -> int | None:
         accepted = [p.version for p in self.versions if p.is_accepted]
         return accepted[-1] if accepted else None
+
+    @property
+    def rerun_from(self) -> RedoStage | None:
+        """Where a run of the current version starts, against the version accepted before it.
+
+        `queries` when none was accepted before: a first run does everything.
+        """
+        current = self.current
+        if current is None:
+            return None
+        before = [p for p in self.versions if p.is_accepted and p.version < current.version]
+        if not before:
+            return "queries"
+        return first_stage_to_redo(before[-1], current)
 
 
 @dataclass(frozen=True, slots=True)

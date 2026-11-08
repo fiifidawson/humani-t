@@ -157,6 +157,16 @@ This phase gives humani-t its way out to the world, and makes it safe. Every req
 - **Where:** [`app/application/pipeline.py`](../../services/api/app/application/pipeline.py) (`NOTHING_FOUND`).
 - **Proven by:** `tests/test_pipeline_stages.py::TestDiscover::test_a_search_that_finds_nothing_stops_the_run_here_and_says_so`.
 
+### D9.18 Changing the search after a run, from the chat (Wave 2)
+
+- **Decision:**
+  - After a run, the chat box asks for changes ("Change the search"), and the next draft appears in time order after the run.
+  - The plan reports `rerun_from`, worked out by `first_stage_to_redo` from the version accepted before. On acceptance the web app starts every stage, or Screen onwards, or nothing.
+  - The accept button names which: Accept and search again, Accept and re-screen, Accept.
+- **Why:** the person says what to change in a sentence and never configures stages. A changed search finds different papers, so it must search again. Changed criteria only need the papers already found judged again.
+- **Where:** [`app/domain/plans.py`](../../services/api/app/domain/plans.py) (`first_stage_to_redo`), [`app/application/planning.py`](../../services/api/app/application/planning.py) (`PlanView.rerun_from`), [`apps/web/src/features/reviews/reviewContext.tsx`](../../apps/web/src/features/reviews/reviewContext.tsx) (`stagesFrom`).
+- **Proven by:** `tests/test_plans_domain.py::TestWhereARunAfterAChangeStarts`, `tests/test_plans_api.py::TestWhereTheNextRunStarts`, `apps/web/src/features/reviews/ChangesAfterRun.test.tsx`.
+
 ## Libraries
 
 ### httpx2 2.12.0 (with httpcore2 2.12.0)

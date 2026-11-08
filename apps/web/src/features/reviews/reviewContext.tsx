@@ -119,8 +119,11 @@ export function useReviewActions(reviewId: string) {
 		onSuccess: (plan) => {
 			showPlan(plan);
 			// "Accept and search" is one step for the person (§5.3.4): the
-			// vocabulary is confirmed, then the whole pipeline starts.
-			startRun.mutate(PIPELINE);
+			// vocabulary is confirmed, then the run starts where the change matters.
+			const stages = stagesFrom(plan.rerun_from);
+			if (stages.length > 0) {
+				startRun.mutate(stages);
+			}
 		},
 		onError: reloadOnConflict,
 	});
@@ -194,6 +197,18 @@ export function useRunNumber(runId: string): number {
 }
 
 /** A run's requested stages in pipeline order, ignoring any the API may add later. */
+/**
+ * The stages a run of an accepted version needs (Wave 2, prompt-first): all of
+ * them after a changed search, Screen onwards after changed criteria alone,
+ * none when nothing changed. The API decides which (`rerun_from`).
+ */
+export function stagesFrom(rerunFrom: "queries" | "screen" | null): StageId[] {
+	if (rerunFrom === null) {
+		return [];
+	}
+	return PIPELINE.slice(PIPELINE.indexOf(rerunFrom));
+}
+
 export function stagesOf(run: Run): StageId[] {
 	return PIPELINE.filter((stage) => run.stages.includes(stage));
 }

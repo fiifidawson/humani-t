@@ -6860,6 +6860,22 @@
             "title": "Accepted Version",
             "description": "The version runs use; null if none."
           },
+          "rerun_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "queries",
+                  "screen"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerun From",
+            "description": "Where a run of the current version would start: `queries` when the search changed since the version accepted before it, or none was; `screen` when only the criteria changed, re-judging the papers already found; null when nothing did."
+          },
           "versions": {
             "items": {
               "$ref": "#/components/schemas/VersionSummaryOut"
@@ -6885,6 +6901,7 @@
           "pending_change",
           "current",
           "accepted_version",
+          "rerun_from",
           "versions",
           "receipts"
         ],

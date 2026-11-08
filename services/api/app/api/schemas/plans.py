@@ -8,6 +8,7 @@ shape; the domain checks meaning (`parse_strict_vocabulary`, `ChangeRequest`,
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -292,6 +293,13 @@ class PlanOut(BaseModel):
     )
     current: VersionOut | None = Field(description="The latest version, accepted or not.")
     accepted_version: int | None = Field(description="The version runs use; null if none.")
+    rerun_from: Literal["queries", "screen"] | None = Field(
+        description=(
+            "Where a run of the current version would start: `queries` when the search "
+            "changed since the version accepted before it, or none was; `screen` when only "
+            "the criteria changed, re-judging the papers already found; null when nothing did."
+        )
+    )
     versions: list[VersionSummaryOut]
     receipts: list[ReceiptOut] = Field(description="What each model call received.")
 
@@ -312,6 +320,7 @@ class PlanOut(BaseModel):
             if current is None
             else VersionOut.from_domain(current, dict(view.term_authors)),
             accepted_version=view.accepted_version,
+            rerun_from=view.rerun_from,
             versions=[
                 VersionSummaryOut(
                     version=p.version,

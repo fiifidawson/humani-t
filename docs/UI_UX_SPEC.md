@@ -376,6 +376,14 @@ L0 when accepted:  ✓ Search plan accepted · 3 categories · Open
 - **The vocabulary gate.** "Accept and search" is the confirmation of the vocabulary (architecture §4.3). After it, the draft becomes version-numbered and frozen. The accepted card says which version.
 - Source: `SearchPlan` from `POST …/plan`, `…/plan/answers`, `…/plan/changes`; `POST …/plan/accept`.
 
+**Changing the search after a run (Wave 2, prompt-first).** Once a plan is accepted, and after a run, the chat box is labelled "Change the search". The person writes what to change; the next draft card appears after the run, in time order, and shows what changed. Its main button says what accepting will run:
+
+- **Accept and search again:** the search terms changed, so it runs every stage.
+- **Accept and re-screen:** only the criteria changed, so it re-judges the papers already found, from Screen onwards.
+- **Accept:** nothing changed, so nothing runs.
+
+The API decides which (`rerun_from`); the person never picks stages. While a run is going, the box says "Wait for the run to finish, or cancel it, to change the search." Follow-up questions about results come with the follow-up threads later in Wave 2.
+
 #### 5.3.5 Run strip
 
 The run strip is one card that updates in place for the whole job. It never adds new chat turns while it runs.

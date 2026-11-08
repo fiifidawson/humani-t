@@ -124,6 +124,29 @@ function compile(themes: Schemas["ThemeOut"][]): string {
 		.join(" AND ");
 }
 
+/** As the API works it out: the current version against the one accepted before it. */
+function rerunFrom(versions: readonly Version[]): "queries" | "screen" | null {
+	const current = versions.at(-1);
+	if (current === undefined) {
+		return null;
+	}
+	const before = versions
+		.filter((v) => v.accepted_at !== null && v.version < current.version)
+		.at(-1);
+	if (before === undefined) {
+		return "queries";
+	}
+	const terms = (v: Version) =>
+		JSON.stringify(
+			v.themes.map((t) => [t.name, t.concepts.map((c) => c.terms)]),
+		);
+	const criteria = (v: Version) => JSON.stringify(v.criteria);
+	if (terms(before) !== terms(current)) {
+		return "queries";
+	}
+	return criteria(before) !== criteria(current) ? "screen" : null;
+}
+
 export function draftVersion(
 	number: number,
 	draft: Draft,
@@ -246,6 +269,8 @@ export class FakeReviews {
 	}[] = [];
 	/** When true, every planning call fails as an unreachable model server does (502). */
 	isModelDown = false;
+	/** What the next change request alters: the search terms, or only the criteria. */
+	nextChange: "search" | "criteria" = "search";
 	/** When set, planning calls wait for it, so a test can see what shows meanwhile. */
 	modelReply: Promise<void> | null = null;
 
@@ -452,6 +477,7 @@ export class FakeReviews {
 			pending_change: plan?.pendingChange ?? null,
 			current: versions.at(-1) ?? null,
 			accepted_version: accepted?.version ?? null,
+			rerun_from: rerunFrom(versions),
 			versions: versions.map((v) => ({
 				version: v.version,
 				origin: v.origin,
@@ -673,10 +699,13 @@ export class FakeReviews {
 						return problem(409, "There is no draft to change yet.");
 					}
 					const body = await jsonBody(request);
-					if (
-						body["based_on_version"] !== current.version ||
-						current.accepted_at !== null
-					) {
+					if (review.status === "running" || review.status === "waiting") {
+						return problem(
+							409,
+							"The plan cannot change while a run is going. Wait for it, or cancel it.",
+						);
+					}
+					if (body["based_on_version"] !== current.version) {
 						return problem(
 							409,
 							"The draft has changed since you looked. Showing the latest.",
@@ -694,15 +723,23 @@ export class FakeReviews {
 						user_id: this.access.userId(),
 					};
 					const request_text = text(body, "request");
-					const next: Draft = FIRST_DRAFT.map(([theme, concepts]) => [
-						theme,
-						concepts.map(
-							([term, synonyms]): Concept =>
-								term === "cash transfers"
-									? [term, [...synonyms, "mobile money"], person]
-									: [term, synonyms],
-						),
-					]);
+					const isCriteriaOnly = this.nextChange === "criteria";
+					const next: Draft = isCriteriaOnly
+						? FIRST_DRAFT
+						: FIRST_DRAFT.map(([theme, concepts]) => [
+								theme,
+								concepts.map(
+									([term, synonyms]): Concept =>
+										term === "cash transfers"
+											? [term, [...synonyms, "mobile money"], person]
+											: [term, synonyms],
+								),
+							]);
+					// A draft asked for after a run is dated after it, as it would be.
+					const afterRun = this.runs.some((r) => r.review_id === review.id);
+					const at = afterRun
+						? `2026-11-03T11:0${plan.versions.length + 1}:00Z`
+						: "2026-11-03T10:45:00Z";
 					this.addDraft(
 						review,
 						plan,
@@ -716,9 +753,22 @@ export class FakeReviews {
 								id: nextId("cr"),
 								text: request_text,
 								requested_by: this.access.userId() ?? "",
-								requested_at: "2026-11-03T10:45:00Z",
+								requested_at: at,
 								based_on_version: current.version,
 							},
+							...(afterRun ? { created_at: at } : {}),
+							...(isCriteriaOnly
+								? {
+										criteria: [
+											...CRITERIA,
+											{
+												id: "E2",
+												kind: "exclusion",
+												text: "Published before 2015",
+											},
+										],
+									}
+								: {}),
 						},
 					);
 					return HttpResponse.json(this.planOut(review));
