@@ -26,7 +26,10 @@ One Compose project, `humani-t-stack`, defined in [`compose.yaml`](../../compose
      [ migrate ]  one-shot: applies database migrations, then exits
 
   optional profiles:  [ ollama ] local-model    [ mailpit ] local-mail
+                      [ clamav ] [ freshclam ] malware-scan
 ```
+
+With `malware-scan`, the worker reaches `clamav` on `scan`, an internal network nothing else is on. `freshclam` has a network of its own, with a route out to ClamAV's CDN and nothing else on it ([section 3.7](#37-scan-uploads-for-malware)).
 
 | Service | Image | What it does |
 | --- | --- | --- |
@@ -38,6 +41,10 @@ One Compose project, `humani-t-stack`, defined in [`compose.yaml`](../../compose
 | `valkey` | `valkey/valkey:8.1.11-alpine` | Rate limits and the job queue. Holds nothing that needs a backup. |
 | `ollama` | `ollama/ollama` (profile `local-model`) | Optional model server inside the deployment. |
 | `mailpit` | `axllent/mailpit` (profile `local-mail`) | Optional fake mail server for trying the stack; never for production. |
+| `clamav` | `clamav/clamav:1.5.4-debian` (profile `malware-scan`) | Optional. ClamAV's daemon: scans every uploaded document before anything reads it. |
+| `freshclam` | the same image (profile `malware-scan`) | Optional. Keeps ClamAV's signatures current. |
+
+Uploaded documents are kept in the `documents` volume, which `api` and `worker` share, sealed under each project's key ([ADR 0008](../adr/0008-uploaded-files-on-a-sealed-volume.md)).
 
 Every service runs as a non-root user, with a read-only filesystem, every Linux capability dropped, `no-new-privileges`, and memory, CPU and process limits, and has a health check; the worker's passes only while it keeps touching a heartbeat file. Images are pinned by digest. Postgres and Valkey sit on an internal network with no route to the internet and no published port. Secrets reach each container as files under `/run/secrets`, and each container receives only the ones it needs: `migrate` alone holds the schema-owner password; it never sees the key-encryption key.
 
@@ -46,11 +53,12 @@ Every service runs as a non-root user, with a read-only filesystem, every Linux 
 - **A server you control**, x86-64 or ARM64, running a current Linux (Debian 13, Ubuntu 24.04 or similar).
   - Without a local model: 2 vCPU, 4 GB RAM, 20 GB disk.
   - With the `local-model` profile on CPU: at least 4 vCPU and 16 GB RAM for the default `llama3.1:8b`, plus about 5 GB of disk for the model. A smaller model needs less; [the remote-model guide](remote-model.md#1-choose-a-machine-and-a-model) has a sizing table.
+  - With the `malware-scan` profile: about 1.5 GB more RAM and 1 GB more disk ([section 3.7](#37-scan-uploads-for-malware)).
 - **Docker Engine 25 or newer with the Compose plugin v2.24 or newer**, from [Docker's own repository](https://docs.docker.com/engine/install/). `docker compose version` must work.
 - **Python 3.9 or newer**, only to run the secret generator once. Every current Linux distribution has it as `python3`.
 - **For a public deployment:** a DNS name (an `A`, and ideally `AAAA`, record) pointing at the server, and ports 80 and 443 reachable from the internet. Caddy needs both to obtain a certificate from Let's Encrypt.
 - **An SMTP server** for invitations, password resets and security notices: your organisation's, or a transactional mail provider.
-- **Outbound access** from the server to Let's Encrypt, your mail server, the paper sources (OpenAlex, Europe PMC, arXiv), and the model server if it runs elsewhere.
+- **Outbound access** from the server to Let's Encrypt, your mail server, the paper sources (OpenAlex, Europe PMC, arXiv), the model server if it runs elsewhere, and, with the `malware-scan` profile, ClamAV's CDN (`database.clamav.net`).
 
 > **Docker and host firewalls.** Ports published by Docker bypass `ufw` and `firewalld` rules on the host. Only Caddy publishes ports (80 and 443, which are meant to be public), and the optional Mailpit publishes on `127.0.0.1` only. Do not add a `ports:` line to any other service: a firewall rule will not protect it.
 
@@ -97,7 +105,8 @@ cp .env.example .env
 | `HUMANI_T_PUBLIC_ORIGIN` | `https://` plus the domain, plus `:port` if it is not 443. The API refuses writes from any other origin. |
 | `HUMANI_T_SMTP_HOST`, `_PORT`, `_USERNAME`, `_SENDER`, `_STARTTLS` | Your mail server. |
 | `HUMANI_T_SECRETS_DIR` | `/etc/humani-t/secrets` (the `--dir` you used). |
-| `COMPOSE_PROFILES` | Empty, or `local-model` to run Ollama in the stack. `local-mail` only for a trial. |
+| `COMPOSE_PROFILES` | Empty, or a comma-separated list: `local-model` to run Ollama in the stack, `malware-scan` to run ClamAV ([section 3.7](#37-scan-uploads-for-malware)), `local-mail` only for a trial. |
+| `HUMANI_T_MALWARE_SCANNER`, `HUMANI_T_CLAMD_ADDRESS` | How uploaded documents are scanned. Until you choose, uploads are refused ([section 3.7](#37-scan-uploads-for-malware)). |
 | `HUMANI_T_INFERENCE_URL`, `HUMANI_T_INFERENCE_MODEL` | The model server and model. The default is the bundled Ollama. To run the model on another machine, see [Running the model on another machine](remote-model.md). |
 | `HUMANI_T_INFERENCE_API` | `ollama` (the default), or `openai` for a server that speaks OpenAI's Chat Completions: vLLM or llama.cpp on your own machine, or a hosted API (see [Running the model on another machine](remote-model.md#7-a-hosted-model-api-an-opt-in)). |
 | `HUMANI_T_PAPER_SOURCES` | Where papers are searched, comma-separated: `openalex`, `europepmc`, `arxiv`. Empty searches nothing outside the deployment. |
@@ -147,6 +156,36 @@ curl -s https://humani-t.example.org/api/v1/ready
 
 Expect the three headers, and `{"status":"ready"}`. (With `localhost`, add `-k`: Caddy's local certificate authority is not trusted by your system.)
 
+### 3.7 Scan uploads for malware
+
+Teams can upload their own documents to a project, and each file is scanned before anything reads it. In production, uploads are refused until you choose how: the documents page says "Uploads are switched off: the operator has not configured a malware scanner."
+
+**To scan with the bundled ClamAV** (recommended), set in `.env`:
+
+```bash
+COMPOSE_PROFILES=malware-scan            # added to any profiles already there
+HUMANI_T_MALWARE_SCANNER=clamd
+HUMANI_T_CLAMD_ADDRESS=tcp://clamav:3310
+```
+
+Then run `docker compose up -d`. Two more services start: `clamav` (the scanner) and `freshclam` (its updater). `clamav` takes a minute or two to load its signatures before it turns `healthy`. A document uploaded meanwhile waits at "Checking for viruses", and is scanned once clamd is up.
+
+What it costs, and what it sends:
+
+- **Memory:** clamd holds about 1 GiB once its signatures are loaded. Its limit is 2 GiB (`HUMANI_T_CLAMAV_MEMORY` in `.env`). freshclam idles at a few MiB, and needs about 0.7 GiB for the minute it spends testing a new database. Plan for about 1.5 GB more RAM than without scanning.
+- **Disk:** about 1 GB for the image and the `clamav-signatures` volume.
+- **Outbound traffic:** every two hours, freshclam asks ClamAV's CDN (`database.clamav.net`) for new signatures, and downloads the day's differences. The request names only database versions: no document, name or text leaves the deployment. `clamav` itself, which receives the uploaded files, has no route to the internet, and only the worker can reach it.
+
+On a server with no internet access, run `clamav` alone (`docker compose up -d clamav`). It scans with the signatures built into its image, which grow staler every day. ClamAV's `cvdupdate` tool can keep a local mirror instead: point `DatabaseMirror` in [`infrastructure/clamav/freshclam.conf`](../../infrastructure/clamav/freshclam.conf) at it.
+
+clamd accepts files up to 25 MiB (`StreamMaxLength` in [`infrastructure/clamav/clamd.conf`](../../infrastructure/clamav/clamd.conf)). If you raise `HUMANI_T_UPLOAD_MAX_BYTES` above that, raise `StreamMaxLength` too, and Caddy's limit for uploads in [`infrastructure/caddy/Caddyfile`](../../infrastructure/caddy/Caddyfile).
+
+**When the scanner is down**, nothing is read unscanned. The worker puts each document back in the queue and tries again a few seconds later, and people see "Checking for viruses" until clamd answers. When freshclam cannot update, clamd keeps scanning with the signatures it has; after two days without a new daily database, `freshclam` shows as `unhealthy` in `docker compose ps`.
+
+**To upload without scanning**, set `HUMANI_T_MALWARE_SCANNER=none` and leave `HUMANI_T_CLAMD_ADDRESS` empty. Every document then records `scanned_with: none`. Make that a written decision: a hostile file then reaches the text extractor unchecked ([ADR 0009](../adr/0009-local-extraction-in-an-isolated-process.md) describes how the extractor is contained).
+
+The reasons for this setup are in [ADR 0012](../adr/0012-clamav-in-the-stack.md).
+
 ## 4. Key custody
 
 humani-t encrypts each project's sensitive data with that project's own **data key**. The data keys are stored in the database, but only in wrapped (encrypted) form, under the **key-encryption key (KEK)** in `key_encryption_keys`. The KEK never touches the database.
@@ -191,7 +230,9 @@ What needs backing up:
 | The KEK | Once, and after each rotation | Separately from the database ([section 4](#4-key-custody)). |
 | The other secret files | Once | Needed to restore onto a new server with the same configuration; new ones can also be generated. |
 | `.env` | Once | Not secret. |
+| Uploaded documents (`documents` volume) | `tar`, below | Sealed under each project's key. The files are useless without the database and the KEK, and the database's document rows are useless without the files: back them up together. |
 | Valkey | Nothing | Rate-limit counters and queued jobs; rebuilt on start by design. |
+| ClamAV's signatures (`clamav-signatures` volume) | Nothing | freshclam downloads them again. |
 | Caddy's certificates (`caddy-data` volume) | Optional | Re-issued automatically; backing them up only avoids Let's Encrypt's rate limits on a rebuild. |
 
 ### Taking a backup
@@ -207,7 +248,16 @@ On Windows PowerShell 5.1, redirect through `cmd`, because PowerShell's own `>` 
 cmd /c "docker compose exec -T postgres pg_dump -U postgres --format=custom humani_t > humani_t.dump"
 ```
 
-Run it daily from cron, copy the dumps to storage on another machine or provider (encrypted, for example with `age` or `restic`), and delete dumps older than your **retention window**: the number of days you keep backups. Choose that number deliberately. It is also the time a deleted project stays recoverable ([section 6](#6-deleting-data-what-crypto-shredding-does-and-does-not-do)).
+Back up the uploaded documents at the same time:
+
+```bash
+docker compose exec -T api tar -C /var/lib/humani-t -cf - documents \
+  > "documents-$(date +%Y%m%d-%H%M%S).tar"
+```
+
+(PowerShell: `cmd /c "docker compose exec -T api tar -C /var/lib/humani-t -cf - documents > documents.tar"`.)
+
+Run both daily from cron, copy the dumps and the archives to storage on another machine or provider (encrypted, for example with `age` or `restic`), and delete those older than your **retention window**: the number of days you keep backups. Choose that number deliberately. It is also the time a deleted project stays recoverable ([section 6](#6-deleting-data-what-crypto-shredding-does-and-does-not-do)).
 
 A backup you have never restored is a hope, not a backup. Restore one onto a scratch machine regularly.
 
@@ -222,6 +272,8 @@ docker compose exec -T postgres pg_restore -U postgres --clean --if-exists \
 docker compose up -d
 docker compose exec api python -m app.cli verify-audit
 ```
+
+Then restore the uploaded documents from the backup taken at the same time: `docker compose exec -T api tar -C /var/lib/humani-t -xf - < documents-20261103-020000.tar`.
 
 Postgres creates the two roles and the empty `humani_t` database when its volume is first created; `pg_restore` then replaces the contents. When the rest of the stack starts, `migrate` brings an older backup's schema up to the current version. `verify-audit` should report `audit chain intact`; if it does not, the restored data does not match the audit log, and that needs investigating before the system is used.
 
@@ -243,6 +295,7 @@ What crypto-shredding does not cover:
 - **Unencrypted metadata.** Identifiers, timestamps, and the hash-chained audit log's structure stay, by design: the audit trail must still verify after a project is deleted. Audit details are encrypted with the project's key, so they become unreadable with it.
 - **Anything that left the deployment.** Exports downloaded by users, emails already sent, and text already sent to a model server (masked, but sent).
 - **Container logs.** Application logs carry identifiers, not content, and are rotated by Docker (`max-size` 10 MB, 5 files per container).
+- **The disk space of uploaded files.** A deleted project's files stay in the `documents` volume, unreadable without the destroyed key, until they are swept away. No sweep exists yet. Deleting a single document deletes its file at once.
 
 ## 7. Upgrades and migrations
 
@@ -287,6 +340,9 @@ docker compose ps
 | Browser certificate warning on a real domain | Caddy could not get a certificate: DNS not pointing here, or port 80/443 blocked | `docker compose logs caddy` |
 | `403 Cross-site requests are not allowed` on every sign-in | `HUMANI_T_PUBLIC_ORIGIN` differs from the address in the browser | Make them identical, including the port |
 | `postgres` fails with `Permission denied` on a secret | Secret file not readable by the container's user | `chmod 0644` the files; keep the directory `0700` |
+| "Uploads are switched off: the operator has not configured a malware scanner" | `HUMANI_T_MALWARE_SCANNER` is empty | [Section 3.7](#37-scan-uploads-for-malware), then `docker compose up -d --force-recreate api worker` |
+| Documents stay at "Checking for viruses" | The worker cannot reach clamd: the `malware-scan` profile is off, or `clamav` is still loading or has stopped. `docker compose logs worker` shows `malware_scanner_unavailable` | `docker compose ps clamav` and `docker compose logs clamav`. If clamd was stopped for lack of memory, raise `HUMANI_T_CLAMAV_MEMORY` |
+| `freshclam` is `unhealthy` | No new signatures for two days: outbound access to `database.clamav.net` is blocked, or ClamAV's CDN is refusing this address | `docker compose logs freshclam`; allow the traffic, or use a mirror ([section 3.7](#37-scan-uploads-for-malware)) |
 
 ## 10. Known limitations
 

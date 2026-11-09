@@ -54,10 +54,13 @@ LABEL org.opencontainers.image.title="humani-t API" \
 # the image takes them itself. The digest pins the base; the fixes are as of the
 # build. pip is a package installer, which nothing at runtime needs; removing it
 # shrinks what an attacker inside the container could use and scanners must track.
+# The documents directory is made here, owned by the app's user, because a new
+# `documents` volume mounted on it starts with its owner (compose.yaml, ADR 0008).
 RUN apt-get update     && apt-get upgrade --yes --no-install-recommends     && rm -rf /var/lib/apt/lists/*     && python -m pip uninstall --yes --quiet pip \
     && groupadd --system --gid 10001 humani \
     && useradd --system --uid 10001 --gid humani --no-create-home --home-dir /nonexistent \
-        --shell /usr/sbin/nologin humani
+        --shell /usr/sbin/nologin humani \
+    && install --directory --owner=10001 --group=10001 --mode=0700 /var/lib/humani-t/documents
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
