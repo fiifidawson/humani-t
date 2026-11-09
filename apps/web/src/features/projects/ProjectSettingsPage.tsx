@@ -1,18 +1,19 @@
 /**
- * Project settings (UI_UX_SPEC §6.14). For now the danger zone alone: members
- * and settings join it later in Wave 2.
+ * Project settings (UI_UX_SPEC §6.14): the name, the members and the danger
+ * zone. Archiving, tags and leaving the project are not here yet.
  *
  * Deleting destroys the project's key (crypto-shredding), so it asks for the
- * project's name typed out. The API decides who may delete and whether the
- * sign-in is recent enough; this page only reflects it.
+ * project's name typed out. The API decides who may rename, change members or
+ * delete, and whether the sign-in is recent enough; this page only reflects it.
  */
 
-import { Box, Button, Flex, Heading, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
-import { unwrapEmpty } from "../../api/client";
+import { type FormEvent, useState } from "react";
+import { unwrap, unwrapEmpty } from "../../api/client";
+import { fieldErrors, isApiError, userMessage } from "../../api/problem";
 import { useApi } from "../../app/api-context";
 import { keys, projectQuery } from "../../app/queries";
 import { Dialog } from "../../ui/Dialog";
@@ -20,13 +21,14 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
+import { MembersSection } from "./ProjectMembers";
+import { SettingsSection } from "./SettingsSection";
 
 export function ProjectSettingsPage() {
 	const api = useApi();
 	const { projectId } = useParams({ from: "/signed-in/p/$projectId/settings" });
 	const project = useQuery(projectQuery(api, projectId));
 	const [isDeleting, setDeleting] = useState(false);
-	const headingId = useId();
 
 	if (project.isError) {
 		return <ErrorNotice error={project.error} />;
@@ -38,24 +40,20 @@ export function ProjectSettingsPage() {
 	return (
 		<Box flex="1" minH="0" overflowY="auto" px={{ base: "4", md: "6" }} py="6">
 			<Stack gap="6" maxW="2xl">
-				<Box
-					as="section"
-					aria-labelledby={headingId}
-					rounded="card"
-					borderWidth="1px"
-					borderColor="border.error"
-					px="5"
-					py="4"
-				>
-					<Heading
-						id={headingId}
-						as="h2"
-						fontSize="lg"
-						fontWeight="semibold"
-						mb="2"
-					>
-						Danger zone
-					</Heading>
+				<SettingsSection title="General">
+					{role === "owner" ? (
+						<RenameForm projectId={projectId} name={name} />
+					) : (
+						<Stack gap="1" fontSize="sm">
+							<Text fontWeight="medium">{name}</Text>
+							<Text>Only owners can rename the project.</Text>
+						</Stack>
+					)}
+				</SettingsSection>
+				<SettingsSection title="Members">
+					<MembersSection projectId={projectId} isOwner={role === "owner"} />
+				</SettingsSection>
+				<SettingsSection title="Danger zone" isDanger>
 					{role === "owner" ? (
 						<Flex gap="4" align="center" justify="space-between" wrap="wrap">
 							<Text fontSize="sm" maxW="md">
@@ -74,7 +72,7 @@ export function ProjectSettingsPage() {
 					) : (
 						<Text fontSize="sm">Only owners can delete a project.</Text>
 					)}
-				</Box>
+				</SettingsSection>
 			</Stack>
 			{isDeleting ? (
 				<DeleteDialog
@@ -84,6 +82,64 @@ export function ProjectSettingsPage() {
 				/>
 			) : null}
 		</Box>
+	);
+}
+
+function RenameForm({ projectId, name }: { projectId: string; name: string }) {
+	const api = useApi();
+	const queryClient = useQueryClient();
+	const [draft, setDraft] = useState(name);
+	const rename = useMutation({
+		mutationFn: () =>
+			unwrap(
+				api.PATCH("/api/v1/projects/{project_id}", {
+					params: { path: { project_id: projectId } },
+					body: { name: draft },
+				}),
+			),
+		onSuccess: async (project) => {
+			setDraft(project.name);
+			queryClient.setQueryData(keys.project(projectId), project);
+			await queryClient.invalidateQueries({ queryKey: keys.projects });
+		},
+	});
+	const nameError = isApiError(rename.error, "invalid")
+		? (fieldErrors(rename.error)["name"] ?? userMessage(rename.error))
+		: undefined;
+	const otherError =
+		rename.isError && nameError === undefined ? rename.error : null;
+	const submit = (event: FormEvent) => {
+		event.preventDefault();
+		if (!rename.isPending) {
+			rename.mutate();
+		}
+	};
+
+	return (
+		<Stack as="form" gap="3" onSubmit={submit}>
+			{otherError === null ? null : <ErrorNotice error={otherError} />}
+			<Field
+				label="Project name"
+				hint="Only members can see it. It is stored encrypted."
+				maxLength={200}
+				required
+				value={draft}
+				error={nameError}
+				onChange={(event) => setDraft(event.target.value)}
+			/>
+			<Flex gap="3" align="center" wrap="wrap">
+				<Button
+					type="submit"
+					size="sm"
+					disabled={draft === name || rename.isPending}
+				>
+					Save name
+				</Button>
+				<Text role="status" fontSize="sm" color="fg.muted">
+					{rename.isSuccess && draft === name ? "Saved." : ""}
+				</Text>
+			</Flex>
+		</Stack>
 	);
 }
 

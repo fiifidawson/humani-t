@@ -66,10 +66,13 @@ class ProjectView:
 
 @dataclass(frozen=True, slots=True)
 class MemberView:
+    """A member as the caller may see them: `email` is `None` unless they manage members."""
+
     user_id: UUID
     display_name: str
     role: Role
     added_at: datetime
+    email: str | None = None
 
 
 class ProjectService:
@@ -203,9 +206,12 @@ class ProjectService:
 
     async def list_members(self, current: Current, project_id: UUID) -> list[MemberView]:
         async with self._storage.unit_of_work() as uow:
-            await self._access(uow, current, project_id, Action.READ_PROJECT)
+            _, own = await self._access(uow, current, project_id, Action.READ_PROJECT)
+            # Owners need the email to tell two people with the same display name
+            # apart before changing their access; nobody else needs it.
+            shows_email = can(own.role, Action.MANAGE_MEMBERS)
             return [
-                await self._member_view(uow, m)
+                await self._member_view(uow, m, shows_email=shows_email)
                 for m in await uow.memberships.list_for_project(project_id)
             ]
 
@@ -237,7 +243,7 @@ class ProjectService:
             await uow.memberships.add(membership)
             await self._record_member(uow, current, request_id, "membership.added", membership)
             await uow.commit()
-        return MemberView(user.id, user.display_name, role, membership.added_at)
+        return MemberView(user.id, user.display_name, role, membership.added_at, user.email)
 
     async def change_role(
         self,
@@ -267,7 +273,7 @@ class ProjectService:
                     uow, current, request_id, "membership.role_changed", changed
                 )
                 await uow.commit()
-            return await self._member_view(uow, changed)
+            return await self._member_view(uow, changed, shows_email=True)
 
     async def remove_member(
         self, current: Current, project_id: UUID, user_id: UUID, request_id: str | None = None
@@ -346,11 +352,14 @@ class ProjectService:
         )
 
     @staticmethod
-    async def _member_view(uow: UnitOfWork, membership: Membership) -> MemberView:
+    async def _member_view(
+        uow: UnitOfWork, membership: Membership, *, shows_email: bool
+    ) -> MemberView:
         user = await uow.users.get(membership.user_id)
         display_name = user.display_name if user is not None else "Unknown account"
+        email = user.email if user is not None and shows_email else None
         return MemberView(
-            membership.user_id, display_name, membership.role, membership.added_at
+            membership.user_id, display_name, membership.role, membership.added_at, email
         )
 
     async def _seal_name(self, uow: UnitOfWork, project_id: UUID, name: str) -> bytes:

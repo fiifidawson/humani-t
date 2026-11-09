@@ -286,12 +286,34 @@ class TestMembers:
             (team.user_id(VIEWER_EMAIL), "viewer"),
         }
 
-    def test_the_member_list_shows_names_not_email_addresses_or_credentials(self, team):
-        members = team.viewer.get(team.path("/members")).json()
+    @pytest.mark.parametrize("role", ["reviewer", "viewer"])
+    def test_the_member_list_shows_others_names_not_email_addresses_or_credentials(
+        self, team, role
+    ):
+        members = team.browser_for(role).get(team.path("/members")).json()
 
         for member in members:
             assert set(member) == MEMBER_FIELDS
         assert "example.org" not in str(members)
+
+    def test_owners_see_each_members_email_to_tell_people_apart(self, team):
+        members = team.owner.get(team.path("/members")).json()
+
+        for member in members:
+            assert set(member) == MEMBER_FIELDS | {"email"}
+        assert {m["email"] for m in members} == {OWNER_EMAIL, REVIEWER_EMAIL, VIEWER_EMAIL}
+
+    def test_a_member_added_or_changed_by_an_owner_comes_back_with_their_email(self, team):
+        added = add_member(team.owner, team.project_id, OUTSIDER_EMAIL, "viewer")
+        changed = send(
+            team.owner,
+            "PATCH",
+            team.path(f"/members/{team.user_id(VIEWER_EMAIL)}"),
+            {"role": "reviewer"},
+        ).json()
+
+        assert added["email"] == OUTSIDER_EMAIL
+        assert changed["email"] == VIEWER_EMAIL
 
     def test_an_owner_adds_an_existing_user_with_a_role(self, team):
         response = send(

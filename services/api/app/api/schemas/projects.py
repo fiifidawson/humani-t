@@ -1,8 +1,8 @@
 """Request and response models for projects and their members.
 
 Every request model forbids unknown fields, so a client cannot set the owner,
-the id or a date by adding them to the body. Response models carry no email
-addresses: members are shown by display name.
+the id or a date by adding them to the body. A member's email address is sent to
+owners only, and left out of the body entirely for everyone else.
 """
 
 from __future__ import annotations
@@ -63,6 +63,9 @@ class MemberOut(BaseModel):
     display_name: str
     role: Role
     added_at: datetime
+    email: str | None = Field(
+        default=None, description="Sent to owners only; absent for everyone else."
+    )
 
     @classmethod
     def from_view(cls, view: MemberView) -> MemberOut:
@@ -71,4 +74,5 @@ class MemberOut(BaseModel):
             display_name=view.display_name,
             role=view.role,
             added_at=view.added_at,
+            email=view.email,
         )

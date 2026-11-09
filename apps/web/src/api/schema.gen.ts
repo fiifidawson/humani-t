@@ -2596,6 +2596,11 @@ export interface components {
              * Format: date-time
              */
             added_at: string;
+            /**
+             * Email
+             * @description Sent to owners only; absent for everyone else.
+             */
+            email?: string | null;
         };
         /** MemberRoleIn */
         MemberRoleIn: {

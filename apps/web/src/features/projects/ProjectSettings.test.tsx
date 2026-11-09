@@ -110,6 +110,55 @@ describe("project settings (UI_UX_SPEC §6.14)", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("lets an owner rename the project, and the rail shows the new name", async () => {
+		const { api, project, path } = withProject();
+		const { user } = renderApp(path);
+
+		const name = await screen.findByRole("textbox", { name: "Project name" });
+		expect(name).toHaveValue(NAME);
+		await user.clear(name);
+		await user.type(name, "Cholera response, Aden");
+		await user.click(screen.getByRole("button", { name: "Save name" }));
+
+		expect(
+			(await screen.findAllByRole("link", { name: /Cholera response, Aden/ }))
+				.length,
+		).toBeGreaterThan(0);
+		expect(api.requestsTo("PATCH", `/projects/${project.id}`)[0]?.body).toEqual(
+			{ name: "Cholera response, Aden" },
+		);
+		expect(api.projects[0]?.name).toBe("Cholera response, Aden");
+	});
+
+	it("shows the API's message at the name field when it refuses the name", async () => {
+		const { path } = withProject();
+		const { user } = renderApp(path);
+
+		const name = await screen.findByRole("textbox", { name: "Project name" });
+		await user.clear(name);
+		await user.type(name, "   ");
+		await user.click(screen.getByRole("button", { name: "Save name" }));
+
+		await waitFor(() =>
+			expect(name).toHaveAccessibleDescription(
+				expect.stringContaining("Project.name must not be blank"),
+			),
+		);
+		expect(name).toBeInvalid();
+	});
+
+	it("offers renaming to owners only", async () => {
+		const { path } = withProject("reviewer");
+		renderApp(path);
+
+		expect(
+			await screen.findByText("Only owners can rename the project."),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("textbox", { name: "Project name" }),
+		).not.toBeInTheDocument();
+	});
+
 	it("has no accessibility violations", async () => {
 		const { path } = withProject();
 		const { container } = renderApp(path);

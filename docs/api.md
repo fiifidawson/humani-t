@@ -295,7 +295,7 @@ Owner only, with a sign-in in the last 15 minutes. Destroys the project's data k
 { "user_id": "2b9e…", "display_name": "Kofi Mensah", "role": "reviewer", "added_at": "2026-11-03T09:05:00Z" }
 ```
 
-No email addresses: members are shown by display name.
+Owners also get each member's `email`, so they can tell two people with the same display name apart before changing anyone's access. For reviewers and viewers the field is left out of the body entirely, not sent as `null`. Adding a member and changing a role need the owner role, so those responses always carry it.
 
 - `GET …/members`: every member, earliest added first. Any member.
 - `POST …/members` with `{"email": "kofi@example.org", "role": "reviewer"}`: owner, recent sign-in. `201` with a `MemberOut`. The email is matched case-insensitively against **existing, enabled** accounts; anything else gets `422` with the same body, which never repeats the email. `409` if the person is already a member. `role` is exactly `owner`, `reviewer` or `viewer`.
