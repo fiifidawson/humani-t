@@ -223,6 +223,13 @@ Yellow marks a caution only as an icon or a bar, never as text colour: yellow te
 
 **PRISMA flow.** The papers panel opens on the PRISMA 2020 flow: Identified → Unique → Screened → Included. Each step shows what left beneath it. Included, excluded, uncertain and not screened are buttons that filter the table, which keeps its rows while a new filter loads.
 
+**Downloads (Wave 2).** The papers and brief panels have a **Download** button in their header. It opens a list of plain file links, each with its run's id:
+
+- **Papers panel:** Papers (CSV), Papers (JSON lines), Included papers for a reference manager (RIS), PRISMA report, and Run record.
+- **Brief panel:** Brief (Markdown), Brief to print or save as PDF (opens in a new tab; "Save as PDF" in the browser's print dialog), and Brief (JSON).
+
+Every member may download what they may read. The API records each download in the audit log.
+
 **Controls.**
 
 - **Card actions:** a card's main action is a solid button; its other actions are outlined buttons with an icon, on one row.
