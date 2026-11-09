@@ -383,6 +383,7 @@ Everything goes in `services\api\.env`, which git ignores. Each line is read whe
   - `HUMANI_T_SCREENING_CONCURRENCY=2` (more can hit the rate limit)
 - **Paper sources:** `HUMANI_T_PAPER_SOURCES=openalex,europepmc,arxiv`. Empty searches nothing.
 - **Geography:** `HUMANI_T_MASK_COUNTRIES_AND_REGIONS=false` keeps "the Sahel" or "Mali" in the question, so the search keeps them ([ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md)).
+- **Uploading documents:** with a database, uploads stay off until files have somewhere to go. Set `HUMANI_T_DOCUMENT_STORAGE_DIR=C:/Users/<you>/humani-t-documents`, written with forward slashes: uv's `.env` reader rejects backslashes. Create the folder first. Also set `HUMANI_T_MALWARE_SCANNER=none`, which is for development only; production scans with ClamAV ([ADR 0012](../adr/0012-clamav-in-the-stack.md)). The API and the worker both need these two lines, since the worker reads the files.
 
 Do not type `$env:HUMANI_T_…` lines into a window for these. A setting typed into a window overrides `.env` until the window closes, and it reaches only programs started afterwards from that same window. Both have caused hard-to-see failures: a worker without paper sources, and an API still sending OpenAI-format requests to Ollama. To clear them, run `Remove-Item Env:HUMANI_T_* -ErrorAction SilentlyContinue`, or open a new window. The privacy receipt's "Sent to …" line shows which model was really used.
 

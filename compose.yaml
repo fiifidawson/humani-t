@@ -48,6 +48,13 @@ x-app-environment: &app-environment
   HUMANI_T_PAPER_SOURCES: ${HUMANI_T_PAPER_SOURCES:-}
   HUMANI_T_MASK_COUNTRIES_AND_REGIONS: ${HUMANI_T_MASK_COUNTRIES_AND_REGIONS:-true}
   HUMANI_T_OPENALEX_MAILTO: ${HUMANI_T_OPENALEX_MAILTO:-}
+  # Uploaded files, sealed under each project's key (ADR 0008). Both the API and
+  # the worker mount the `documents` volume here.
+  HUMANI_T_DOCUMENT_STORAGE_DIR: /var/lib/humani-t/documents
+  # Empty means not chosen, and production then refuses uploads. `clamd` with
+  # tcp://clamav:3310 and the malware-scan profile, or `none` (ADR 0012).
+  HUMANI_T_MALWARE_SCANNER: ${HUMANI_T_MALWARE_SCANNER:-}
+  HUMANI_T_CLAMD_ADDRESS: ${HUMANI_T_CLAMD_ADDRESS:-}
   # HUMANI_T_ALLOW_HOSTED_INFERENCE is deliberately not passed through: sending
   # text to a third-party model API should take an edit here, not a stray .env line.
 
@@ -115,6 +122,8 @@ services:
       HUMANI_T_TRUSTED_PROXIES: 172.30.231.2
       WEB_CONCURRENCY: ${HUMANI_T_API_WORKERS:-2}
     secrets: *app-secrets
+    volumes:
+      - documents:/var/lib/humani-t/documents
     tmpfs:
       - /tmp:size=64m
     networks: [backend, data, egress]
@@ -146,12 +155,15 @@ services:
     command: ["python", "-m", "app.worker"]
     environment: *app-environment
     secrets: *app-secrets
+    volumes:
+      - documents:/var/lib/humani-t/documents
     # Also holds the heartbeat file (tempfile.gettempdir(), /tmp here).
     tmpfs:
       - /tmp:size=64m
     # No `backend`: nothing calls the worker. It reads jobs from Valkey and Postgres
     # and makes the outbound calls (paper sources, the model) through `egress`.
-    networks: [data, egress]
+    # `scan` reaches clamd: the worker is what scans uploads; the API never does.
+    networks: [data, egress, scan]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -331,6 +343,67 @@ services:
     volumes:
       - ollama-models:/models
 
+  # Optional malware scanning of uploads (ADR 0012). Enable with
+  # COMPOSE_PROFILES=malware-scan, HUMANI_T_MALWARE_SCANNER=clamd and
+  # HUMANI_T_CLAMD_ADDRESS=tcp://clamav:3310. clamd receives raw files, so it sits
+  # on `scan` alone: the worker can reach it, and it can reach nothing.
+  clamav:
+    <<: *hardened
+    profiles: [malware-scan]
+    image: clamav/clamav:1.5.4-debian@sha256:76a9c3b63764b78178dc68fa7efcceca0cde2c8c9d4f925a8e697cb4511f8fdc
+    # The image's `clamav` user. The image's /init edits its config files as root,
+    # so clamd is started directly, with ours mounted read-only.
+    user: "1000:1000"
+    entrypoint: ["clamd", "--config-file=/etc/humani-t/clamd.conf"]
+    volumes:
+      - clamav-signatures:/var/lib/clamav:ro
+      - ./infrastructure/clamav/clamd.conf:/etc/humani-t/clamd.conf:ro
+    # Each upload is written here before it is scanned, and archives are unpacked
+    # here. In memory, so a team's file never reaches the host's disk unsealed.
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=0700,size=256m
+    networks: [scan]
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Loading the signatures takes up to a minute or two on a small server.
+      start_period: 5m
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: "${HUMANI_T_CLAMAV_MEMORY:-2g}", pids: 128 }
+
+  # Keeps clamd's signatures current from ClamAV's CDN (database.clamav.net). The
+  # request names only database versions. It runs apart from clamd, on a network
+  # of its own, so the container that downloads never sees an uploaded file.
+  freshclam:
+    <<: *hardened
+    profiles: [malware-scan]
+    image: clamav/clamav:1.5.4-debian@sha256:76a9c3b63764b78178dc68fa7efcceca0cde2c8c9d4f925a8e697cb4511f8fdc
+    user: "1000:1000"
+    entrypoint:
+      ["freshclam", "--daemon", "--foreground", "--stdout", "--config-file=/etc/humani-t/freshclam.conf"]
+    # A new volume starts with the signatures built into the image, so clamd can
+    # start before the first download, or without one on a host with no internet.
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+      - ./infrastructure/clamav/freshclam.conf:/etc/humani-t/freshclam.conf:ro
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,size=64m
+    networks: [signatures]
+    healthcheck:
+      # ClamAV publishes new signatures daily. Two days without a newer daily
+      # database means updates are failing: blocked, rate-limited or offline.
+      test: ["CMD-SHELL", "find /var/lib/clamav -maxdepth 1 -name 'daily.c[lv]d' -mmin -2880 | grep -q ."]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 10m
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 1536m, pids: 64 }
+
 networks:
   # Caddy's published ports, and its route out to Let's Encrypt.
   public: {}
@@ -349,12 +422,20 @@ networks:
     internal: true
   # Outbound traffic from the API and the worker: paper sources, mail, the model.
   egress: {}
+  # The worker to clamd. Internal: clamd, which reads raw uploads, has no way out.
+  scan:
+    internal: true
+  # freshclam's route to ClamAV's CDN. Nothing else is on it.
+  signatures: {}
 
 volumes:
   postgres-data:
+  # Sealed uploads; back it up with the database (docs/deploy/self-hosting.md §5).
+  documents:
   caddy-data:
   caddy-config:
   ollama-models:
+  clamav-signatures:
 
 # Files under ./secrets (or HUMANI_T_SECRETS_DIR), created by
 # infrastructure/generate_secrets.py. Each container sees only the ones it lists.
