@@ -21,7 +21,7 @@ import {
 } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
@@ -38,11 +38,13 @@ import type { BriefSource } from "./Claim";
 import { SECTIONS, screeningWord } from "./words";
 
 type Evidence = components["schemas"]["EvidenceOut"];
+type Passage = components["schemas"]["PassageOut"];
 
-function Passages({ evidence }: { evidence: Evidence }) {
+/** The masked passages behind a tag, one at a time. */
+export function Passages({ passages }: { passages: readonly Passage[] }) {
 	const [index, setIndex] = useState(0);
-	const passage = evidence.passages[index];
-	const total = evidence.passages.length;
+	const passage = passages[index];
+	const total = passages.length;
 	if (passage === undefined) {
 		return <Text color="fg.muted">No passage was kept for this source.</Text>;
 	}
@@ -146,7 +148,7 @@ function Found({ evidence }: { evidence: Evidence }) {
 					</chakra.ul>
 				</Box>
 			)}
-			<Passages evidence={evidence} />
+			<Passages passages={evidence.passages} />
 			{details === null ? null : (
 				<Box>
 					<DisclosureButton
@@ -181,6 +183,45 @@ export function SourcePanel({
 }) {
 	const api = useApi();
 	const evidence = useQuery(evidenceQuery(api, briefId, tag));
+	return (
+		<SourcePanelFrame tag={tag} onClose={onClose}>
+			{isApiError(evidence.error, "not-found") ? (
+				<Stack gap="2">
+					{source?.title == null ? null : (
+						<Text fontWeight="semibold">{source.title}</Text>
+					)}
+					<Text color="caveat.fg" display="flex" gap="1.5" alignItems="center">
+						<TriangleAlert size={16} />
+						This citation has no passage. Report it.
+					</Text>
+				</Stack>
+			) : evidence.isError ? (
+				<ErrorNotice
+					error={evidence.error}
+					onRetry={() => void evidence.refetch()}
+				/>
+			) : evidence.data === undefined ? (
+				<Loading what="the source" />
+			) : (
+				<Found evidence={evidence.data} />
+			)}
+		</SourcePanelFrame>
+	);
+}
+
+/**
+ * The panel around a source: its tag as a heading that takes focus, Close,
+ * Esc and the resize handle. A brief and a follow-up answer fill it differently.
+ */
+export function SourcePanelFrame({
+	tag,
+	onClose,
+	children,
+}: {
+	tag: string;
+	onClose: () => void;
+	children: ReactNode;
+}) {
 	const heading = useRef<HTMLHeadingElement>(null);
 	const id = useId();
 	const [width, setWidth] = usePanelWidth("source");
@@ -265,31 +306,7 @@ export function SourcePanel({
 				</IconButton>
 			</Flex>
 			<Box flex="1" position="relative" overflowY="auto" px="4" py="4">
-				{isApiError(evidence.error, "not-found") ? (
-					<Stack gap="2">
-						{source?.title == null ? null : (
-							<Text fontWeight="semibold">{source.title}</Text>
-						)}
-						<Text
-							color="caveat.fg"
-							display="flex"
-							gap="1.5"
-							alignItems="center"
-						>
-							<TriangleAlert size={16} />
-							This citation has no passage. Report it.
-						</Text>
-					</Stack>
-				) : evidence.isError ? (
-					<ErrorNotice
-						error={evidence.error}
-						onRetry={() => void evidence.refetch()}
-					/>
-				) : evidence.data === undefined ? (
-					<Loading what="the source" />
-				) : (
-					<Found evidence={evidence.data} />
-				)}
+				{children}
 			</Box>
 		</Box>
 	);

@@ -20,7 +20,7 @@ import {
 	VisuallyHidden,
 } from "@chakra-ui/react";
 import { ArrowUp } from "lucide-react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { useId } from "react";
 
 interface ComposerProps {
@@ -33,6 +33,8 @@ interface ComposerProps {
 	unavailableReason?: string | undefined;
 	/** A line of help for this moment, read with the box ("Say what to change, for example…"). */
 	note?: string | undefined;
+	/** Shown above the label, such as a choice of what the box does. */
+	above?: ReactNode;
 }
 
 /** The textarea and its hidden copy must lay text out identically, or the height drifts. */
@@ -53,6 +55,7 @@ export function Composer({
 	onSend,
 	unavailableReason,
 	note,
+	above,
 }: ComposerProps) {
 	const id = useId();
 	const hintId = `${id}-hint`;
@@ -105,6 +108,7 @@ export function Composer({
 			onSubmit={onSubmit}
 		>
 			<Box maxW="3xl" mx="auto">
+				{above}
 				<chakra.label
 					htmlFor="composer-input"
 					display="block"

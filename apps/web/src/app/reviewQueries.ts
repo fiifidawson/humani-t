@@ -128,3 +128,35 @@ export const prismaQuery = (api: ApiClient, reviewId: string, runId: string) =>
 				}),
 			),
 	});
+
+/** A review's follow-up threads, newest first, each with its questions in order. */
+export const threadsQuery = (api: ApiClient, reviewId: string) =>
+	queryOptions({
+		queryKey: keys.threads(reviewId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/reviews/{review_id}/threads", {
+					params: { path: { review_id: reviewId } },
+				}),
+			),
+	});
+
+const QUESTION_POLL_MS = 2000;
+
+/** One question, polled until it is answered or failed (docs/api.md "Follow-up questions"). */
+export const questionQuery = (api: ApiClient, questionId: string) =>
+	queryOptions({
+		queryKey: keys.question(questionId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/questions/{question_id}", {
+					params: { path: { question_id: questionId } },
+				}),
+			),
+		refetchInterval: (query) => {
+			const status = query.state.data?.status;
+			return status === "answered" || status === "failed"
+				? false
+				: QUESTION_POLL_MS;
+		},
+	});
