@@ -731,7 +731,7 @@ Mark a mask "not personal". **Request** `{"version": 1, "start": 40, "end": 46, 
 
 ### `DELETE /api/v1/projects/{project_id}/documents/{document_id}`
 
-**Response** `204`. Deletes the document's raw and masked text, then its file. Its tag is never given to another document. A brief written earlier keeps the masked passages it cited.
+**Response** `204`. Deletes the document's raw and masked text, then its file. Its tag is never given to another document. A brief written earlier keeps the masked passages it cited. Owners only (`403` for other members); no recent sign-in needed. `404` if there is no such document, including one another owner already deleted. Any status can be deleted, a document still being processed included: the worker drops it.
 
 ### Processing and evidence
 

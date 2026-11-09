@@ -1,6 +1,6 @@
 # 16 — Documents
 
-> **Milestones:** UI_UX_SPEC §15 P2 (documents, privacy review) · **Status:** in progress (API done; the web screens are wave B) · **Previous:** [15 — Exports and follow-up questions](15-exports-and-questions.md) · **Next:** none yet
+> **Milestones:** UI_UX_SPEC §15 P2 (documents, privacy review) · **Status:** in progress (API done; on the web, upload, the list, the masked text, approve or reject, and delete are built; correcting masks on screen is next) · **Previous:** [15 — Exports and follow-up questions](15-exports-and-questions.md) · **Next:** none yet
 
 Before this phase a team could only bring papers from the paper sources. Now an owner uploads the team's own files to a project (PDF, Word, plain text, Markdown). Each one is scanned for malware, read in a separate process that can do nothing but read, and masked with the broad list: names and places (with the name model installed), dates, contacts and identifiers, plus the project's rules. An owner then reviews the masked result: sees the original and every mask with what made it, masks what was missed, removes what is not personal with a reason, and approves or rejects the exact masked version they saw. Only an approved document becomes evidence, for the decision brief and follow-up questions, cited as `D1`, `D2`, … with a page or character range. A run that reaches the mask stage while documents wait pauses at the `privacy_review` gate, and deciding the last one resumes it. Everything is sealed under the project's key, and deleting the project shreds it. This serves the brief's rules 2, 3, 12, 13 and 17, [`architecture.md` §3.3 and §3.9.1](../architecture.md#391-masking-is-derived-reviewable-and-re-runnable) and UI_UX_SPEC [§6.6](../UI_UX_SPEC.md#66-gates-vocabulary-and-privacy-review) and [§6.13](../UI_UX_SPEC.md#613-documents). **Masking is not anonymity:** text that is only in an image is not read, and so not masked.
 
@@ -16,7 +16,9 @@ Before this phase a team could only bring papers from the paper sources. Now an 
 - **Delete** (`DELETE …/documents/{document_id}`): rows, then the file; tags are never reused.
 - **Endpoints:** ten, listed in [`api.md`](../api.md#documents).
 - **Settings:** `HUMANI_T_DOCUMENT_STORAGE_DIR`, `HUMANI_T_UPLOAD_MAX_BYTES`, `HUMANI_T_DOCUMENTS_PER_PROJECT`, `HUMANI_T_DOCUMENT_BYTES_PER_PROJECT`, `HUMANI_T_UPLOADS_PER_HOUR`, `HUMANI_T_MALWARE_SCANNER`, `HUMANI_T_CLAMD_ADDRESS`, `HUMANI_T_EXTRACTION_TIMEOUT_SECONDS`, `HUMANI_T_EXTRACTION_MAX_PAGES`, `HUMANI_T_EXTRACTION_MAX_CHARACTERS`.
-- **Migration** `0013`, with `down_revision` `0011` until the wave's migrations are chained at integration.
+- **Migration** `0013`, after `0012`.
+- **The web screens** at `/p/:project/documents` ([`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx)), opened from the Documents link in the project's header: upload by choosing or dropping a file (owners); the list with tag, name, size, who uploaded it and the status in words, fetched again every 3 seconds while a file is being processed; the masked text for any member; approve or reject the masked version shown (owners); delete, after a confirmation (owners). Correcting masks (`…/masks`, `…/unmask`) and the original text side by side are not on screen yet: owners use the API for those (G16.11).
+- **ClamAV in the compose stack:** the `clamav` and `freshclam` services, in the opt-in profile `malware-scan` ([ADR-0012](../adr/0012-clamav-in-the-stack.md)), and a `documents` volume that the API and the worker share, so uploads work in the stack.
 
 ### Data model
 
@@ -79,7 +81,7 @@ The file itself is `<HUMANI_T_DOCUMENT_STORAGE_DIR>/<project id>/<document id>.s
 ### D16.6 Scanning is a decision the operator writes down
 
 - **Decision:** `HUMANI_T_MALWARE_SCANNER=clamd` (with `HUMANI_T_CLAMD_ADDRESS`) or `none`. Unset outside production means not scanned; unset in production switches uploads off with a `503` naming the reason. Every document records `scanned_with`. An infected file is deleted unread; an unreachable scanner leaves the document queued.
-- **Why:** the brief's rule 12, without shipping a ClamAV service that pulls signature updates from the internet on its own; the choice not to scan is visible on every file and in [`controls.md`](../security/controls.md).
+- **Why:** the brief's rule 12. The stack's own ClamAV is something the operator turns on (D16.10), because its updater talks to ClamAV's CDN. The choice not to scan is visible on every file and in [`controls.md`](../security/controls.md).
 - **Rejected:** a hosted scanning API (sends the raw file out of the deployment); a client library (`pyclamd`, `clamd`): the protocol is a few lines of `asyncio`.
 - **Where:** [`app/malware/`](../../services/api/app/malware/), [`settings.py`](../../services/api/app/settings.py) (`uploads_disabled_reason`).
 - **Proven by:** `tests/test_document_seams.py::TestClamd`, `tests/test_documents_settings.py::TestScannerChoice`, `tests/test_documents_api.py::TestProcessing::test_an_infected_file_is_deleted_unread_and_fails_plainly`.
@@ -108,6 +110,23 @@ The file itself is `<HUMANI_T_DOCUMENT_STORAGE_DIR>/<project id>/<document id>.s
 - **Why:** UI_UX_SPEC §6.6, "Approving the last document resumes the run."
 - **Where:** [`application/documents.py`](../../services/api/app/application/documents.py) (`_resume_runs`).
 - **Proven by:** `tests/test_documents_gate.py`.
+
+### D16.10 ClamAV in the stack, opt-in, split from its updater
+
+- **Decision:** two services from the official `clamav/clamav:1.5.4-debian` image, pinned by digest, in the profile `malware-scan`. `clamav` runs clamd alone, on `scan`, an internal network only the worker joins. `freshclam` runs the updater alone, on `signatures`, a network of its own with a route out. Both run as `1000:1000` with a read-only filesystem and no capabilities; the image's root `/init` is bypassed, and our config is mounted read-only from [`infrastructure/clamav/`](../../infrastructure/clamav/). clamd reads the signature volume read-only and picks up freshclam's updates every 10 minutes. The operator sets `COMPOSE_PROFILES=malware-scan`, `HUMANI_T_MALWARE_SCANNER=clamd` and `HUMANI_T_CLAMD_ADDRESS=tcp://clamav:3310`.
+- **Why:** clamd reads hostile files, so it gets no route anywhere and only the worker can reach it; the API, which the internet talks to, cannot. freshclam needs the internet but never sees a file. Opt-in, because freshclam's requests go to a destination the operator has not otherwise chosen, and clamd needs about 1 GiB of memory.
+- **Rejected:** the image's `/init` as root (one container both reading files and talking to the internet); `NotifyClamd` (freshclam would need a route to clamd); the Alpine image (amd64 only); the `_base` tag (no signatures until the first download). See [ADR-0012](../adr/0012-clamav-in-the-stack.md), which leaves the default open for the owner.
+- **Costs:** about 1.5 GB more memory; signatures from the CDN every two hours; uploads in production stay off until the operator chooses a scanner.
+- **Where:** [`compose.yaml`](../../compose.yaml), [`infrastructure/clamav/`](../../infrastructure/clamav/), [`services/api/Dockerfile`](../../services/api/Dockerfile) (the documents directory), [`docs/deploy/self-hosting.md` §3.7](../deploy/self-hosting.md#37-scan-uploads-for-malware).
+- **Proven by:** the compose smoke test ([`.github/workflows/compose.yml`](../../.github/workflows/compose.yml)): clamd is hardened like every container, the worker's real client gets `Eicar-Test-Signature` back, the API cannot connect to clamd, and clamd cannot resolve an internet name.
+
+### D16.11 Deleting a document from the web app
+
+- **Decision:** owners see **Delete** on every row, whatever the document's status, so a failed or rejected file can be removed and uploaded again. A dialog asks first: "This deletes the file and its text. A brief that already cites D1 keeps the passages it quoted. This can't be undone." The request is `DELETE …/documents/{document_id}` with the session's CSRF token, and needs no recent sign-in, as the API does not ask for one. Afterwards the list is fetched again and the page says "D1 report.txt is deleted." A `404` means another owner deleted it first, so the page says "… was already deleted." and refreshes; any other refusal shows in the dialog in the API's words.
+- **Why:** UI_UX_SPEC §6.13 ("Deleting a document asks for confirmation and says the brief may cite it"). Two failure messages ("Delete the file and upload it again") already sent people to a delete the screen did not have.
+- **Rejected:** asking for the password first, which the API does not require for this; typing the name to confirm, as for a project, since one document is far less to lose.
+- **Where:** [`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx) (`DeleteDialog`), [`test/fakeDocuments.ts`](../../apps/web/src/test/fakeDocuments.ts).
+- **Proven by:** `Documents.test.tsx` › "deleting a document".
 
 ### Deliberately not used
 
@@ -144,34 +163,34 @@ From the rule outwards.
 
 ## Set up
 
-Beyond [00 — Setup](00-setup.md): give uploads a directory, choose not to scan (development only), migrate, and run a worker.
+Beyond [00 — Setup](00-setup.md): give uploads a directory, choose not to scan (development only), migrate, and run a worker. Create the folder, then add two lines to `services\api\.env`, as [S0.13b](00-setup.md#s013b-real-mode-on-this-machine-a-real-model-and-real-paper-sources) says, with forward slashes in the path (uv's `.env` reader rejects backslashes):
+
+```text
+HUMANI_T_DOCUMENT_STORAGE_DIR=C:/Users/<you>/humani-t-documents
+HUMANI_T_MALWARE_SCANNER=none
+```
 
 ```powershell
+New-Item -ItemType Directory -Force $HOME\humani-t-documents | Out-Null
 cd services\api
 uv sync
-New-Item -ItemType Directory -Force ..\..\.data\documents | Out-Null
-$env:HUMANI_T_DOCUMENT_STORAGE_DIR = (Resolve-Path ..\..\.data\documents).Path
-$env:HUMANI_T_MALWARE_SCANNER = 'none'
 uv run --env-file .env alembic upgrade head
 uv run --env-file .env uvicorn app.main:app --reload --port 8731 --no-proxy-headers
 ```
 
-In a second PowerShell window, with the same two `$env:` lines:
+In a second PowerShell window:
 
 ```powershell
 cd services\api
-$env:HUMANI_T_DOCUMENT_STORAGE_DIR = (Resolve-Path ..\..\.data\documents).Path
-$env:HUMANI_T_MALWARE_SCANNER = 'none'
 uv run --env-file .env python -m app.worker
 ```
 
-Until the wave is integrated, `alembic upgrade head` reports several heads (0012, 0013 and 0014 all follow 0011); upgrade to `0013` explicitly if you test this lane alone. Have a project `{{project}}` with Amara (owner), Kofi (reviewer) and Maya (viewer), as in [07](07-projects-and-roles.md). Create a file `report.txt` holding: `Interview on 12 March 2024 with amina.yusuf@example.org. Kofi Mensah leads the team. MRN 448-1207 was referred.`
+For the web screens, run `pnpm --filter @humani-t/web dev` from the repository root in a third window and open `http://localhost:5173`. Have a project `{{project}}` with Amara (owner), Kofi (reviewer) and Maya (viewer), as in [07](07-projects-and-roles.md). Create a file `report.txt` holding: `Interview on 12 March 2024 with amina.yusuf@example.org. Kofi Mensah leads the team. MRN 448-1207 was referred.`
 
 ### Troubleshooting
 
-- **`503` "the operator has not set a storage directory"**: `HUMANI_T_DOCUMENT_STORAGE_DIR` is not set in the API's window.
-- **A document stays `uploaded`**: no worker is running, or it lacks the two variables.
-- **`413` through Caddy**: the compose proxy still caps bodies at 1 MiB (G16.6); test against `uvicorn` directly.
+- **`503` "the operator has not set a storage directory"**: `HUMANI_T_DOCUMENT_STORAGE_DIR` is not in `services\api\.env`, or a window still holds an old `$env:` value (`Remove-Item Env:HUMANI_T_* -ErrorAction SilentlyContinue`).
+- **A document stays `uploaded`**: no worker is running, or it was started before the two lines were added. In the compose stack, the worker cannot reach clamd: see [self-hosting §9](../deploy/self-hosting.md#9-troubleshooting).
 
 ## Manual tests
 
@@ -225,6 +244,27 @@ Until the wave is integrated, `alembic upgrade head` reports several heads (0012
 | T16.6.3 | `DELETE …/documents/{{document}}`, then upload again | `204`; the file is gone from the directory; the new upload is `D3`, not a reused tag | tags never reused | |
 | T16.6.4 | pgAdmin as `humani_t_app`: `UPDATE document_reviews SET decision = 'reject';` | `permission denied` | reviews are provenance | the role script did not run |
 
+### T16.7 Deleting from the web app
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T16.7.1 | As Amara, on the Documents page, click **Delete** on D1's row | A dialog "Delete D1 report.txt?" saying a brief that already cites D1 keeps the passages it quoted, and that this can't be undone | D16.11 | |
+| T16.7.2 | Click **Cancel** | The dialog closes; D1 is still listed; no `DELETE` in the API log | D16.11 | |
+| T16.7.3 | Open it again and click **Delete** | The dialog closes, "D1 report.txt is deleted." shows above the list, D1 leaves it; the API logs `204`; the `.sealed` file is gone from the documents folder | D16.11, T16.6.3 | a `403` means Amara is not an owner of this project |
+| T16.7.4 | As Kofi (reviewer), open the Documents page | No **Delete** button on any row | roles | the API would refuse with `403` anyway |
+
+### T16.8 ClamAV in the compose stack
+
+With the stack running as in [self-hosting §3.7](../deploy/self-hosting.md#37-scan-uploads-for-malware) (profile `malware-scan`, `HUMANI_T_MALWARE_SCANNER=clamd`, `HUMANI_T_CLAMD_ADDRESS=tcp://clamav:3310`). The EICAR test string is built in Python from the app's own constant, so no test file sits on your disk for a desktop virus scanner to quarantine.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T16.8.1 | `docker compose ps` | `clamav` and `freshclam` `healthy` (clamav after a minute or two) | D16.10 | `docker compose logs clamav` |
+| T16.8.2 | `docker compose exec -T worker python -c "import asyncio; from app.malware.clamd import ClamdAddress, ClamdScanner; from app.malware.fake import EICAR; print(asyncio.run(ClamdScanner(ClamdAddress.parse('tcp://clamav:3310')).scan(EICAR)))"` | `ScanVerdict(outcome=<ScanOutcome.INFECTED: 'infected'>, scanner='clamd', signature='Eicar-Test-Signature')` | the worker reaches clamd, which finds the test file | |
+| T16.8.3 | The same, with `.scan(b'An ordinary report.')` | `outcome=<ScanOutcome.CLEAN: 'clean'>` | | |
+| T16.8.4 | The same command in `api` instead of `worker` | `MalwareScanUnavailableError: clamd could not be reached`, never a verdict | only the worker reaches clamd | check the `api` service's `networks` |
+| T16.8.5 | `docker compose stop clamav`, upload `report.txt`, wait a minute, then `docker compose start clamav` | The document stays at "Checking for viruses" while clamd is down (the worker logs `malware_scanner_unavailable`), then moves on once clamd is healthy | fails closed | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -235,6 +275,8 @@ Until the wave is integrated, `alembic upgrade head` reports several heads (0012
 | T16.4 | ☐ | |
 | T16.5 | ☐ | |
 | T16.6 | ☐ | |
+| T16.7 | ☐ | |
+| T16.8 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -250,6 +292,8 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | The privacy_review gate with real documents | `tests/test_documents_gate.py` |
 | Scanner and storage settings, and the production wiring | `tests/test_documents_settings.py` |
 | Storage behaves the same on memory and Postgres | `tests/test_documents_storage_contract.py` |
+| The web screens: upload, status, review, delete (owners only, confirmed), and no accessibility violations | `apps/web/src/features/documents/Documents.test.tsx` |
+| clamd in the stack is hardened, reachable from the worker only, finds EICAR, and reaches nothing | `.github/workflows/compose.yml` (compose smoke test) |
 
 ```powershell
 uv run pytest tests/test_documents_domain.py tests/test_document_extraction.py tests/test_document_seams.py tests/test_document_uploads.py tests/test_documents_api.py tests/test_documents_gate.py tests/test_documents_settings.py tests/test_documents_storage_contract.py -v
@@ -264,11 +308,14 @@ uv run pytest tests/test_documents_domain.py tests/test_document_extraction.py t
 | G16.3 | No "low-confidence spans first": detectors report no confidence | the reviewer reads every span | add a confidence to `MaskSpan` from the name model |
 | G16.4 | A project rule added after approval reaches a document only at its next correction | an approved document can still name someone a later rule masks | re-mask approved documents, adding masks only, when a rule is added |
 | G16.5 | The brief's source details know only papers: a `D` tag has no title in the brief | the source panel shows the passage without a document name | the brief lane adds documents to its `SourceCatalogue` (deciding whether a file name may be shown) |
-| G16.6 | Caddy caps `/api/*` bodies at 1 MiB | uploads over 1 MiB fail at the compose stack's edge | a `request_body` limit for the upload path in the Caddyfile |
-| G16.7 | No ClamAV compose service | production must set `malware_scanner=none` or run its own clamd | add `clamav` to `compose.yaml` with a volume for signatures |
+| G16.6 | Closed: the Caddyfile gives the upload path its own limit (21 MiB) | — | — |
+| G16.7 | Closed: `clamav` and `freshclam` are in `compose.yaml`, profile `malware-scan` (D16.10) | — | — |
 | G16.8 | Postgres contract tests were not run in this wave (no database) | a SQL mistake would show only at integration | run them against the lane database |
 | G16.9 | Deleting a project does not delete its files from the volume; they are unreadable (shredded) but take space | disk use | a worker sweep of deleted projects' files |
 | G16.10 | No threat model document exists yet; `scanner=none` is recorded in `controls.md` | — | add it to the threat model when it is written (M14) |
+| G16.11 | Correcting masks and the original text side by side are not on the web screens yet | owners correct masks through the API (T16.4) | the review screen of UI_UX_SPEC §6.6 |
+| G16.12 | ClamAV in the stack is opt-in | a new production deployment refuses uploads until the operator chooses a scanner | the owner's decision, open in ADR-0012 |
+| G16.13 | `FakeMalwareScanner` finds EICAR anywhere in a file; clamd finds it only as the whole file or at its start, as the EICAR standard defines | a test that passes with the fake can need the bare string against real clamd (T16.8 uses it) | make the fake match clamd, and the tests that put text before EICAR send it bare |
 
 ## Glossary
 
