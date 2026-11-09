@@ -6412,6 +6412,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Added At"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Sent to owners only; absent for everyone else."
           }
         },
         "type": "object",
