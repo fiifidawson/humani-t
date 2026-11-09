@@ -309,6 +309,24 @@ const traceRoute = createRoute({
 	),
 });
 
+export interface DocumentsSearch {
+	/** The document whose masked text is open. */
+	document?: string | undefined;
+}
+
+const documentsRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "documents",
+	validateSearch: (search: Record<string, unknown>): DocumentsSearch => ({
+		document:
+			typeof search["document"] === "string" ? search["document"] : undefined,
+	}),
+	component: lazyRouteComponent(
+		() => import("../features/documents/Documents"),
+		"DocumentsPage",
+	),
+});
+
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
@@ -327,6 +345,7 @@ const routeTree = rootRoute.addChildren([
 				briefRoute,
 				traceRoute,
 			]),
+			documentsRoute,
 		]),
 		accountRoute,
 	]),

@@ -13,6 +13,7 @@
  */
 
 import { HttpResponse, http } from "msw";
+import { FakeDocuments } from "./fakeDocuments";
 import {
 	jsonBody,
 	nextId,
@@ -106,6 +107,13 @@ export class FakeApi {
 	session: FakeSession | null = null;
 	/** Reviews, plans, runs, gates and papers (fakeReviews.ts). */
 	readonly reviews = new FakeReviews({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		userId: () => this.session?.userId ?? null,
+	});
+	/** A project's uploaded documents (fakeDocuments.ts). */
+	readonly documents = new FakeDocuments({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		roleIn: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
@@ -353,7 +361,12 @@ export class FakeApi {
 
 	handlers() {
 		const record = async (request: Request) => {
-			const body = request.method === "GET" ? null : await jsonBody(request);
+			// An upload's body is a file, recorded by its content type alone.
+			const isUpload = request.headers
+				.get("content-type")
+				?.startsWith("multipart/form-data");
+			const body =
+				request.method === "GET" || isUpload ? null : await jsonBody(request);
 			this.requests.push({
 				method: request.method,
 				path: new URL(request.url).pathname,
@@ -955,6 +968,7 @@ export class FakeApi {
 			),
 
 			...this.reviews.handlers(),
+			...this.documents.handlers(),
 		];
 	}
 }

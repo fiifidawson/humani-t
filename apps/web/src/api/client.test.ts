@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { installNodeFiles } from "../test/nodeFiles";
 import { fakeApi, server } from "../test/server";
 import { createApiClient, unwrap, unwrapEmpty } from "./client";
 import { ApiError } from "./problem";
@@ -79,6 +80,45 @@ describe("the API client", () => {
 		const sending = client.POST("/api/v1/projects", {
 			body: { name: "Gao" },
 			bodySerializer: () => new URLSearchParams({ name: "Gao" }),
+		});
+
+		await expect(sending).rejects.toThrow("JSON");
+	});
+
+	it("sends a file as multipart to the document upload path, with the CSRF token", async () => {
+		await installNodeFiles();
+		const api = signedIn();
+		const project = api.addProject("Gao");
+		const form = new FormData();
+		form.append("file", new File(["Notes from Gao."], "notes.txt"));
+
+		await unwrap(
+			createApiClient().POST("/api/v1/projects/{project_id}/documents", {
+				params: { path: { project_id: project.id } },
+				body: { file: "notes.txt" },
+				bodySerializer: () => form,
+			}),
+		);
+
+		const [upload] = api.requestsTo(
+			"POST",
+			`/projects/${project.id}/documents`,
+		);
+		expect(upload?.contentType).toMatch(/^multipart\/form-data; boundary=/);
+		expect(upload?.csrfToken).toBe(api.csrfToken);
+		expect(api.documents.all.map((d) => d.document.name)).toEqual([
+			"notes.txt",
+		]);
+	});
+
+	it("refuses to send multipart anywhere but the document upload path", async () => {
+		signedIn();
+		const form = new FormData();
+		form.append("name", "Gao");
+
+		const sending = createApiClient().POST("/api/v1/projects", {
+			body: { name: "Gao" },
+			bodySerializer: () => form,
 		});
 
 		await expect(sending).rejects.toThrow("JSON");
