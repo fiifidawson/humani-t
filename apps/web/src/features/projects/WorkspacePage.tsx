@@ -12,8 +12,10 @@
 import {
 	Badge,
 	Box,
+	Button,
 	Link as ChakraLink,
 	Flex,
+	IconButton,
 	Stack,
 	Text,
 } from "@chakra-ui/react";
@@ -25,7 +27,7 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
+import { Folder, Settings, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
@@ -287,6 +289,27 @@ export function WorkspacePage() {
 				>
 					{roleLabel(project.data.role)}
 				</Badge>
+				<Button asChild variant="outline" size="sm" flex="none">
+					<Link to="/p/$projectId/documents" params={{ projectId }}>
+						<Folder />
+						Documents
+					</Link>
+				</Button>
+				<IconButton
+					asChild
+					variant="ghost"
+					size="sm"
+					rounded="card"
+					flex="none"
+				>
+					<Link
+						to="/p/$projectId/settings"
+						params={{ projectId: project.data.id }}
+						aria-label="Project settings"
+					>
+						<Settings />
+					</Link>
+				</IconButton>
 			</Flex>
 			<Outlet />
 		</Flex>

@@ -13,6 +13,7 @@
  */
 
 import { HttpResponse, http } from "msw";
+import { FakeDocuments } from "./fakeDocuments";
 import {
 	jsonBody,
 	nextId,
@@ -66,6 +67,17 @@ interface FakeProject {
 	archived_at: string | null;
 }
 
+/** Someone in a project other than the signed-in person, whose role is the project's `role`. */
+interface FakeMember {
+	userId: string;
+	role: Role;
+	addedAt: string;
+}
+
+const ROLES: readonly string[] = ["owner", "reviewer", "viewer"];
+const LAST_OWNER =
+	"A project needs at least one owner. Make someone else an owner first.";
+
 export interface RecordedRequest {
 	method: string;
 	path: string;
@@ -84,6 +96,8 @@ interface UserOptions {
 export class FakeApi {
 	readonly users: FakeUser[] = [];
 	readonly projects: FakeProject[] = [];
+	/** Each project's other members, by project id, earliest added first. */
+	readonly members = new Map<string, FakeMember[]>();
 	readonly requests: RecordedRequest[] = [];
 	readonly otherSessions: {
 		id: string;
@@ -93,6 +107,13 @@ export class FakeApi {
 	session: FakeSession | null = null;
 	/** Reviews, plans, runs, gates and papers (fakeReviews.ts). */
 	readonly reviews = new FakeReviews({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		userId: () => this.session?.userId ?? null,
+	});
+	/** A project's uploaded documents (fakeDocuments.ts). */
+	readonly documents = new FakeDocuments({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		roleIn: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
@@ -149,6 +170,17 @@ export class FakeApi {
 		};
 		this.projects.push(project);
 		return project;
+	}
+
+	addMember(
+		project: FakeProject,
+		user: FakeUser,
+		role: Role,
+		addedAt = "2026-11-02T10:00:00Z",
+	): FakeMember {
+		const member = { userId: user.id, role, addedAt };
+		this.othersIn(project.id).push(member);
+		return member;
 	}
 
 	expireSession(): void {
@@ -245,6 +277,75 @@ export class FakeApi {
 		return null;
 	}
 
+	/** The gate in front of a project route (api/access.py): 404, then 403, then the recent sign-in. */
+	private gate(
+		projectId: unknown,
+		options: { isOwnersOnly?: boolean; needsRecentSignIn?: boolean } = {},
+	):
+		| { project: FakeProject; refused: null }
+		| { project: null; refused: ReturnType<typeof problem> } {
+		const refused = this.refuseUnlessSignedIn();
+		if (refused !== null) {
+			return { project: null, refused };
+		}
+		const project = this.projects.find((p) => p.id === projectId);
+		if (project === undefined) {
+			return { project: null, refused: problem(404, "No such project.") };
+		}
+		if (options.isOwnersOnly && project.role !== "owner") {
+			return {
+				project: null,
+				refused: problem(403, "Your role in this project does not allow this."),
+			};
+		}
+		const stale = options.needsRecentSignIn ? this.refuseUnlessRecent() : null;
+		return stale === null
+			? { project, refused: null }
+			: { project: null, refused: stale };
+	}
+
+	private othersIn(projectId: string): FakeMember[] {
+		const others = this.members.get(projectId) ?? [];
+		this.members.set(projectId, others);
+		return others;
+	}
+
+	/** Everyone in the project, the signed-in person first: they created it. */
+	private memberList(project: FakeProject): FakeMember[] {
+		const userId = this.session?.userId;
+		const self =
+			userId === undefined
+				? []
+				: [{ userId, role: project.role, addedAt: project.created_at }];
+		return [...self, ...this.othersIn(project.id)];
+	}
+
+	/** As the API: the email goes to owners only, and is otherwise left out. */
+	private memberOut(member: FakeMember, showsEmail: boolean) {
+		const user = this.users.find((u) => u.id === member.userId);
+		return {
+			user_id: member.userId,
+			display_name: user?.display_name ?? "Unknown account",
+			role: member.role,
+			added_at: member.addedAt,
+			...(showsEmail && user !== undefined ? { email: user.email } : {}),
+		};
+	}
+
+	/** `newRole` is `null` for a removal (domain/projects.py `require_an_owner_remains`). */
+	private leavesNoOwner(
+		project: FakeProject,
+		userId: string,
+		newRole: Role | null,
+	): boolean {
+		const members = this.memberList(project);
+		const target = members.find((m) => m.userId === userId);
+		if (target?.role !== "owner" || newRole === "owner") {
+			return false;
+		}
+		return members.filter((m) => m.role === "owner").length <= 1;
+	}
+
 	private raiseToFullStrength(user: FakeUser): string[] | null {
 		const wasEnrolling = this.session?.stage === "enrolment";
 		this.startSession(user, "full");
@@ -260,7 +361,12 @@ export class FakeApi {
 
 	handlers() {
 		const record = async (request: Request) => {
-			const body = request.method === "GET" ? null : await jsonBody(request);
+			// An upload's body is a file, recorded by its content type alone.
+			const isUpload = request.headers
+				.get("content-type")
+				?.startsWith("multipart/form-data");
+			const body =
+				request.method === "GET" || isUpload ? null : await jsonBody(request);
 			this.requests.push({
 				method: request.method,
 				path: new URL(request.url).pathname,
@@ -689,9 +795,193 @@ export class FakeApi {
 					: HttpResponse.json(project);
 			}),
 
+			http.delete(`${API}/projects/:projectId`, ({ params }) => {
+				const refused = this.refuseUnlessSignedIn();
+				if (refused !== null) {
+					return refused;
+				}
+				const project = this.projects.find((p) => p.id === params["projectId"]);
+				if (project === undefined) {
+					return problem(404, "Not Found");
+				}
+				if (project.role !== "owner") {
+					return problem(403, "Only owners can delete a project.");
+				}
+				const stale = this.refuseUnlessRecent();
+				if (stale !== null) {
+					return stale;
+				}
+				this.projects.splice(this.projects.indexOf(project), 1);
+				return new HttpResponse(null, { status: 204 });
+			}),
+
+			http.patch(`${API}/projects/:projectId`, async ({ params, request }) => {
+				const { project, refused } = this.gate(params["projectId"], {
+					isOwnersOnly: true,
+				});
+				if (refused !== null) {
+					return refused;
+				}
+				const name = text(await jsonBody(request), "name");
+				if (name.length < 1 || name.length > 200) {
+					return invalidBody("name", "String should have 1 to 200 characters");
+				}
+				// The schema checks the size; the domain trims and checks the rest,
+				// and its refusal is a plain 422 with no `errors` list.
+				if (name.trim() === "") {
+					return problem(422, "Project.name must not be blank");
+				}
+				if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name.trim())) {
+					return problem(
+						422,
+						"Project.name must not contain control characters",
+					);
+				}
+				project.name = name.trim();
+				return HttpResponse.json(project);
+			}),
+
+			http.get(`${API}/projects/:projectId/members`, ({ params }) => {
+				const { project, refused } = this.gate(params["projectId"]);
+				if (refused !== null) {
+					return refused;
+				}
+				return HttpResponse.json(
+					this.memberList(project).map((m) =>
+						this.memberOut(m, project.role === "owner"),
+					),
+				);
+			}),
+
+			http.post(
+				`${API}/projects/:projectId/members`,
+				async ({ params, request }) => {
+					const { project, refused } = this.gate(params["projectId"], {
+						isOwnersOnly: true,
+						needsRecentSignIn: true,
+					});
+					if (refused !== null) {
+						return refused;
+					}
+					const body = await jsonBody(request);
+					const email = text(body, "email").trim().toLowerCase();
+					const role = text(body, "role");
+					if (!email.includes("@")) {
+						return invalidBody(
+							"email",
+							"value is not a valid email address: An email address must have an @-sign.",
+						);
+					}
+					if (!isRole(role)) {
+						return invalidBody(
+							"role",
+							"Input should be 'owner', 'reviewer' or 'viewer'",
+						);
+					}
+					// Unknown and disabled accounts get the same answer, which never repeats the email.
+					const user = this.users.find((u) => u.email.toLowerCase() === email);
+					if (user === undefined) {
+						return problem(422, "No active account uses this email address.");
+					}
+					if (this.memberList(project).some((m) => m.userId === user.id)) {
+						return problem(
+							409,
+							"This person is already a member of the project.",
+						);
+					}
+					const member = this.addMember(
+						project,
+						user,
+						role,
+						"2026-11-03T11:00:00Z",
+					);
+					return HttpResponse.json(this.memberOut(member, true), {
+						status: 201,
+					});
+				},
+			),
+
+			http.patch(
+				`${API}/projects/:projectId/members/:userId`,
+				async ({ params, request }) => {
+					const { project, refused } = this.gate(params["projectId"], {
+						isOwnersOnly: true,
+						needsRecentSignIn: true,
+					});
+					if (refused !== null) {
+						return refused;
+					}
+					const role = text(await jsonBody(request), "role");
+					if (!isRole(role)) {
+						return invalidBody(
+							"role",
+							"Input should be 'owner', 'reviewer' or 'viewer'",
+						);
+					}
+					const target = this.memberList(project).find(
+						(m) => m.userId === params["userId"],
+					);
+					if (target === undefined) {
+						return problem(404, "No such member.");
+					}
+					if (this.leavesNoOwner(project, target.userId, role)) {
+						return problem(409, LAST_OWNER, { last_owner: true });
+					}
+					if (target.userId === this.session?.userId) {
+						project.role = role;
+					} else {
+						target.role = role;
+					}
+					return HttpResponse.json(this.memberOut({ ...target, role }, true));
+				},
+			),
+
+			http.delete(
+				`${API}/projects/:projectId/members/:userId`,
+				({ params }) => {
+					// Leaving needs neither the owner role nor a recent sign-in.
+					const isLeaving = params["userId"] === this.session?.userId;
+					const { project, refused } = this.gate(params["projectId"], {
+						isOwnersOnly: !isLeaving,
+						needsRecentSignIn: !isLeaving,
+					});
+					if (refused !== null) {
+						return refused;
+					}
+					const target = this.memberList(project).find(
+						(m) => m.userId === params["userId"],
+					);
+					if (target === undefined) {
+						return problem(404, "No such member.");
+					}
+					if (this.leavesNoOwner(project, target.userId, null)) {
+						return problem(409, LAST_OWNER, { last_owner: true });
+					}
+					if (isLeaving) {
+						this.projects.splice(this.projects.indexOf(project), 1);
+					} else {
+						const others = this.othersIn(project.id);
+						others.splice(others.indexOf(target), 1);
+					}
+					return noContent();
+				},
+			),
+
 			...this.reviews.handlers(),
+			...this.documents.handlers(),
 		];
 	}
+}
+
+function isRole(value: string): value is Role {
+	return ROLES.includes(value);
+}
+
+/** The API's 422 for a body that fails its schema, naming the field. */
+function invalidBody(field: string, message: string) {
+	return problem(422, "The request body is not valid.", {
+		errors: [{ loc: ["body", field], msg: message, type: "value_error" }],
+	});
 }
 
 function isAssertion(value: unknown): boolean {

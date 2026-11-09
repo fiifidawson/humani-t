@@ -295,7 +295,7 @@ Owner only, with a sign-in in the last 15 minutes. Destroys the project's data k
 { "user_id": "2b9e…", "display_name": "Kofi Mensah", "role": "reviewer", "added_at": "2026-11-03T09:05:00Z" }
 ```
 
-No email addresses: members are shown by display name.
+Owners also get each member's `email`, so they can tell two people with the same display name apart before changing anyone's access. For reviewers and viewers the field is left out of the body entirely, not sent as `null`. Adding a member and changing a role need the owner role, so those responses always carry it.
 
 - `GET …/members`: every member, earliest added first. Any member.
 - `POST …/members` with `{"email": "kofi@example.org", "role": "reviewer"}`: owner, recent sign-in. `201` with a `MemberOut`. The email is matched case-insensitively against **existing, enabled** accounts; anything else gets `422` with the same body, which never repeats the email. `409` if the person is already a member. `role` is exactly `owner`, `reviewer` or `viewer`.
@@ -476,6 +476,7 @@ The question, every answer and every change request are masked before any model 
   "pending_change": null,
   "current": { "…": "a VersionOut" },
   "accepted_version": 1,
+  "rerun_from": "queries",
   "versions": [{"version": 1, "origin": "llm_assisted", "author": {"kind": "model", "user_id": null}, "created_at": "…", "accepted_at": "…"}],
   "receipts": [{"id": "…", "purpose": "draft", "created_at": "…", "created_by": "…", "model_id": "llama3.1:8b", "prompt_version": "plan.draft@1", "delivered": true, "masked_total": 1, "items": [{"kind": "question", "ref": null, "sent": "… in [LOCATION_1]?", "counts": {"LOCATION": 1}}], "plan_version": 1, "change_request_id": null}]
 }
@@ -483,6 +484,12 @@ The question, every answer and every change request are masked before any model 
 
 - `status` is the review's status (UI_UX_SPEC §11.1): `new`, `clarifying`, `drafting`, `changes_requested`, `accepted`, then the latest run's.
 - `current` is the latest version, accepted or not; `accepted_version` is the one runs use.
+- `rerun_from` is where a run of the current version would start, against the version accepted before it:
+  - `queries` when the search changed, or when none was accepted before (a first run does everything);
+  - `screen` when only the criteria changed, so the papers already found are re-judged;
+  - `null` when nothing changed.
+
+  After a run that is done, failed or cancelled, `POST …/plan/changes` drafts the next version, and the web app starts a run from this stage when it is accepted (Wave 2, prompt-first changes).
 - `receipts` are the privacy receipts (UI_UX_SPEC §5.3.2): one per model call, with exactly the masked text the model received and the masked counts by type, never the original values. `delivered: false` means the call failed after the text may have left. `plan_version` is the version the call was drafting (`null` for clarifying questions), and `change_request_id` the change request a revision was drafted from; both are set on failed calls too, so a receipt is placed by them, never by its position. A failed call's `plan_version` may later be written by a retry, whose receipt names it as well. Receipts written before these fields existed have both `null`.
 
 `VersionOut` carries `version`, `origin` (`llm_assisted` or `user_supplied`), `is_strict`, `author` (`model` or a `person` with their id), `created_at`, `accepted_at`, `accepted_by`, `model_id` and `prompt_version` (null for a person's version), `themes` (each concept with its `term`, `synonyms` and `terms`, every term with `added_by`), `criteria` (`I1`, `E1`… with `kind` and `text`), `notes` (changes made automatically to the model's draft, such as a term dropped because it held masked text), the `change_request` that produced it, the `clarifications` it was drafted from, and `query`, the compiled Boolean query (as `POST /vocabulary/compile` returns it).

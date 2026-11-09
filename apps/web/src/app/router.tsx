@@ -176,6 +176,15 @@ const projectHomeRoute = createRoute({
 	),
 });
 
+const projectSettingsRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "settings",
+	component: lazyRouteComponent(
+		() => import("../features/projects/ProjectSettingsPage"),
+		"ProjectSettingsPage",
+	),
+});
+
 const reviewRoute = createRoute({
 	getParentRoute: () => workspaceRoute,
 	path: "r/$reviewId",
@@ -300,6 +309,24 @@ const traceRoute = createRoute({
 	),
 });
 
+export interface DocumentsSearch {
+	/** The document whose masked text is open. */
+	document?: string | undefined;
+}
+
+const documentsRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "documents",
+	validateSearch: (search: Record<string, unknown>): DocumentsSearch => ({
+		document:
+			typeof search["document"] === "string" ? search["document"] : undefined,
+	}),
+	component: lazyRouteComponent(
+		() => import("../features/documents/Documents"),
+		"DocumentsPage",
+	),
+});
+
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
@@ -309,6 +336,7 @@ const routeTree = rootRoute.addChildren([
 		newProjectRoute,
 		workspaceRoute.addChildren([
 			projectHomeRoute,
+			projectSettingsRoute,
 			reviewRoute.addChildren([
 				reviewChatRoute,
 				draftRoute,
@@ -317,6 +345,7 @@ const routeTree = rootRoute.addChildren([
 				briefRoute,
 				traceRoute,
 			]),
+			documentsRoute,
 		]),
 		accountRoute,
 	]),

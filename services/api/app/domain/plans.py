@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from app.domain.reviews import InvalidTransitionError
@@ -502,6 +502,24 @@ def diff_plans(before: ReviewPlan | None, after: ReviewPlan) -> PlanDiff:
             ),
         ),
     )
+
+
+type RedoStage = Literal["queries", "screen"]
+
+
+def first_stage_to_redo(before: ReviewPlan, after: ReviewPlan) -> RedoStage | None:
+    """The earliest pipeline stage a change from `before` to `after` affects.
+
+    A changed search finds different papers, so it starts again from `queries`.
+    Changed criteria alone re-judge the papers already found, from `screen`.
+    `None` when the search and the criteria are the same: there is nothing to redo.
+    """
+    diff = diff_plans(before, after)
+    if diff.concepts or diff.terms:
+        return "queries"
+    if diff.criteria:
+        return "screen"
+    return None
 
 
 def term_authors(versions: Sequence[ReviewPlan]) -> dict[TermKey, PlanAuthor]:

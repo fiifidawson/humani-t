@@ -35,6 +35,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Canvas } from "../reviews/Canvas";
+import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
 import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
@@ -732,6 +733,7 @@ function BriefView({ brief }: { brief: Brief }) {
 	return (
 		<Canvas
 			title="Decision brief"
+			downloads={briefDownloads(review.id, brief.run_id)}
 			panel={
 				search.source === undefined ? null : (
 					<SourcePanel

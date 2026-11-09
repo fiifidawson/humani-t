@@ -2596,6 +2596,11 @@ export interface components {
              * Format: date-time
              */
             added_at: string;
+            /**
+             * Email
+             * @description Sent to owners only; absent for everyone else.
+             */
+            email?: string | null;
         };
         /** MemberRoleIn */
         MemberRoleIn: {
@@ -2778,6 +2783,11 @@ export interface components {
              * @description The version runs use; null if none.
              */
             accepted_version: number | null;
+            /**
+             * Rerun From
+             * @description Where a run of the current version would start: `queries` when the search changed since the version accepted before it, or none was; `screen` when only the criteria changed, re-judging the papers already found; null when nothing did.
+             */
+            rerun_from: ("queries" | "screen") | null;
             /** Versions */
             versions: components["schemas"]["VersionSummaryOut"][];
             /**

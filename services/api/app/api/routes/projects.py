@@ -118,7 +118,11 @@ async def delete_project(
     await projects.delete(current, project_id, request_id(request))
 
 
-@router.get("/{project_id}/members", summary="Who belongs to a project")
+@router.get(
+    "/{project_id}/members",
+    summary="Who belongs to a project",
+    response_model_exclude_none=True,
+)
 async def list_members(
     project_id: UUID, current: _Reader, projects: ProjectsDep
 ) -> list[MemberOut]:
@@ -129,6 +133,7 @@ async def list_members(
     "/{project_id}/members",
     status_code=status.HTTP_201_CREATED,
     summary="Give an existing account a role in the project",
+    response_model_exclude_none=True,
 )
 async def add_member(
     project_id: UUID,
@@ -148,7 +153,11 @@ async def add_member(
     return MemberOut.from_view(view)
 
 
-@router.patch("/{project_id}/members/{user_id}", summary="Change a member's role")
+@router.patch(
+    "/{project_id}/members/{user_id}",
+    summary="Change a member's role",
+    response_model_exclude_none=True,
+)
 async def change_member_role(
     project_id: UUID,
     user_id: UUID,

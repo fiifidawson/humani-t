@@ -15,6 +15,8 @@ export const keys = {
 	projectList: (includeArchived: boolean) =>
 		["projects", "list", { includeArchived }] as const,
 	project: (projectId: string) => ["projects", "one", projectId] as const,
+	members: (projectId: string) =>
+		["projects", "one", projectId, "members"] as const,
 	devices: ["account", "sessions"] as const,
 	mfa: ["account", "mfa"] as const,
 	reviews: (projectId: string) =>
@@ -35,6 +37,12 @@ export const keys = {
 	evidence: (briefId: string, tag: string) =>
 		["briefs", briefId, "evidence", tag] as const,
 	trace: (briefId: string) => ["briefs", briefId, "trace"] as const,
+	documents: (projectId: string) =>
+		["projects", "one", projectId, "documents"] as const,
+	maskedDocument: (projectId: string, documentId: string) =>
+		["projects", "one", projectId, "documents", documentId, "masked"] as const,
+	threads: (reviewId: string) => ["reviews", reviewId, "threads"] as const,
+	question: (questionId: string) => ["questions", questionId] as const,
 };
 
 export interface PaperFilter {
@@ -68,6 +76,17 @@ export const projectQuery = (api: ApiClient, projectId: string) =>
 		queryFn: () =>
 			unwrap(
 				api.GET("/api/v1/projects/{project_id}", {
+					params: { path: { project_id: projectId } },
+				}),
+			),
+	});
+
+export const membersQuery = (api: ApiClient, projectId: string) =>
+	queryOptions({
+		queryKey: keys.members(projectId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/projects/{project_id}/members", {
 					params: { path: { project_id: projectId } },
 				}),
 			),
