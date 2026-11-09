@@ -30,6 +30,7 @@ import {
 	keyframes,
 	layerStyles,
 	linkRecipe,
+	nativeSelectSlotRecipe,
 	radioGroupSlotRecipe,
 	semanticTokens,
 	separatorRecipe,
@@ -270,6 +271,23 @@ const config = defineConfig({
 			alert: alertSlotRecipe,
 			checkbox: checkboxSlotRecipe,
 			dialog: dialogSlotRecipe,
+			// A menu's edge identifies it too, so it gets the inputs' 3:1 border.
+			nativeSelect: {
+				...nativeSelectSlotRecipe,
+				variants: {
+					...nativeSelectSlotRecipe.variants,
+					variant: {
+						...nativeSelectSlotRecipe.variants?.variant,
+						outline: {
+							...nativeSelectSlotRecipe.variants?.variant?.outline,
+							field: {
+								...nativeSelectSlotRecipe.variants?.variant?.outline?.field,
+								borderColor: "border.emphasized",
+							},
+						},
+					},
+				},
+			},
 			radioGroup: radioGroupSlotRecipe,
 			table: tableSlotRecipe,
 		},
