@@ -25,6 +25,7 @@ import {
 	type Trace,
 } from "./fakeBriefs";
 import { jsonBody, nextId, problem, text } from "./fakeHttp";
+import { FakeQuestions } from "./fakeQuestions";
 
 const API = "*/api/v1";
 
@@ -273,6 +274,14 @@ export class FakeReviews {
 	nextChange: "search" | "criteria" = "search";
 	/** When set, planning calls wait for it, so a test can see what shows meanwhile. */
 	modelReply: Promise<void> | null = null;
+	/** Follow-up questions and their threads (fakeQuestions.ts). */
+	readonly questions = new FakeQuestions({
+		reach: (reviewId, write) => this.reach(reviewId, write),
+		userId: () => this.access.userId(),
+		mask,
+		latestRunId: (reviewId) =>
+			this.runs.find((r) => r.review_id === reviewId)?.id ?? null,
+	});
 
 	constructor(private readonly access: Access) {}
 
@@ -1031,6 +1040,8 @@ export class FakeReviews {
 					excluded_by_reason: { E1: count("exclude") },
 				});
 			}),
+
+			...this.questions.handlers(),
 		];
 	}
 }

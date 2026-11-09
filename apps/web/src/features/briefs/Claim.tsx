@@ -13,6 +13,11 @@ import { STRENGTHS, type Strength } from "./words";
 type Schemas = components["schemas"];
 export type Claim = Schemas["ClaimOut"];
 export type BriefSource = Schemas["app__api__schemas__briefs__SourceOut"];
+/** What a chip needs of a source: a brief's sources and an answer's both give it. */
+export type ChipSource = Pick<
+	BriefSource,
+	"tag" | "has_passage" | "source_kind" | "title" | "year"
+>;
 
 /** The word is the label; the meter repeats it and is hidden from screen readers (§10.2). */
 export function EvidenceBadge({ strength }: { strength: Strength }) {
@@ -72,7 +77,7 @@ export function CitationChip({
 	onOpen,
 }: {
 	tag: string;
-	source: BriefSource | undefined;
+	source: ChipSource | undefined;
 	onOpen: (tag: string) => void;
 }) {
 	const isMissing = source === undefined || !source.has_passage;
@@ -110,7 +115,7 @@ export function ClaimText({
 	onOpen,
 }: {
 	claim: Claim;
-	sources: readonly BriefSource[];
+	sources: readonly ChipSource[];
 	onOpen: (tag: string) => void;
 }) {
 	if (claim.support === "hypothesis") {
@@ -154,7 +159,7 @@ export function Claims({
 	onOpen,
 }: {
 	claims: readonly Claim[];
-	sources: readonly BriefSource[];
+	sources: readonly ChipSource[];
 	onOpen: (tag: string) => void;
 }) {
 	return (

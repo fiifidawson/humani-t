@@ -504,6 +504,8 @@ L1  ┌ Answer ─────────────────────�
 - "Add to brief notes" pins the answer to the brief's notes section **(new, needs API)**.
 - Source: `POST /projects/{id}/questions`.
 
+**Built so far (Wave 2):** the answer card ("Answer") shows its claims with the brief's citation chips and reasoning marks, then one line: the number of sources and how many items of the question were masked. A chip opens the source panel over the chat, with the masked passages the answer drew on (an answer may cite passages the brief never cited, so it does not reuse the brief's evidence). "Nothing in this project answers that." shows as plain text. A failed answer is a problem card, "The answer couldn't be made", with the API's reason and **Try again**, which asks again in the same thread. See [6.12](#612-ask-follow-up-questions).
+
 #### 5.3.10 Error
 
 ```text
@@ -1022,6 +1024,8 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 - Each answer: card per [5.3.9](#539-follow-up-answer-ask), privacy receipt per [5.3.2](#532-privacy-receipt).
 - **Answers only from this project.** The composer hint says so: "Answers use only the papers and documents in this project."
 - When nothing relevant is found, the answer card says "Nothing in this project answers that" and offers "Start a new search".
+
+**Built so far (Wave 2):** once the latest run has a decision brief, two pressed-or-not buttons sit above the box: **Ask about the evidence** (chosen at first) and **Change the search**. Without a brief the box only changes the search. A question continues the latest thread, or starts one when there is none (`POST /reviews/{id}/questions`). Your question shows at once with "Sending your question…", then as the API stored it (masked words as tags) with "Searching the evidence…" while the browser polls `GET /questions/{id}` every 2 seconds. The box waits until the last question is answered. Questions and answers sit in the chat by the time they were asked, so they come after the brief they follow. Viewers read them; their box says "You can read the answers. Only owners and reviewers can ask." Not built yet: New thread, a thread list, the `/ask/:thread` page, "Start a new search", "Read all", "Add to brief notes" and the full privacy receipt.
 
 ### 6.13 Documents
 

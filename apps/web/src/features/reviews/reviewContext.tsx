@@ -25,6 +25,9 @@ export type Review = Schemas["ReviewOut"];
 export type Plan = Schemas["PlanOut"];
 export type Version = Schemas["VersionOut"];
 export type Run = Schemas["RunOut"];
+export type Thread = Schemas["ThreadOut"];
+// By position, not by name: the generated name carries the module path.
+export type FollowUp = Thread["questions"][number];
 
 export type AnswerInput =
 	| { questionId: string; answer: string | null }
@@ -148,7 +151,68 @@ export function useReviewActions(reviewId: string) {
 			),
 	});
 
-	return { startPlan, answer, change, accept, startRun, cancel, decide };
+	const ask = useMutation({
+		mutationFn: (input: AskInput) =>
+			unwrap(
+				api.POST("/api/v1/reviews/{review_id}/questions", {
+					params: path,
+					body: { question: input.question, thread_id: input.threadId },
+				}),
+			),
+		// The question goes into its thread before the pending state ends, so
+		// the person's turn never blinks out while the threads reload.
+		onSuccess: (question) => {
+			queryClient.setQueryData(
+				keys.threads(reviewId),
+				(threads: Thread[] | undefined) =>
+					withQuestion(threads ?? [], question),
+			);
+			void queryClient.invalidateQueries({ queryKey: keys.threads(reviewId) });
+		},
+		onError: (error) => {
+			if (isApiError(error, "conflict")) {
+				void queryClient.invalidateQueries({
+					queryKey: keys.threads(reviewId),
+				});
+			}
+		},
+	});
+
+	return { startPlan, answer, change, accept, startRun, cancel, decide, ask };
+}
+
+export interface AskInput {
+	question: string;
+	/** The thread to continue; `null` starts one. */
+	threadId: string | null;
+}
+
+/** `threads` with `question` added to its thread, or in a new thread first. */
+export function withQuestion(
+	threads: readonly Thread[],
+	question: FollowUp,
+): Thread[] {
+	if (!threads.some((thread) => thread.id === question.thread_id)) {
+		const thread: Thread = {
+			id: question.thread_id,
+			review_id: question.review_id,
+			created_at: question.asked_at,
+			created_by: question.asked_by,
+			questions: [question],
+		};
+		return [thread, ...threads];
+	}
+	return threads.map((thread) =>
+		thread.id !== question.thread_id
+			? thread
+			: {
+					...thread,
+					questions: [
+						...thread.questions.filter((q) => q.id !== question.id),
+						question,
+					].sort((a, b) => a.position - b.position),
+				},
+	);
 }
 
 export type ReviewActions = ReturnType<typeof useReviewActions>;

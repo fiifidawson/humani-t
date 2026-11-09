@@ -35,6 +35,15 @@ import { ResizeHandle } from "../../ui/ResizeHandle";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { Composer } from "../chat/Composer";
 import { CanvasWidthProvider } from "./canvasWidth";
+import {
+	AnswerSourceProvider,
+	type ComposerChoice,
+	ComposerChoiceSwitch,
+	SendingQuestion,
+	useAskSetup,
+	useFollowUpTurns,
+	useHasBrief,
+} from "./FollowUps";
 import { LiveRunProvider } from "./liveRun";
 import { totalMasked } from "./masking";
 import {
@@ -213,6 +222,7 @@ function Conversation({
 	const drafts = receipts.filter((r) => r.purpose === "draft");
 	const current = plan.current;
 	const pendingChange = change.isPending ? change.variables : undefined;
+	const followUps = useFollowUpTurns();
 
 	// Drafts and runs in the order they happened: a draft asked for after Run 1
 	// sits below it. Within one draft, its turns keep the order they were added.
@@ -338,9 +348,11 @@ function Conversation({
 								node: <LatestRunCards key="latest-run" />,
 							},
 						]),
+				...followUps,
 			]
 				.sort((a, b) => a.at.localeCompare(b.at))
 				.map((item) => item.node)}
+			<SendingQuestion />
 			{pendingChange === undefined ? null : (
 				<ChangeTurn text={pendingChange.request} isSending />
 			)}
@@ -382,7 +394,11 @@ function ReviewLayout({
 	const { review, plan, runs, canManage, actions } = useReview();
 	const { pathname } = useLocation();
 	const isCanvasOpen = !pathname.replace(/\/$/, "").endsWith(`/r/${review.id}`);
-	const setup = composerFor(plan, runs, actions);
+	const hasBrief = useHasBrief();
+	const askSetup = useAskSetup();
+	const [choice, setChoice] = useState<ComposerChoice>("ask");
+	const setup =
+		hasBrief && choice === "ask" ? askSetup : composerFor(plan, runs, actions);
 	const chatId = useId();
 	const [chatWidth, setChatWidth] = usePanelWidth("chat");
 	const isWide = useMediaQuery(WIDE_SCREEN);
@@ -409,47 +425,66 @@ function ReviewLayout({
 				flex={isCanvasOpen ? { base: "1", lg: `0 0 ${chatWidth}px` } : "1"}
 				maxW={isCanvasOpen ? { lg: "calc(100% - 480px)" } : undefined}
 			>
-				<Flex direction="column" flex="1" minW="0" minH="0" bg="bg.subtle">
-					{/* position: relative keeps visually hidden text, which is absolutely
+				<Flex
+					direction="column"
+					flex="1"
+					minW="0"
+					minH="0"
+					bg="bg.subtle"
+					position="relative"
+				>
+					<AnswerSourceProvider>
+						{/* position: relative keeps visually hidden text, which is absolutely
 					    positioned, inside this scroller; without it the page itself scrolls. */}
-					<Flex
-						role="log"
-						aria-label="Project conversation"
-						flex="1"
-						minH="0"
-						position="relative"
-						overflowY="auto"
-						direction="column"
-						p="4"
-					>
-						<Stack gap="4" w="full" maxW="3xl" mx="auto">
-							<Conversation draft={draft} isFirstReview={isFirstReview} />
-						</Stack>
-					</Flex>
-					{canManage ? (
-						<Composer
-							label={setup.label}
-							placeholder={setup.placeholder}
-							draft={draft}
-							onDraftChange={setDraft}
-							onSend={setup.onSend}
-							unavailableReason={setup.unavailableReason}
-							note={setup.note}
-						/>
-					) : (
-						<Text
-							px="4"
-							py="3"
-							borderTopWidth="1px"
-							borderColor="border"
-							bg="bg"
-							fontSize="sm"
-							color="fg.muted"
-							textAlign="center"
+						<Flex
+							role="log"
+							aria-label="Project conversation"
+							flex="1"
+							minH="0"
+							position="relative"
+							overflowY="auto"
+							direction="column"
+							p="4"
 						>
-							Only owners and reviewers can change or accept the search plan.
-						</Text>
-					)}
+							<Stack gap="4" w="full" maxW="3xl" mx="auto">
+								<Conversation draft={draft} isFirstReview={isFirstReview} />
+							</Stack>
+						</Flex>
+						{canManage ? (
+							<Composer
+								label={setup.label}
+								placeholder={setup.placeholder}
+								draft={draft}
+								onDraftChange={setDraft}
+								onSend={setup.onSend}
+								unavailableReason={setup.unavailableReason}
+								note={setup.note}
+								above={
+									hasBrief ? (
+										<ComposerChoiceSwitch
+											choice={choice}
+											onChoose={setChoice}
+										/>
+									) : undefined
+								}
+							/>
+						) : (
+							<Text
+								px="4"
+								py="3"
+								borderTopWidth="1px"
+								borderColor="border"
+								bg="bg"
+								fontSize="sm"
+								color="fg.muted"
+								textAlign="center"
+							>
+								{hasBrief
+									? "You can read the answers. Only owners and reviewers can ask."
+									: "Only owners and reviewers can change or accept the search plan."}
+							</Text>
+						)}
+					</AnswerSourceProvider>
 				</Flex>
 			</Box>
 			{isCanvasOpen && isWide && !isChatHidden ? (
