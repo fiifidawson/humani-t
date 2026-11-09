@@ -37,6 +37,10 @@ export const keys = {
 	evidence: (briefId: string, tag: string) =>
 		["briefs", briefId, "evidence", tag] as const,
 	trace: (briefId: string) => ["briefs", briefId, "trace"] as const,
+	documents: (projectId: string) =>
+		["projects", "one", projectId, "documents"] as const,
+	maskedDocument: (projectId: string, documentId: string) =>
+		["projects", "one", projectId, "documents", documentId, "masked"] as const,
 	threads: (reviewId: string) => ["reviews", reviewId, "threads"] as const,
 	question: (questionId: string) => ["questions", questionId] as const,
 };
