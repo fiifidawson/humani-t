@@ -37,7 +37,7 @@ RUN pnpm --filter @humani-t/web build
 # can lag behind security releases of Go and of Caddy's dependencies. Caddy faces
 # the internet, so those fixes must reach it as soon as they ship. CADDY_VERSION
 # must match the runtime image's tag below; Dependabot updates the tags, not this.
-FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS caddy
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS caddy
 
 ARG CADDY_VERSION=v2.11.7
 # Dependencies raised above what Caddy's go.mod asks for, each fixing a HIGH
