@@ -1,19 +1,20 @@
 /**
  * Follow-up questions in the chat (UI_UX_SPEC §5.3.9, §6.12): the choice
  * above the box once a brief exists, each question with its answer in the
- * conversation, and the source panel for an answer's citations.
+ * conversation, its threads, and the source panel for an answer's citations.
  *
  * Asking returns at once and the worker answers in the background, so an
  * open question is polled until it is answered or failed (docs/api.md
- * "Follow-up questions"). Every question continues the latest thread. What
- * may be asked, and by whom, is the API's rule; this hides only what the
- * caller's role cannot do.
+ * "Follow-up questions"). A question continues the latest thread unless New
+ * thread is pressed. What may be asked, and by whom, is the API's rule; this
+ * hides only what the caller's role cannot do.
  */
 
-import { Button, Flex, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, chakra, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	MessageCircleQuestion,
+	MessageSquarePlus,
 	ShieldCheck,
 	SlidersHorizontal,
 	TriangleAlert,
@@ -24,24 +25,32 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useId,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { briefQuery } from "../../app/briefQueries";
 import { keys } from "../../app/queries";
-import { questionQuery, threadsQuery } from "../../app/reviewQueries";
-import { type ChipSource, Claims } from "../briefs/Claim";
+import {
+	paperQuery,
+	questionQuery,
+	threadsQuery,
+} from "../../app/reviewQueries";
+import { DisclosureButton } from "../../ui/DisclosureButton";
+import { type ChipSource, Claims, type OnOpenSource } from "../briefs/Claim";
 import { Passages, SourcePanelFrame } from "../briefs/SourcePanel";
 import { PendingReply } from "../chat/PendingReply";
-import { ChatCard } from "./ChatCard";
+import { ChatCard, When } from "./ChatCard";
 import { plural } from "./format";
 import { MaskedText } from "./MaskedText";
 import { totalMasked } from "./masking";
 import { ErrorCard } from "./PlanCards";
 import {
 	type FollowUp,
+	type ReviewActions,
 	type Thread,
 	useReview,
 	withQuestion,
@@ -51,12 +60,78 @@ type AnswerSource = components["schemas"]["AnswerSourceOut"];
 
 export const ASK_LABEL = "Ask about the evidence";
 const CHANGE_LABEL = "Change the search";
+const NEW_THREAD_LABEL = "New thread";
 const NOTHING_FOUND = "Nothing in this project answers that.";
 
 export type ComposerChoice = "ask" | "change";
 
 const isOpen = (question: FollowUp) =>
 	question.status === "pending" || question.status === "answering";
+
+/** Where the list of threads jumps to: the thread's first question. */
+const threadAnchor = (threadId: string) => `thread-${threadId}`;
+
+/** What the box is set to do, shared by the box, the answers and the thread controls. */
+export interface AskState {
+	choice: ComposerChoice;
+	choose: (choice: ComposerChoice) => void;
+	/** Whether the next question starts a thread rather than continuing the latest. */
+	isNewThread: boolean;
+	setNewThread: (isNewThread: boolean) => void;
+	/** Switch the box to changing the search, starting from `text` unless something is typed. */
+	changeSearch: (text: string) => void;
+}
+
+export function useAskState(
+	draft: string,
+	setDraft: (text: string) => void,
+): AskState {
+	const { focusComposer } = useReview();
+	const [choice, choose] = useState<ComposerChoice>("ask");
+	const [isNewThread, setNewThread] = useState(false);
+	const isDraftEmpty = draft.trim() === "";
+	return useMemo(
+		() => ({
+			choice,
+			choose,
+			isNewThread,
+			setNewThread,
+			changeSearch: (text: string) => {
+				choose("change");
+				if (isDraftEmpty) {
+					setDraft(text);
+				}
+				focusComposer();
+			},
+		}),
+		[choice, isNewThread, isDraftEmpty, setDraft, focusComposer],
+	);
+}
+
+const AskContext = createContext<AskState | null>(null);
+
+function useAsk(): AskState {
+	const state = useContext(AskContext);
+	if (state === null) {
+		throw new Error("useAsk must be used inside <FollowUpsProvider>");
+	}
+	return state;
+}
+
+/** What the follow-up cards and controls share: the box's state and the source panel. */
+export function FollowUpsProvider({
+	ask,
+	children,
+}: {
+	ask: AskState;
+	children: ReactNode;
+}) {
+	return (
+		<AskContext value={ask}>
+			<AnswerSourceProvider>{children}</AnswerSourceProvider>
+		</AskContext>
+	);
+}
 
 /** Whether the review's latest run wrote a decision brief, which is what questions are about. */
 export function useHasBrief(): boolean {
@@ -70,33 +145,46 @@ export function useHasBrief(): boolean {
 	return latest !== undefined && brief.data !== undefined;
 }
 
-/** What the box does while asking (§5.4 "A brief exists"): it continues the latest thread. */
-export function useAskSetup() {
+/**
+ * What the box does while asking (§5.4 "A brief exists"): it continues the
+ * latest thread, or starts one after New thread.
+ */
+export function useAskSetup(state: AskState) {
 	const api = useApi();
 	const { review, actions } = useReview();
 	const threads = useQuery(threadsQuery(api, review.id));
 	const { ask } = actions;
+	const { isNewThread, setNewThread } = state;
 	const latest = threads.data?.[0];
 	const last = latest?.questions.at(-1);
+	// The API answers one question at a time per thread, so a new thread need not wait.
+	const isWaiting = !isNewThread && last !== undefined && isOpen(last);
 	const reason = threads.isError
 		? "The questions so far couldn't be loaded. Reload the page to try again."
 		: threads.data === undefined
 			? "Loading the questions so far…"
-			: ask.isPending || (last !== undefined && isOpen(last))
+			: ask.isPending || isWaiting
 				? "Wait for the answer to your last question."
 				: null;
 	return {
 		label: ASK_LABEL,
-		placeholder: "Ask a follow-up",
+		placeholder: isNewThread
+			? "Ask a question to start a new thread"
+			: "Ask a follow-up",
 		note: "Answers use only the papers and documents in this project.",
 		...(reason === null ? {} : { unavailableReason: reason }),
-		onSend: (text: string) =>
-			ask.mutate({ question: text, threadId: latest?.id ?? null }),
+		onSend: (text: string) => {
+			setNewThread(false);
+			ask.mutate({
+				question: text,
+				threadId: isNewThread ? null : (latest?.id ?? null),
+			});
+		},
 	};
 }
 
 /** Two pressed-or-not buttons, not a menu: both choices stay in sight. */
-export function ComposerChoiceSwitch({
+function ComposerChoiceSwitch({
 	choice,
 	onChoose,
 }: {
@@ -116,22 +204,136 @@ export function ComposerChoiceSwitch({
 		</Button>
 	);
 	return (
-		<Flex
-			role="group"
-			aria-label="What the box does"
-			gap="2"
-			wrap="wrap"
-			pb="2.5"
-		>
+		<Flex role="group" aria-label="What the box does" gap="2" wrap="wrap">
 			{option("ask", <MessageCircleQuestion />, ASK_LABEL)}
 			{option("change", <SlidersHorizontal />, CHANGE_LABEL)}
 		</Flex>
 	);
 }
 
+/**
+ * Above the box once a brief exists: what the box does, and, while asking
+ * and once a thread exists, New thread. Pressed, the next question starts a
+ * thread; pressed again, it continues the latest one.
+ */
+export function AskControls() {
+	const api = useApi();
+	const { review } = useReview();
+	const threads = useQuery(threadsQuery(api, review.id));
+	const { choice, choose, isNewThread, setNewThread } = useAsk();
+	const hasThread = (threads.data?.length ?? 0) > 0;
+	return (
+		<Flex gap="2" wrap="wrap" align="center" justify="space-between" pb="2.5">
+			<ComposerChoiceSwitch choice={choice} onChoose={choose} />
+			{choice === "ask" && hasThread ? (
+				<Button
+					type="button"
+					size="xs"
+					variant="outline"
+					aria-pressed={isNewThread}
+					_pressed={{ bg: "bg.emphasized", borderColor: "fg.muted" }}
+					onClick={() => setNewThread(!isNewThread)}
+				>
+					<MessageSquarePlus />
+					{NEW_THREAD_LABEL}
+				</Button>
+			) : null}
+		</Flex>
+	);
+}
+
+/**
+ * The review's threads, newest first, folded away under the conversation:
+ * each names its first question, its size and when it started, and jumps to
+ * that question in the chat.
+ */
+export function ThreadList() {
+	const api = useApi();
+	const { review } = useReview();
+	const threads = useQuery(threadsQuery(api, review.id));
+	const [isOpenList, setOpenList] = useState(false);
+	const id = useId();
+	const all = threads.data ?? [];
+	if (all.length === 0) {
+		return null;
+	}
+	const jump = (threadId: string) => {
+		const target = document.getElementById(threadAnchor(threadId));
+		target?.scrollIntoView?.({ block: "start" });
+		target?.focus({ preventScroll: true });
+	};
+	return (
+		<Box
+			flex="none"
+			px="4"
+			py="1"
+			borderTopWidth="1px"
+			borderColor="border"
+			bg="bg"
+		>
+			<Box maxW="3xl" mx="auto">
+				<DisclosureButton
+					isOpen={isOpenList}
+					controls={`${id}-threads`}
+					onToggle={() => setOpenList(!isOpenList)}
+				>
+					{plural(all.length, "thread")}
+				</DisclosureButton>
+				{isOpenList ? (
+					<chakra.ul
+						id={`${id}-threads`}
+						aria-label="Threads"
+						listStyleType="none"
+						maxH="48"
+						overflowY="auto"
+						pb="2"
+					>
+						{all.map((thread) => (
+							<li key={thread.id}>
+								<chakra.button
+									type="button"
+									display="block"
+									w="full"
+									textAlign="start"
+									px="2"
+									py="1.5"
+									rounded="card"
+									fontSize="sm"
+									cursor="pointer"
+									_hover={{ bg: "bg.muted" }}
+									onClick={() => jump(thread.id)}
+								>
+									<Text as="span" display="block" truncate>
+										<MaskedText
+											text={thread.questions[0]?.question_sent ?? ""}
+											isInline
+										/>
+									</Text>
+									<Text
+										as="span"
+										display="block"
+										fontSize="xs"
+										color="fg.muted"
+									>
+										{plural(thread.questions.length, "question")} ·{" "}
+										<When at={thread.created_at} />
+									</Text>
+								</chakra.button>
+							</li>
+						))}
+					</chakra.ul>
+				) : null}
+			</Box>
+		</Box>
+	);
+}
+
 interface OpenSource {
 	tag: string;
 	source: AnswerSource | undefined;
+	runId: string | null;
+	/** The chip pressed: focus goes back to it when the panel closes. */
+	chip: HTMLElement;
 }
 
 const AnswerSourceContext = createContext<(open: OpenSource) => void>(
@@ -143,11 +345,19 @@ const AnswerSourceContext = createContext<(open: OpenSource) => void>(
  * passages, which may be ones the brief never cited, so the panel shows those
  * rather than the brief's evidence.
  */
-export function AnswerSourceProvider({ children }: { children: ReactNode }) {
+function AnswerSourceProvider({ children }: { children: ReactNode }) {
 	const [open, setOpen] = useState<OpenSource | null>(null);
-	const close = useCallback(() => setOpen(null), []);
+	const chip = useRef<HTMLElement | null>(null);
+	const show = useCallback((next: OpenSource) => {
+		chip.current = next.chip;
+		setOpen(next);
+	}, []);
+	const close = useCallback(() => {
+		setOpen(null);
+		chip.current?.focus();
+	}, []);
 	return (
-		<AnswerSourceContext value={setOpen}>
+		<AnswerSourceContext value={show}>
 			{children}
 			{open === null ? null : (
 				<SourcePanelFrame key={open.tag} tag={open.tag} onClose={close}>
@@ -163,11 +373,16 @@ export function AnswerSourceProvider({ children }: { children: ReactNode }) {
 						</Text>
 					) : (
 						<Stack gap="4">
-							<Text>
-								{open.source.source_kind === "document"
-									? "One of your project's documents."
-									: "A paper in this review."}
-							</Text>
+							{open.source.source_kind === "document" ? (
+								<Text>One of your project's documents.</Text>
+							) : open.runId === null ? (
+								<Text>A paper in this review.</Text>
+							) : (
+								<PaperDetails
+									runId={open.runId}
+									paperId={open.source.paper_id}
+								/>
+							)}
 							<Passages passages={open.source.passages} />
 						</Stack>
 					)}
@@ -177,9 +392,32 @@ export function AnswerSourceProvider({ children }: { children: ReactNode }) {
 	);
 }
 
+/** A cited paper's title and year, from the run the answer drew on. */
+function PaperDetails({ runId, paperId }: { runId: string; paperId: string }) {
+	const api = useApi();
+	const { review } = useReview();
+	const paper = useQuery(paperQuery(api, review.id, paperId, runId));
+	if (paper.data === undefined) {
+		return (
+			<Text>
+				A paper in this review.
+				{paper.isError ? " Its title couldn't be loaded." : null}
+			</Text>
+		);
+	}
+	const { title, year } = paper.data.paper;
+	return (
+		<Box>
+			<Text fontWeight="semibold">{title}</Text>
+			{year === null ? null : <Text color="fg.muted">{year}</Text>}
+		</Box>
+	);
+}
+
 /**
  * Each question with its answer, stamped with when it was asked, for the
  * conversation to place among the drafts and runs: after the brief it follows.
+ * Every thread but the oldest opens with a "New thread" divider.
  */
 export function useFollowUpTurns(): { at: string; node: ReactNode }[] {
 	const api = useApi();
@@ -187,14 +425,18 @@ export function useFollowUpTurns(): { at: string; node: ReactNode }[] {
 	const threads = useQuery(threadsQuery(api, review.id));
 	const all = threads.data ?? [];
 	const lastAsked = all[0]?.questions.at(-1);
+	const oldest = all.at(-1);
 	const canRetry = canManage && !actions.ask.isPending;
 	return all.flatMap((thread) =>
-		thread.questions.map((question) => ({
+		thread.questions.map((question, index) => ({
 			at: question.asked_at,
 			node: (
 				<FollowUpTurn
 					key={`question-${question.id}`}
 					question={question}
+					startsThread={
+						index > 0 ? null : thread.id === oldest?.id ? "first" : "later"
+					}
 					canRetry={canRetry && question.id === lastAsked?.id}
 				/>
 			),
@@ -232,12 +474,44 @@ export function SendingQuestion() {
 	);
 }
 
+/**
+ * The words to ask again or start a search from. The masked text is what the
+ * model saw before; the words typed in this visit are better still, since
+ * masking runs on them again.
+ */
+function askedWords(question: FollowUp, ask: ReviewActions["ask"]): string {
+	return ask.data?.id === question.id && ask.variables !== undefined
+		? ask.variables.question
+		: question.question_sent;
+}
+
+/** A quiet rule where a thread begins, so a reader can tell which questions belong together. */
+function ThreadDivider() {
+	return (
+		<Flex
+			role="separator"
+			aria-label={NEW_THREAD_LABEL}
+			align="center"
+			gap="3"
+			fontSize="xs"
+			color="fg.muted"
+		>
+			<Box flex="1" borderTopWidth="1px" borderColor="border" />
+			{NEW_THREAD_LABEL}
+			<Box flex="1" borderTopWidth="1px" borderColor="border" />
+		</Flex>
+	);
+}
+
 /** One question and, once it comes, its answer; an open question is polled. */
 function FollowUpTurn({
 	question,
+	startsThread,
 	canRetry,
 }: {
 	question: FollowUp;
+	/** Whether this question starts the oldest thread, a later one, or neither. */
+	startsThread: "first" | "later" | null;
 	canRetry: boolean;
 }) {
 	const api = useApi();
@@ -262,20 +536,31 @@ function FollowUpTurn({
 	const { ask } = actions;
 	const retry = () =>
 		ask.mutate({
-			// The masked text is what the model saw before; the words typed in
-			// this visit are better still, since masking runs on them again.
-			question:
-				ask.data?.id === question.id && ask.variables !== undefined
-					? ask.variables.question
-					: question.question_sent,
+			question: askedWords(question, ask),
 			threadId: question.thread_id,
 		});
 
+	const asked = (
+		<ChatCard title="Follow-up question" tone="person" at={question.asked_at}>
+			<MaskedText text={question.question_sent} />
+		</ChatCard>
+	);
+
 	return (
 		<>
-			<ChatCard title="Follow-up question" tone="person" at={question.asked_at}>
-				<MaskedText text={question.question_sent} />
-			</ChatCard>
+			{startsThread === null ? (
+				asked
+			) : (
+				<Stack
+					id={threadAnchor(question.thread_id)}
+					tabIndex={-1}
+					gap="4"
+					rounded="card"
+				>
+					{startsThread === "later" ? <ThreadDivider /> : null}
+					{asked}
+				</Stack>
+			)}
 			{isOpen(current) ? (
 				polled.isError ? (
 					<ErrorCard
@@ -302,14 +587,23 @@ function FollowUpTurn({
 					<Text>{current.error ?? "Something went wrong. Ask again."}</Text>
 				</ChatCard>
 			) : (
-				<AnswerCard question={current} />
+				<AnswerCard question={current} words={askedWords(question, ask)} />
 			)}
 		</>
 	);
 }
 
-function AnswerCard({ question }: { question: FollowUp }) {
+function AnswerCard({
+	question,
+	words,
+}: {
+	question: FollowUp;
+	/** What "Change the search" starts from when nothing answers. */
+	words: string;
+}) {
 	const openSource = useContext(AnswerSourceContext);
+	const { canManage } = useReview();
+	const { changeSearch } = useAsk();
 	const answer = question.answer;
 	const sources = answer?.sources ?? [];
 	const chips = useMemo<ChipSource[]>(
@@ -330,19 +624,35 @@ function AnswerCard({ question }: { question: FollowUp }) {
 		masked > 0 ? `${plural(masked, "item")} masked` : "nothing to mask",
 	].filter((fact) => fact !== null);
 	const warnings = answer?.warnings.length ?? 0;
+	const onOpen: OnOpenSource = (tag, chip) =>
+		openSource({
+			tag,
+			source: sources.find((s) => s.tag === tag),
+			runId: answer?.run_id ?? null,
+			chip,
+		});
 
 	return (
-		<ChatCard title="Answer" at={question.answered_at ?? undefined}>
+		<ChatCard
+			title="Answer"
+			at={question.answered_at ?? undefined}
+			actions={
+				isNothing && canManage ? (
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => changeSearch(words)}
+					>
+						<SlidersHorizontal />
+						{CHANGE_LABEL}
+					</Button>
+				) : undefined
+			}
+		>
 			{isNothing ? (
 				<Text>{answer?.message ?? NOTHING_FOUND}</Text>
 			) : (
-				<Claims
-					claims={answer.claims}
-					sources={chips}
-					onOpen={(tag) =>
-						openSource({ tag, source: sources.find((s) => s.tag === tag) })
-					}
-				/>
+				<Claims claims={answer.claims} sources={chips} onOpen={onOpen} />
 			)}
 			{warnings === 0 ? null : (
 				<Text display="flex" gap="1.5" alignItems="center">

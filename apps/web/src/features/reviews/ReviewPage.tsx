@@ -36,11 +36,12 @@ import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { Composer } from "../chat/Composer";
 import { CanvasWidthProvider } from "./canvasWidth";
 import {
-	AnswerSourceProvider,
-	type ComposerChoice,
-	ComposerChoiceSwitch,
+	AskControls,
+	FollowUpsProvider,
 	SendingQuestion,
+	ThreadList,
 	useAskSetup,
+	useAskState,
 	useFollowUpTurns,
 	useHasBrief,
 } from "./FollowUps";
@@ -395,10 +396,12 @@ function ReviewLayout({
 	const { pathname } = useLocation();
 	const isCanvasOpen = !pathname.replace(/\/$/, "").endsWith(`/r/${review.id}`);
 	const hasBrief = useHasBrief();
-	const askSetup = useAskSetup();
-	const [choice, setChoice] = useState<ComposerChoice>("ask");
+	const ask = useAskState(draft, setDraft);
+	const askSetup = useAskSetup(ask);
 	const setup =
-		hasBrief && choice === "ask" ? askSetup : composerFor(plan, runs, actions);
+		hasBrief && ask.choice === "ask"
+			? askSetup
+			: composerFor(plan, runs, actions);
 	const chatId = useId();
 	const [chatWidth, setChatWidth] = usePanelWidth("chat");
 	const isWide = useMediaQuery(WIDE_SCREEN);
@@ -433,7 +436,7 @@ function ReviewLayout({
 					bg="bg.subtle"
 					position="relative"
 				>
-					<AnswerSourceProvider>
+					<FollowUpsProvider ask={ask}>
 						{/* position: relative keeps visually hidden text, which is absolutely
 					    positioned, inside this scroller; without it the page itself scrolls. */}
 						<Flex
@@ -450,6 +453,7 @@ function ReviewLayout({
 								<Conversation draft={draft} isFirstReview={isFirstReview} />
 							</Stack>
 						</Flex>
+						<ThreadList />
 						{canManage ? (
 							<Composer
 								label={setup.label}
@@ -459,14 +463,7 @@ function ReviewLayout({
 								onSend={setup.onSend}
 								unavailableReason={setup.unavailableReason}
 								note={setup.note}
-								above={
-									hasBrief ? (
-										<ComposerChoiceSwitch
-											choice={choice}
-											onChoose={setChoice}
-										/>
-									) : undefined
-								}
+								above={hasBrief ? <AskControls /> : undefined}
 							/>
 						) : (
 							<Text
@@ -484,7 +481,7 @@ function ReviewLayout({
 									: "Only owners and reviewers can change or accept the search plan."}
 							</Text>
 						)}
-					</AnswerSourceProvider>
+					</FollowUpsProvider>
 				</Flex>
 			</Box>
 			{isCanvasOpen && isWide && !isChatHidden ? (
