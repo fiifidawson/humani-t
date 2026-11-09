@@ -36,6 +36,7 @@ import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Canvas, CanvasHeading } from "./Canvas";
 import { CriteriaList, type CriterionMark } from "./CriteriaList";
+import { paperDownloads } from "./exports";
 import { plural, sourceName, TIER_ORDER, TIERS } from "./format";
 import { MaskedText } from "./MaskedText";
 import { LabelBadge } from "./RunCards";
@@ -515,7 +516,10 @@ export function PapersCanvas() {
 	}) => void navigate({ search: (previous) => ({ ...previous, ...next }) });
 
 	return (
-		<Canvas title={title}>
+		<Canvas
+			title={title}
+			downloads={paperDownloads(review.id, papers.data.run_id)}
+		>
 			<PrismaFlow
 				runId={papers.data.run_id}
 				onShow={(shown) => go({ label: shown, page: undefined })}
