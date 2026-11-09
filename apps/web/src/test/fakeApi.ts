@@ -841,6 +841,29 @@ export class FakeApi {
 				return HttpResponse.json(project);
 			}),
 
+			// Owner only, with no recent sign-in; archiving twice keeps the first date.
+			http.post(`${API}/projects/:projectId/archive`, ({ params }) => {
+				const { project, refused } = this.gate(params["projectId"], {
+					isOwnersOnly: true,
+				});
+				if (refused !== null) {
+					return refused;
+				}
+				project.archived_at ??= "2026-11-09T10:00:00Z";
+				return HttpResponse.json(project);
+			}),
+
+			http.post(`${API}/projects/:projectId/unarchive`, ({ params }) => {
+				const { project, refused } = this.gate(params["projectId"], {
+					isOwnersOnly: true,
+				});
+				if (refused !== null) {
+					return refused;
+				}
+				project.archived_at = null;
+				return HttpResponse.json(project);
+			}),
+
 			http.get(`${API}/projects/:projectId/members`, ({ params }) => {
 				const { project, refused } = this.gate(params["projectId"]);
 				if (refused !== null) {

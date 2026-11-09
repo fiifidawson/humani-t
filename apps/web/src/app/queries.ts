@@ -14,6 +14,8 @@ export const keys = {
 	projects: ["projects"] as const,
 	projectList: (includeArchived: boolean) =>
 		["projects", "list", { includeArchived }] as const,
+	/** Both project lists, with archived projects and without. */
+	projectLists: ["projects", "list"] as const,
 	project: (projectId: string) => ["projects", "one", projectId] as const,
 	members: (projectId: string) =>
 		["projects", "one", projectId, "members"] as const,
