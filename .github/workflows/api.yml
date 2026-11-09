@@ -26,6 +26,15 @@ defaults:
     shell: bash
     working-directory: services/api
 
+env:
+  # Each job installs once; every later `uv run` reuses that environment as it is.
+  # Otherwise each step re-checks uv.lock and fetches the spaCy model's URL again, and
+  # one GitHub 504 there failed lint-imports after ruff and pyright had passed.
+  UV_NO_SYNC: "1"
+  # uv retries only transient failures (5xx, resets), with backoff, never a stale
+  # lock. The default three retries did not outlast that 504.
+  UV_HTTP_RETRIES: "8"
+
 jobs:
   static:
     name: lint, format, types, layering
@@ -79,6 +88,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: services/api/uv.lock
 
+      - name: Install (exactly what uv.lock says)
+        run: uv sync --locked
+
       # The development stack, set up exactly as a contributor sets it up: the same
       # secrets script, the same compose file, the same init script creating the two
       # roles and humani_t_test. GitHub's `services:` containers start before the
@@ -102,14 +114,14 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Migrate humani_t_test (as the schema-owner role)
-        run: uv run --locked alembic upgrade head
+        run: uv run alembic upgrade head
 
       - name: pytest with branch coverage (fails under 85%)
         # HUMANI_T_MIGRATION_DATABASE_URL was only for Alembic; the tests build
         # their own settings and must not inherit it.
         run: |
           unset HUMANI_T_MIGRATION_DATABASE_URL
-          uv run --locked pytest --cov -rs
+          uv run pytest --cov -rs
 
       - name: Service logs
         if: failure()
