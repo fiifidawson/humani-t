@@ -18,6 +18,8 @@ export type ChipSource = Pick<
 	BriefSource,
 	"tag" | "has_passage" | "source_kind" | "title" | "year"
 >;
+/** Open the source panel for `tag`; `chip` is the chip pressed, which takes focus back on close. */
+export type OnOpenSource = (tag: string, chip: HTMLElement) => void;
 
 /** The word is the label; the meter repeats it and is hidden from screen readers (§10.2). */
 export function EvidenceBadge({ strength }: { strength: Strength }) {
@@ -78,7 +80,7 @@ export function CitationChip({
 }: {
 	tag: string;
 	source: ChipSource | undefined;
-	onOpen: (tag: string) => void;
+	onOpen: OnOpenSource;
 }) {
 	const isMissing = source === undefined || !source.has_passage;
 	const isDocument = source?.source_kind === "document" || tag.startsWith("D");
@@ -89,7 +91,7 @@ export function CitationChip({
 		<Chip
 			type="button"
 			aria-label={`Source ${tag}${details === "" ? "" : `, ${details}`}`}
-			onClick={() => onOpen(tag)}
+			onClick={(event) => onOpen(tag, event.currentTarget)}
 			color={isMissing ? "caveat.fg" : "link"}
 		>
 			{isMissing ? (
@@ -116,7 +118,7 @@ export function ClaimText({
 }: {
 	claim: Claim;
 	sources: readonly ChipSource[];
-	onOpen: (tag: string) => void;
+	onOpen: OnOpenSource;
 }) {
 	if (claim.support === "hypothesis") {
 		return (
@@ -160,7 +162,7 @@ export function Claims({
 }: {
 	claims: readonly Claim[];
 	sources: readonly ChipSource[];
-	onOpen: (tag: string) => void;
+	onOpen: OnOpenSource;
 }) {
 	return (
 		<Text>

@@ -66,6 +66,20 @@ export const EXAMPLE_ANSWER: FakeOutcome = {
 	],
 };
 
+/** The example answer, citing the paper `paperId` as P1. */
+export function answerCiting(paperId: string): FakeOutcome {
+	if (EXAMPLE_ANSWER.kind !== "answer") {
+		throw new Error("EXAMPLE_ANSWER must be an answer");
+	}
+	return {
+		...EXAMPLE_ANSWER,
+		sources: EXAMPLE_ANSWER.sources.map((source) => ({
+			...source,
+			paper_id: paperId,
+		})),
+	};
+}
+
 export const MODEL_DOWN_ANSWER: FakeOutcome = {
 	kind: "failed",
 	error: "The model server isn't answering. Ask again in a minute.",
@@ -94,14 +108,23 @@ export class FakeQuestions {
 
 	constructor(private readonly access: Access) {}
 
-	/** A thread already asked and answered, as if from an earlier visit. */
+	/**
+	 * A question already asked and answered, as if from an earlier visit: in a
+	 * new thread, or continuing `threadId`.
+	 */
 	addAnswered(
 		review: Review,
 		question: string,
 		outcome: FakeOutcome = EXAMPLE_ANSWER,
 		askedAt = "2026-11-03T11:30:00Z",
+		threadId: string | null = null,
 	): Question {
-		const asked = this.ask(review, question, null, askedAt);
+		const thread =
+			threadId === null ? null : this.threads.find((t) => t.id === threadId);
+		if (thread === undefined) {
+			throw new Error(`No thread ${threadId}`);
+		}
+		const asked = this.ask(review, question, thread, askedAt);
 		this.finish(asked, outcome);
 		return asked;
 	}
@@ -239,7 +262,13 @@ export class FakeQuestions {
 				return reached instanceof Response
 					? reached
 					: HttpResponse.json(
-							this.threads.filter((t) => t.review_id === reached.review.id),
+							this.threads
+								.filter((t) => t.review_id === reached.review.id)
+								.sort(
+									(a, b) =>
+										b.created_at.localeCompare(a.created_at) ||
+										b.id.localeCompare(a.id),
+								),
 						);
 			}),
 
