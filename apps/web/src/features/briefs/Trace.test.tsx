@@ -42,9 +42,12 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		await waitFor(() =>
 			expect(currentPath(router)).toBe(`/p/${project.id}/r/${review.id}/trace`),
 		);
+		// While the trace loads, a placeholder region with the same name stands in,
+		// and the loaded one replaces it: wait for the trace itself, then look up.
+		await screen.findByText(/Stopped because/);
 		expect(
-			await screen.findByRole("region", { name: "How this brief was made" }),
-		).toBeInTheDocument();
+			screen.getByRole("region", { name: "How this brief was made" }),
+		).toHaveTextContent("Stopped because");
 	});
 
 	it("says why the loop stopped and which round was kept", async () => {
@@ -153,14 +156,13 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 			source.emit("agent.step", 3, { round: 1, role: "writer", status: "ok" });
 		});
 
-		const canvas = await screen.findByRole("region", {
+		await screen.findByText("Still writing. Steps appear as they finish.");
+		const canvas = screen.getByRole("region", {
 			name: "How this brief was made",
 		});
-		expect(
-			await within(canvas).findByText(
-				"Still writing. Steps appear as they finish.",
-			),
-		).toBeInTheDocument();
+		expect(canvas).toHaveTextContent(
+			"Still writing. Steps appear as they finish.",
+		);
 		const live = within(canvas).getByRole("list", { name: "Steps so far" });
 		expect(
 			within(live)
