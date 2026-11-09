@@ -478,7 +478,7 @@ The question, every answer and every change request are masked before any model 
   "accepted_version": 1,
   "rerun_from": "queries",
   "versions": [{"version": 1, "origin": "llm_assisted", "author": {"kind": "model", "user_id": null}, "created_at": "…", "accepted_at": "…"}],
-  "receipts": [{"id": "…", "purpose": "draft", "created_at": "…", "created_by": "…", "model_id": "llama3.1:8b", "prompt_version": "plan.draft@1", "delivered": true, "masked_total": 1, "items": [{"kind": "question", "ref": null, "sent": "… in [LOCATION_1]?", "counts": {"LOCATION": 1}}], "plan_version": 1, "change_request_id": null}]
+  "receipts": [{"id": "…", "purpose": "draft", "created_at": "…", "created_by": "…", "model_id": "llama3.1:8b", "prompt_version": "plan.draft@2", "delivered": true, "masked_total": 1, "items": [{"kind": "question", "ref": null, "sent": "… in [LOCATION_1]?", "counts": {"LOCATION": 1}}], "plan_version": 1, "change_request_id": null}]
 }
 ```
 

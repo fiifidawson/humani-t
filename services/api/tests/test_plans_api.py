@@ -22,7 +22,11 @@ import structlog
 
 from app.application import planning
 from app.domain.encryption import KeyDestroyedError
-from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
+from app.domain.inference import (
+    ChatRole,
+    InferenceRateLimitedError,
+    InferenceUnavailableError,
+)
 from tests.plan_support import (
     DRAFT,
     REVISED,
@@ -350,6 +354,55 @@ class TestChanges:
         assert "[LOCATION_1]" not in _terms(current)
         assert "displacement" in _terms(current)
         assert any("masked" in note for note in current["notes"])
+
+    def test_model_terms_that_hold_a_rewritten_placeholder_are_dropped_too(self):
+        leaky = {
+            **DRAFT,
+            "themes": [
+                *DRAFT["themes"],
+                {
+                    "name": "setting",
+                    "concepts": [
+                        {
+                            "term": "displacement",
+                            "synonyms": ["<LOCATION_1>", "location_1 camps"],
+                        }
+                    ],
+                },
+            ],
+        }
+        team = make_plan_team(drafts=[leaky])
+
+        terms = _terms(team.drafted()["current"])
+
+        assert "<LOCATION_1>" not in terms
+        assert "location_1 camps" not in terms
+        assert "displacement" in terms
+
+
+class TestMaskedPlaces:
+    """A masked place reaches the planner as a placeholder; it must not become a guess."""
+
+    def test_every_planning_call_tells_the_model_never_to_guess_what_a_placeholder_hides(
+        self, team
+    ):
+        _deep_and_answered(team)
+        team.change("add mobile money", based_on_version=1)
+
+        instructions = [request.messages[0] for request in team.model.requests]
+
+        assert [m.role for m in instructions] == [ChatRole.SYSTEM] * 3
+        for message in instructions:
+            text = message.content.casefold()
+            assert "never guess what a placeholder stands for" in text
+            assert "keep that part of the plan general" in text
+
+    def test_clarifying_questions_may_ask_the_team_to_name_a_masked_place(self, team):
+        team.start("deep")
+
+        (clarify,) = team.model.requests
+
+        assert "ask the team to name" in clarify.messages[0].content.casefold()
 
 
 class TestAccept:

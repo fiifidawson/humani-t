@@ -96,6 +96,25 @@ _PRECEDENCE: tuple[EntityType, ...] = (
 
 PLACEHOLDER = re.compile(r"\[(?:" + "|".join(t.value for t in EntityType) + r")_[0-9]+\]")
 
+# A space before the number is not accepted: "date 2020" is a search term, and
+# a placeholder rewritten as "Location 1" is left to the planner's instructions.
+_PLACEHOLDER_ANY_FORM = re.compile(
+    r"(?<![a-z0-9])(?:"
+    + "|".join(t.value.replace("_", "[ _-]") for t in EntityType)
+    + r")[_-][0-9]+(?![0-9])",
+    re.IGNORECASE,
+)
+
+
+def holds_placeholder(text: str) -> bool:
+    """Whether `text` holds a placeholder, even one a model re-bracketed or lower-cased.
+
+    `PLACEHOLDER` matches only what masking writes, `[LOCATION_1]`. A model
+    copying one into its answer may write `<LOCATION_1>` or `location_1 camps`.
+    """
+    return _PLACEHOLDER_ANY_FORM.search(text) is not None
+
+
 _DETECTOR_SOURCE = re.compile(r"[a-z0-9][a-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.+-]*")
 _ID_SOURCE = re.compile(
     r"(?:user|rule):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"

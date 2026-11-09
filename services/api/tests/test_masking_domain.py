@@ -31,6 +31,7 @@ from app.domain.masking import (
     MaskSpan,
     apply_spans,
     detector_source,
+    holds_placeholder,
     leak_reason,
     masking_fingerprint,
     normalize_masking_term,
@@ -395,3 +396,41 @@ class TestPromptChecks:
         assert masking_fingerprint([detector_source("patterns", "2")], [first]) != base
         assert masking_fingerprint([PATTERNS], [first, rule("Kofi")]) != base
         assert masking_fingerprint([PATTERNS], []) != base
+
+
+class TestHoldsPlaceholder:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "[LOCATION_1]",
+            "displacement in [LOCATION_1]",
+            "<LOCATION_1>",
+            "{PERSON_2}",
+            "LOCATION_1 region",
+            "location_1",
+            "Location-1 camps",
+            "[MEDICAL_RECORD_3]",
+            "medical record_3",
+        ],
+    )
+    def test_a_placeholder_is_found_however_a_model_rewrote_its_brackets_or_case(self, text):
+        assert holds_placeholder(text)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Sahel",
+            "displacement",
+            "COVID-19",
+            "relocation",
+            "relocation_1",
+            "date 2020",
+            "people 1 to 5",
+        ],
+    )
+    def test_ordinary_search_terms_hold_no_placeholder(self, text):
+        assert not holds_placeholder(text)
+
+    @given(st.sampled_from(list(EntityType)), st.integers(min_value=1, max_value=999))
+    def test_every_placeholder_masking_writes_is_found(self, kind, number):
+        assert holds_placeholder(f"[{kind.value}_{number}]")

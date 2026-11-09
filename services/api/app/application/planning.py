@@ -45,7 +45,7 @@ from app.domain.inference import (
     InvalidStructuredOutputError,
     PromptRefusedError,
 )
-from app.domain.masking import PLACEHOLDER, MaskingRule
+from app.domain.masking import MaskingRule, holds_placeholder
 from app.domain.plans import (
     AuthorKind,
     ChangeKind,
@@ -87,20 +87,27 @@ from app.domain.vocabulary import Concept, VocabularyOrigin
 from app.privacy.base import Sanitizer
 from app.storage.base import StorageProvider, UnitOfWork
 
-CLARIFY_PROMPT_VERSION = "plan.clarify@1"
-DRAFT_PROMPT_VERSION = "plan.draft@1"
-REVISE_PROMPT_VERSION = "plan.revise@1"
+CLARIFY_PROMPT_VERSION = "plan.clarify@2"
+DRAFT_PROMPT_VERSION = "plan.draft@2"
+REVISE_PROMPT_VERSION = "plan.revise@2"
 
+# Told only not to copy a placeholder, a model given "households in [LOCATION_1]"
+# builds a term from it or guesses the place. The code can drop the first, not the second.
 _MASKING_NOTE = (
-    "Text in square brackets, such as [PERSON_1] or [LOCATION_2], replaces personal "
-    "details that were masked. Never copy a placeholder into a search term."
+    "Text in square brackets, such as [PERSON_1] or [LOCATION_2], replaces details "
+    "that were masked for privacy. Never copy a placeholder, or a word made from one, "
+    "into a search term or a criterion. Never guess what a placeholder stands for, and "
+    "never put a place, person or organisation of your own in its stead. Keep that part "
+    "of the plan general instead: for a masked place, add no place terms."
 )
 
 CLARIFY_PROMPT = (
     "You help a humanitarian team plan a literature search. Read their question and ask "
     "the 2 to 4 short questions whose answers would most change which papers to look for "
     "(outcomes, populations, settings, study types, years). Offer up to 5 short suggested "
-    "answers per question. " + _MASKING_NOTE
+    "answers per question. " + _MASKING_NOTE + " If a masked place would change which "
+    "papers to look for, one of your questions may ask the team to name the country or "
+    "wider region the review covers."
 )
 
 DRAFT_PROMPT = (
@@ -1006,8 +1013,9 @@ def _draft_from(
 ) -> tuple[tuple[Concept, ...], tuple[Criterion, ...], tuple[str, ...]]:
     """Concepts and criteria from a schema-valid draft, and notes on what was changed.
 
-    A term holding a masked placeholder is dropped: it would search for
-    "[LOCATION_1]", and the plan's terms reach the paper sources.
+    A term holding a masked placeholder, in any form a model rewrote it to, is
+    dropped: it would search for "[LOCATION_1]", and the plan's terms reach the
+    paper sources.
     """
     concepts: list[Concept] = []
     notes: list[str] = []
@@ -1016,7 +1024,7 @@ def _draft_from(
         name = theme["name"].strip()
         for item in theme["concepts"]:
             terms = [t.strip() for t in (item["term"], *item["synonyms"])]
-            kept = [t for t in terms if t and not PLACEHOLDER.search(t)]
+            kept = [t for t in terms if t and not holds_placeholder(t)]
             if len(kept) < len(terms):
                 notes.append(f"{len(terms) - len(kept)} term(s) in '{name}' held masked text")
             if not kept:
