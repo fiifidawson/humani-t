@@ -609,12 +609,18 @@ This part turns a review's question into an accepted, frozen search plan: its vo
 
 #### D9.22 Masked text never becomes a search term
 
-- **Decision:** a model-drafted term holding a placeholder such as `[LOCATION_1]` is dropped and counted in the version's `notes`.
-- **Why:** the plan's terms are sent to the paper sources; a placeholder would search for nonsense.
-- **Rejected:** restoring the original value (unmasked text would leave for a paper source).
-- **Costs:** a draft for a place-specific question may lose its place terms; a person can add them by uploading or at the gate.
-- **Where:** `_draft_from` in [`app/application/planning.py`](../../services/api/app/application/planning.py).
-- **Proven by:** `tests/test_plans_api.py::TestChanges::test_model_terms_that_hold_masked_text_are_dropped_and_noted`.
+- **Decision:**
+  - a model-drafted term holding a placeholder such as `[LOCATION_1]` is dropped and counted in the version's `notes`, also when the model rewrote it (`<LOCATION_1>`, `location_1 camps`);
+  - every planning prompt tells the model never to guess what a placeholder stands for and to keep that part of the plan general (for a masked place, no place terms). In deep mode, a clarifying question may ask the team to name the country or wider region (prompts `plan.clarify@2`, `plan.draft@2`, `plan.revise@2`).
+- **Why:** the plan's terms are sent to the paper sources; a placeholder would search for nonsense. In a real run with a hosted model, "the Sahel" reached the planner as a placeholder, and the model built a term from it or guessed a place.
+- **Rejected:**
+  - restoring the original value (unmasked text would leave for a paper source);
+  - dropping a country or region the model added on its own: it cannot be told apart from a fair synonym for a place the question kept, such as "Mali" for "the Sahel".
+- **Costs:**
+  - a draft for a place-specific question may lose its place terms; a person can add them by uploading or at the gate, or the operator can keep countries and regions ([ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md));
+  - a guessed place, or a placeholder written out in words ("Location 1"), is caught only by the prompt.
+- **Where:** `_draft_from` and `_MASKING_NOTE` in [`app/application/planning.py`](../../services/api/app/application/planning.py); `holds_placeholder` in [`app/domain/masking.py`](../../services/api/app/domain/masking.py).
+- **Proven by:** `tests/test_plans_api.py::TestChanges::test_model_terms_that_hold_masked_text_are_dropped_and_noted`, `::test_model_terms_that_hold_a_rewritten_placeholder_are_dropped_too`, `tests/test_plans_api.py::TestMaskedPlaces`; `tests/test_masking_domain.py::TestHoldsPlaceholder`.
 
 ### Libraries
 
