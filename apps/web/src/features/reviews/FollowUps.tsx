@@ -1,17 +1,21 @@
 /**
- * Follow-up questions in the chat (UI_UX_SPEC §5.3.9, §6.12): the choice
- * above the box once a brief exists, each question with its answer in the
- * conversation, its threads, and the source panel for an answer's citations.
- *
- * Asking returns at once and the worker answers in the background, so an
- * open question is polled until it is answered or failed (docs/api.md
- * "Follow-up questions"). A question continues the latest thread unless New
- * thread is pressed. What may be asked, and by whom, is the API's rule; this
- * hides only what the caller's role cannot do.
+ * Follow-up questions (UI_UX_SPEC §5.3.9, §6.12): the box's choice, each
+ * question with its answer, the threads, and the source panel for citations.
+ * An open question is polled until answered or failed. Who may ask is the
+ * API's rule; this only hides what the caller's role cannot do.
  */
 
-import { Box, Button, chakra, Flex, Stack, Text } from "@chakra-ui/react";
+import {
+	Box,
+	Button,
+	Link as ChakraLink,
+	chakra,
+	Flex,
+	Stack,
+	Text,
+} from "@chakra-ui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
 	MessageCircleQuestion,
 	MessageSquarePlus,
@@ -40,7 +44,13 @@ import {
 	threadsQuery,
 } from "../../app/reviewQueries";
 import { DisclosureButton } from "../../ui/DisclosureButton";
-import { type ChipSource, Claims, type OnOpenSource } from "../briefs/Claim";
+import { linkStyle } from "../../ui/LinkButton";
+import {
+	type ChipSource,
+	type Claim,
+	Claims,
+	type OnOpenSource,
+} from "../briefs/Claim";
 import { Passages, SourcePanelFrame } from "../briefs/SourcePanel";
 import { PendingReply } from "../chat/PendingReply";
 import { ChatCard, When } from "./ChatCard";
@@ -62,6 +72,9 @@ export const ASK_LABEL = "Ask about the evidence";
 const CHANGE_LABEL = "Change the search";
 const NEW_THREAD_LABEL = "New thread";
 const NOTHING_FOUND = "Nothing in this project answers that.";
+const PREVIEW_WORDS = 60;
+export const VIEWER_ASK_NOTE =
+	"You can read the answers. Only owners and reviewers can ask.";
 
 export type ComposerChoice = "ask" | "change";
 
@@ -78,8 +91,11 @@ export interface AskState {
 	/** Whether the next question starts a thread rather than continuing the latest. */
 	isNewThread: boolean;
 	setNewThread: (isNewThread: boolean) => void;
-	/** Switch the box to changing the search, starting from `text` unless something is typed. */
-	changeSearch: (text: string) => void;
+	/**
+	 * Switch the box to changing the search, starting from `text` unless
+	 * something is typed; null where the box cannot change the search.
+	 */
+	changeSearch: ((text: string) => void) | null;
 }
 
 export function useAskState(
@@ -146,17 +162,20 @@ export function useHasBrief(): boolean {
 }
 
 /**
- * What the box does while asking (§5.4 "A brief exists"): it continues the
- * latest thread, or starts one after New thread.
+ * What the box does while asking (§5.4 "A brief exists"): it continues
+ * `threadId`, or else the latest thread, or starts one after New thread.
  */
-export function useAskSetup(state: AskState) {
+export function useAskSetup(state: AskState, threadId?: string) {
 	const api = useApi();
 	const { review, actions } = useReview();
 	const threads = useQuery(threadsQuery(api, review.id));
 	const { ask } = actions;
 	const { isNewThread, setNewThread } = state;
-	const latest = threads.data?.[0];
-	const last = latest?.questions.at(-1);
+	const continued =
+		threadId === undefined
+			? threads.data?.[0]
+			: threads.data?.find((thread) => thread.id === threadId);
+	const last = continued?.questions.at(-1);
 	// The API answers one question at a time per thread, so a new thread need not wait.
 	const isWaiting = !isNewThread && last !== undefined && isOpen(last);
 	const reason = threads.isError
@@ -177,7 +196,7 @@ export function useAskSetup(state: AskState) {
 			setNewThread(false);
 			ask.mutate({
 				question: text,
-				threadId: isNewThread ? null : (latest?.id ?? null),
+				threadId: isNewThread ? null : (threadId ?? continued?.id ?? null),
 			});
 		},
 	};
@@ -242,14 +261,31 @@ export function AskControls() {
 	);
 }
 
+/** Under the chat in place of the box, for a viewer. */
+export function ViewerNote({ children }: { children: ReactNode }) {
+	return (
+		<Text
+			px="4"
+			py="3"
+			borderTopWidth="1px"
+			borderColor="border"
+			bg="bg"
+			fontSize="sm"
+			color="fg.muted"
+			textAlign="center"
+		>
+			{children}
+		</Text>
+	);
+}
+
 /**
- * The review's threads, newest first, folded away under the conversation:
- * each names its first question, its size and when it started, and jumps to
- * that question in the chat.
+ * The review's threads, newest first, folded away under the conversation.
+ * Choosing one jumps to its first question in the chat; Open goes to its page.
  */
 export function ThreadList() {
 	const api = useApi();
-	const { review } = useReview();
+	const { project, review } = useReview();
 	const threads = useQuery(threadsQuery(api, review.id));
 	const [isOpenList, setOpenList] = useState(false);
 	const id = useId();
@@ -289,11 +325,12 @@ export function ThreadList() {
 						pb="2"
 					>
 						{all.map((thread) => (
-							<li key={thread.id}>
+							<Flex as="li" key={thread.id} align="center" gap="2">
 								<chakra.button
 									type="button"
 									display="block"
-									w="full"
+									flex="1"
+									minW="0"
 									textAlign="start"
 									px="2"
 									py="1.5"
@@ -319,7 +356,15 @@ export function ThreadList() {
 										<When at={thread.created_at} />
 									</Text>
 								</chakra.button>
-							</li>
+								<ChakraLink asChild css={linkStyle} fontSize="sm" px="2">
+									<Link
+										to="/p/$projectId/ask/$threadId"
+										params={{ projectId: project.id, threadId: thread.id }}
+									>
+										Open
+									</Link>
+								</ChakraLink>
+							</Flex>
 						))}
 					</chakra.ul>
 				) : null}
@@ -416,14 +461,18 @@ function PaperDetails({ runId, paperId }: { runId: string; paperId: string }) {
 
 /**
  * Each question with its answer, stamped with when it was asked, for the
- * conversation to place among the drafts and runs: after the brief it follows.
- * Every thread but the oldest opens with a "New thread" divider.
+ * conversation to place among the drafts and runs; only `threadId`'s when
+ * given. Every thread but the oldest opens with a "New thread" divider.
  */
-export function useFollowUpTurns(): { at: string; node: ReactNode }[] {
+export function useFollowUpTurns(
+	threadId?: string,
+): { at: string; node: ReactNode }[] {
 	const api = useApi();
 	const { review, canManage, actions } = useReview();
 	const threads = useQuery(threadsQuery(api, review.id));
-	const all = threads.data ?? [];
+	const all = (threads.data ?? []).filter(
+		(thread) => threadId === undefined || thread.id === threadId,
+	);
 	const lastAsked = all[0]?.questions.at(-1);
 	const oldest = all.at(-1);
 	const canRetry = canManage && !actions.ask.isPending;
@@ -637,7 +686,7 @@ function AnswerCard({
 			title="Answer"
 			at={question.answered_at ?? undefined}
 			actions={
-				isNothing && canManage ? (
+				isNothing && canManage && changeSearch !== null ? (
 					<Button
 						size="sm"
 						variant="outline"
@@ -652,7 +701,7 @@ function AnswerCard({
 			{isNothing ? (
 				<Text>{answer?.message ?? NOTHING_FOUND}</Text>
 			) : (
-				<Claims claims={answer.claims} sources={chips} onOpen={onOpen} />
+				<AnswerClaims claims={answer.claims} sources={chips} onOpen={onOpen} />
 			)}
 			{warnings === 0 ? null : (
 				<Text display="flex" gap="1.5" alignItems="center">
@@ -671,5 +720,69 @@ function AnswerCard({
 				{facts.join(" · ")}
 			</Text>
 		</ChatCard>
+	);
+}
+
+const wordsOf = (text: string) =>
+	text.split(/\s+/).filter((word) => word !== "");
+
+/** The claims cut to their first `limit` words, or null when they fit. */
+function previewOf(claims: readonly Claim[], limit: number): Claim[] | null {
+	const total = claims.reduce((sum, c) => sum + wordsOf(c.text).length, 0);
+	if (total <= limit) {
+		return null;
+	}
+	const shown: Claim[] = [];
+	let left = limit;
+	for (const claim of claims) {
+		const words = wordsOf(claim.text);
+		if (words.length >= left) {
+			shown.push({ ...claim, text: `${words.slice(0, left).join(" ")}…` });
+			break;
+		}
+		shown.push(claim);
+		left -= words.length;
+	}
+	return shown;
+}
+
+/** An answer's claims; past 60 words, the rest waits behind Read all (§5.3.9). */
+function AnswerClaims({
+	claims,
+	sources,
+	onOpen,
+}: {
+	claims: readonly Claim[];
+	sources: readonly ChipSource[];
+	onOpen: OnOpenSource;
+}) {
+	const [isWhole, setWhole] = useState(false);
+	const id = useId();
+	const preview = useMemo(() => previewOf(claims, PREVIEW_WORDS), [claims]);
+	if (preview === null) {
+		return <Claims claims={claims} sources={sources} onOpen={onOpen} />;
+	}
+	return (
+		<>
+			<Box id={id}>
+				<Claims
+					claims={isWhole ? claims : preview}
+					sources={sources}
+					onOpen={onOpen}
+				/>
+			</Box>
+			{/* The button stays and toggles, so focus never falls back to the page. */}
+			<Button
+				type="button"
+				size="xs"
+				variant="ghost"
+				alignSelf="flex-start"
+				aria-expanded={isWhole}
+				aria-controls={id}
+				onClick={() => setWhole(!isWhole)}
+			>
+				{isWhole ? "Show less" : "Read all"}
+			</Button>
+		</>
 	);
 }

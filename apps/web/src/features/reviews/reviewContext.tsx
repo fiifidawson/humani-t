@@ -9,13 +9,20 @@
  * only hides actions the caller's role cannot take (§3.3) and sends the rest.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	createContext,
+	type ReactNode,
+	useCallback,
+	useContext,
+	useMemo,
+} from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
-import { keys } from "../../app/queries";
+import { keys, projectQuery, sessionQuery } from "../../app/queries";
+import { planQuery, reviewQuery, runsQuery } from "../../app/reviewQueries";
 import type { Project } from "../projects/format";
 import { PIPELINE, type StageId } from "../runs/runEvents";
 import type { PlanMode } from "./format";
@@ -229,6 +236,61 @@ export interface ReviewContextValue {
 	actions: ReviewActions;
 	setComposerText: (text: string) => void;
 	focusComposer: () => void;
+}
+
+const COMPOSER_ID = "composer-input";
+
+/**
+ * Load what a review's pages share. `value` is null until everything has
+ * loaded; `failed` is the first read that failed, if any.
+ */
+export function useReviewValue(
+	projectId: string,
+	reviewId: string,
+	setComposerText: (text: string) => void,
+) {
+	const api = useApi();
+	const project = useQuery(projectQuery(api, projectId));
+	const review = useQuery(reviewQuery(api, projectId, reviewId));
+	const plan = useQuery(planQuery(api, reviewId));
+	const runs = useQuery(runsQuery(api, reviewId));
+	const session = useQuery(sessionQuery(api));
+	const actions = useReviewActions(reviewId);
+	const focusComposer = useCallback(
+		() => document.getElementById(COMPOSER_ID)?.focus(),
+		[],
+	);
+	const value = useMemo<ReviewContextValue | null>(
+		() =>
+			project.data === undefined ||
+			review.data === undefined ||
+			plan.data === undefined ||
+			runs.data === undefined
+				? null
+				: {
+						project: project.data,
+						review: review.data,
+						plan: plan.data,
+						runs: runs.data,
+						canManage: project.data.role !== "viewer",
+						userId: session.data?.user.id ?? null,
+						actions,
+						setComposerText,
+						focusComposer,
+					},
+		[
+			project.data,
+			review.data,
+			plan.data,
+			runs.data,
+			session.data,
+			actions,
+			setComposerText,
+			focusComposer,
+		],
+	);
+	const failed = [review, plan, runs].find((query) => query.isError);
+	return { value, actions, failed };
 }
 
 const ReviewContext = createContext<ReviewContextValue | null>(null);

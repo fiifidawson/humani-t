@@ -4,6 +4,7 @@ import { expectNoAccessibilityViolations } from "../../test/axe";
 import {
 	answerCiting,
 	EXAMPLE_ANSWER,
+	type FakeOutcome,
 	MODEL_DOWN_ANSWER,
 	NOTHING_FOUND,
 } from "../../test/fakeQuestions";
@@ -661,5 +662,81 @@ describe("when nothing in the project answers (UI_UX_SPEC §6.12)", () => {
 		expect(
 			within(answer).queryByRole("button", { name: CHANGE }),
 		).not.toBeInTheDocument();
+	});
+});
+
+/** `count` words, `prefix1` to `prefixN`, so a test can tell where a cut fell. */
+function words(prefix: string, count: number): string {
+	return Array.from({ length: count }, (_, i) => `${prefix}${i + 1}`).join(" ");
+}
+
+/** The example answer with an evidence claim of `evidence` words and reasoning of `reasoning`. */
+function answerOf(evidence: number, reasoning: number): FakeOutcome {
+	if (EXAMPLE_ANSWER.kind !== "answer") {
+		throw new Error("EXAMPLE_ANSWER must be an answer");
+	}
+	return {
+		...EXAMPLE_ANSWER,
+		claims: [
+			{
+				text: words("alpha", evidence),
+				support: "evidence",
+				citations: [{ tag: "P1", source_kind: "paper" }],
+			},
+			{ text: words("beta", reasoning), support: "hypothesis", citations: [] },
+		],
+	};
+}
+
+describe("a long answer (UI_UX_SPEC §5.3.9)", () => {
+	it("shows the first 60 words, and Read all shows the rest in place", async () => {
+		const { path, review, questions } = reviewed();
+		questions.addAnswered(review, "Do prices rise in Gao?", answerOf(40, 30));
+		const { user } = renderApp(path);
+
+		const answer = await screen.findByRole("article", { name: "Answer" });
+		expect(answer).toHaveTextContent("alpha40");
+		expect(answer).toHaveTextContent("beta20…");
+		expect(answer).not.toHaveTextContent("beta21");
+		const readAll = within(answer).getByRole("button", { name: "Read all" });
+		expect(readAll).toHaveAttribute("aria-expanded", "false");
+
+		await user.click(readAll);
+
+		expect(answer).toHaveTextContent("beta30");
+		expect(answer).not.toHaveTextContent("…");
+		expect(readAll).toHaveAttribute("aria-expanded", "true");
+		expect(readAll).toHaveFocus();
+	});
+
+	it("shows an answer of 60 words whole, with no Read all", async () => {
+		const { path, review, questions } = reviewed();
+		questions.addAnswered(review, "Do prices rise in Gao?", answerOf(40, 20));
+		renderApp(path);
+
+		const answer = await screen.findByRole("article", { name: "Answer" });
+		expect(answer).toHaveTextContent("beta20");
+		expect(
+			within(answer).queryByRole("button", { name: "Read all" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("keeps its citation chips working before and after Read all", async () => {
+		const { path, review, questions } = reviewed();
+		questions.addAnswered(review, "Do prices rise in Gao?", answerOf(70, 5));
+		const { user } = renderApp(path);
+		const answer = await screen.findByRole("article", { name: "Answer" });
+
+		await user.click(within(answer).getByRole("button", { name: /Source P1/ }));
+		const panel = await screen.findByRole("complementary", { name: "P1" });
+		await user.click(
+			within(panel).getByRole("button", { name: "Close source" }),
+		);
+		await user.click(within(answer).getByRole("button", { name: "Read all" }));
+		await user.click(within(answer).getByRole("button", { name: /Source P1/ }));
+
+		expect(
+			await screen.findByRole("complementary", { name: "P1" }),
+		).toHaveTextContent("staple prices rose by 5 to 12 percent.");
 	});
 });
