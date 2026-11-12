@@ -27,7 +27,7 @@ That makes it the closest thing the project has to a requirements document. Its 
 | 1. Curated vocabulary of concepts and synonyms | `Vocabulary`, `Concept` domain types |
 | 2. Queries built automatically from the vocabulary | `BooleanQuery`, compiled per source |
 | 3. Search arXiv / OpenAlex / Europe PMC / Google Scholar, deduplicated | `PaperSearchProvider` |
-| 4. Collect papers, extract text and metadata | `fetch_fulltext` + mmore extraction |
+| 4. Collect papers, extract text and metadata | Full-text retrieval (not built) + mmore extraction |
 | 5. LLM-assisted screening, scores and priorities | `ScreeningProvider` |
 | 6. Analyse and visualise | LitLens-equivalent, `apps/web` |
 

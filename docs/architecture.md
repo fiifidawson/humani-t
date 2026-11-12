@@ -74,21 +74,15 @@ Each seam is a `Protocol` in `services/api/app/<area>/base.py`, with a default i
 | Interface | Default implementation | Fake |
 | --- | --- | --- |
 | `InferenceProvider` | Ollama, run by the operator (native `/api/chat`, JSON-schema output); or, with `inference_api=openai`, any server speaking OpenAI's Chat Completions. A hosted one only with `allow_hosted_inference` (ADR 0010) | scripted answers, validated against the schema |
-| `PromptGuard` | leak check from the masking stage (today: allows everything) | allows, refuses or fails on demand |
+| `PromptGuard` | `LeakCheckPromptGuard`: the pattern detector over every outgoing message, plus the project's rules; any hit refuses the call | allows, refuses or fails on demand |
 | `StorageProvider` | `PostgresStorage` (SQLAlchemy 2, async) | in-memory repositories |
 | `FileStore` | a local volume, ciphertext only ([ADR-0008](adr/0008-uploaded-files-on-a-sealed-volume.md)) | in-memory |
 | `MalwareScanner` | ClamAV's daemon over `INSTREAM`, or `none` by explicit choice | finds the EICAR test file |
 | `DocumentExtractor` | standard library and pypdf in a child process ([ADR-0009](adr/0009-local-extraction-in-an-isolated-process.md)); mmore later | reads bytes as UTF-8, or fails as told |
-| `EmbeddingProvider` | local embedding model | deterministic hash vectors |
-| `VectorStoreProvider` | Milvus (via mmore) | in-memory |
 | `PaperSearchProvider` | OpenAlex, Europe PMC, arXiv | `FakePaperSearchProvider` |
-| `ScreeningProvider` | LLM-assisted, via `InferenceProvider` | rule-based |
-| `SanitizationProvider` | mmore privacy mode, local detection | pattern-based |
-| `ToolProvider` | in-process tools | in-memory |
 | `KeyProvider` | file-backed KEK (Docker secret) | fixed test key |
 | `PasswordHasher` | Argon2id | fast deterministic hasher |
 | `PasskeyVerifier` | WebAuthn (py_webauthn), in `auth/webauthn.py` | none needed: it makes no network call, so tests drive the real one with a software authenticator (`tests/webauthn_authenticator.py`) |
-| `IdentityProvider` | OIDC (optional) | local JWKS |
 | `EmailProvider` | SMTP | records sent messages |
 | `RateLimiter` | Valkey | in-memory |
 | `HttpFetcher` | SSRF-guarded HTTP client | scripted resolver and responses |
@@ -153,51 +147,18 @@ There is no pre-signed URL method. Files are always streamed through an API rout
 
 Stored bytes are encrypted with the project's data key (§5.4) before `put`, bound to the document's id.
 
-### 3.4 EmbeddingProvider
+### 3.4 Planned, not built
 
-```python
-class EmbeddingProvider(Protocol):
-    @property
-    def model_id(self) -> str: ...
-    @property
-    def dimensions(self) -> int: ...
-    async def embed(self, texts: Sequence[str]) -> Sequence[Vector]: ...
-```
+These seams are designed but have no code yet. Each will get a `Protocol` and a fake when a feature needs it.
 
-Stored vectors must record `model_id` and `dimensions` alongside them. Vectors from different models are not comparable, and the model will change.
+- `EmbeddingProvider`: a local embedding model. Stored vectors record the model id and dimensions, because vectors from different models are not comparable.
+- `VectorStoreProvider`: Milvus through mmore, one collection per project. The brief uses BM25 per search instead ([ADR-0007](adr/0007-bm25-retrieval-for-the-brief.md)).
+- `ScreeningProvider`: not needed so far. Screening is the `screen` stage calling `InferenceProvider` (§3.8).
+- `SanitizationProvider`: mmore's privacy mode. Masking uses `Detector` and `Sanitizer` in `app/privacy/` instead (§3.9).
+- `ToolProvider`: tools for the agent loop, each checked against the caller's identity and project role.
+- `IdentityProvider`: OIDC sign-in, optional.
 
-### 3.5 ToolProvider
-
-```python
-class ToolProvider(Protocol):
-    def list_tools(self) -> Sequence[ToolSpec]: ...
-    async def invoke(
-        self, name: str, arguments: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult: ...
-```
-
-`ToolContext` carries the caller's identity and project role. Every tool is checked against it, because a tool invoked by the agent loop acts on behalf of a user and must not see more than that user can.
-
-### 3.6 VectorStoreProvider
-
-mmore indexes into Milvus. Milvus must not leak above its provider package.
-
-```python
-class VectorStoreProvider(Protocol):
-    async def upsert(self, collection: str, records: Sequence[VectorRecord]) -> None: ...
-    async def search(
-        self,
-        collection: str,
-        query: HybridQuery,
-        k: int,
-        filter: Mapping[str, Any] | None = None,
-    ) -> Sequence[ScoredChunk]: ...
-    async def delete(self, collection: str, ids: Sequence[str]) -> None: ...
-```
-
-`HybridQuery` carries both a dense vector and sparse terms, because mmore's retrieval is hybrid. A provider that can only do dense search degrades explicitly rather than silently ignoring the sparse half.
-
-One collection per project. Projects never share an index (brief rule 7).
+Later sections keep their numbers, which other documents cite.
 
 ### 3.7 PaperSearchProvider
 
@@ -208,21 +169,13 @@ class PaperSearchProvider(Protocol):
     @property
     def source_id(self) -> str: ...
     async def search(self, query: BooleanQuery, limit: int) -> Sequence[PaperRecord]: ...
-    async def fetch_fulltext(self, record: PaperRecord) -> Document | None: ...
 ```
 
 `BooleanQuery` is a **domain type**, not a source-specific string. The provider compiles it into that repository's syntax. This seam makes a search reproducible across sources. It is the single most important interface in the system, because everything downstream inherits its provenance.
 
-`fetch_fulltext` returns `None` when the document is not openly available. That is a normal outcome, not an error, and screening must handle metadata-only records.
+### 3.8 Screening
 
-### 3.8 ScreeningProvider
-
-```python
-class ScreeningProvider(Protocol):
-    async def screen(
-        self, paper: PaperRecord, criteria: Sequence[Criterion]
-    ) -> ScreeningDecision: ...
-```
+The `screen` stage asks the model through `GuardedInference` (§3.1). There is no separate screening seam (§4.2).
 
 `ScreeningDecision` records:
 
@@ -231,22 +184,11 @@ class ScreeningProvider(Protocol):
 
 Auditability is a stated project commitment. A reviewer must be able to ask why a paper was excluded and get an answer that names what produced the decision.
 
-Screening never makes the final call. The interface returns an assessment; the domain decides what a human still has to see.
+Screening never makes the final call. The stage records an assessment; the domain decides what a human still has to see.
 
-### 3.9 SanitizationProvider
+### 3.9 Masking
 
-mmore ships a privacy mode (`src/mmore/privacy/`) that sanitises retrieved context before it reaches the answer model. It has `humanitarian` as a first-class domain profile. We use it behind our own interface, never by shelling out to `mmore rag --privacy`.
-
-```python
-class SanitizationProvider(Protocol):
-    async def sanitize(
-        self, chunks: Sequence[Chunk], query: str, policy: PrivacyPolicy
-    ) -> SanitizationResult: ...
-```
-
-The mmore pipeline runs `analyzer -> detector -> sanitizer -> leakage_adversary -> HITL gate -> answer -> verifier -> report`.
-
-`SanitizationResult` carries the sanitised chunks, the verifier warnings and the `ReportRecord`, which feeds `RunManifest`.
+mmore ships a privacy mode (`src/mmore/privacy/`) with `humanitarian` as a domain profile. It is not used yet (§3.4); if it is, it sits behind our own interface, never `mmore rag --privacy`, with these choices.
 
 **Locked configuration choices:**
 
@@ -445,7 +387,7 @@ ScreeningDecision  per run and paper: label (include | exclude | uncertain),
 Passage         a masked excerpt the brief may cite, tagged by the paper's place
 ```
 
-The UI's labels (Highly relevant, Relevant, Possibly relevant, Excluded, Uncertain) are a `ScreeningTier` derived from label and priority, not stored. This differs from §3.8 in one respect: there is no `ScreeningProvider` seam. Screening is a use case (the `screen` stage) that calls the model through `GuardedInference` with a versioned prompt, because a second seam in front of the model would be a place to skip the guard.
+The UI's labels (Highly relevant, Relevant, Possibly relevant, Excluded, Uncertain) are a `ScreeningTier` derived from label and priority, not stored. As §3.8 says, there is no `ScreeningProvider` seam: screening is a use case (the `screen` stage) that calls the model through `GuardedInference` with a versioned prompt, because a second seam in front of the model would be a place to skip the guard.
 
 Conversations may still exist: the agentic loop produces a transcript, and a user may ask follow-up questions. But they are an *artefact of* a Review, not the organising entity.
 

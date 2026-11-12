@@ -734,13 +734,12 @@ uv run pytest tests/test_plans_domain.py tests/test_plans_storage_contract.py te
 | Id | Gap | Effect | Plan |
 | --- | --- | --- | --- |
 | G9.11 | Planning text is masked by the pattern detector only | Names and places in a question reach the model unmasked; only structured identifiers are masked | The masking lane wires its local NER detector into `_planning_sanitizer()` in `api/dependencies.py` |
-| G9.12 | Project masking rules are not applied to planning text | A term the owner marked "always mask" is masked only if a detector also finds it | Wire the mask lane's rule store as the `MaskingRuleSource` in `api/dependencies.py` (`NO_PROJECT_RULES` today) |
 | G9.13 | No automatic fitting to a source's limits, and no per-source "fits" indicator | A very long vocabulary fails at OpenAlex's URL limit during discover | A fit check per compiler, shown on the draft |
 | G9.14 | A concept moved between themes shows as removed and added | The compare view has no "moved" marker (UI_UX_SPEC §6.5) | Detect moves when the canvas needs them |
 | G9.15 | A draft can be edited directly only through the gate's revisions or an upload | No pill editing (UI_UX_SPEC §16, question 6) | A `PATCH` on the draft when the canvas allows direct edits |
 | G9.16 | A failed revision leaves the review in `changes_requested` | The old draft cannot be accepted until the change is asked for again | Ask again to retry; a "drop this request" action if it proves annoying |
 
-G9.1 (no planning conversation) and G9.6 (compiled queries not stored) are closed by this part.
+G9.1 (no planning conversation) and G9.6 (compiled queries not stored) are closed by this part. G9.12 (project masking rules not applied to planning text) is closed too: planning takes the project's `MaskingRuleService`.
 
 ### Glossary
 
