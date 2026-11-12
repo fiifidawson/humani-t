@@ -1,16 +1,9 @@
 """The decision brief: the `answer` stage that writes it, and reading it back.
 
-`AnswerStage` reads the run's screened-in passages and the review's question,
-masks the question with the project's rules, runs the agent loop
-(`brief_loop.py`) and stores one brief for the run, sealed under the project's
-key. A stage run again after a crash finds the stored brief and returns it
-instead of writing another (`runs/base.py`: a stage may run more than once).
-
-`BriefService` reads a brief for a member: the brief, one cited source with
-its passages and the claims citing it, and the trace. `ScreenedSources` says
-what the pipeline knew of each cited paper when the brief was written.
-
-No transaction is open while the model is called (architecture §5.7).
+`AnswerStage` masks the question, runs `brief_loop.py` on screened-in passages and stores
+one sealed brief per run; a rerun after a crash returns the stored brief instead of
+writing another. `BriefService` reads it back for a member. No transaction is open while
+the model is called.
 """
 
 from __future__ import annotations

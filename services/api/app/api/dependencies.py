@@ -1,11 +1,7 @@
 """Which concrete implementations the routes get.
 
-This is the seam made operational. Every provider choice in the system is made
-here and nowhere else, so swapping the fake for OpenAlex — or one LLM provider
-for another — is an edit to this file alone.
-
-If you ever find yourself importing a concrete provider inside a route, the
-architecture has sprung a leak. Import it here instead.
+Every provider choice is made here and nowhere else. Importing a concrete provider
+anywhere else is the architecture leaking: import it here instead.
 """
 
 from __future__ import annotations
@@ -267,7 +263,7 @@ def inference_provider(settings: Settings, fetcher: HttpFetcher) -> InferencePro
 
 
 def prompt_guard() -> PromptGuard:
-    """The last check before every model call (architecture §3.9.1): it fails closed.
+    """The last check before every model call: it fails closed.
 
     Patterns only: a name model on every prompt would refuse the published
     author and place names that papers legitimately contain.
@@ -444,12 +440,10 @@ def build_providers(
     malware_scanner: MalwareScanner | None = None,
     document_extractor: DocumentExtractor | None = None,
 ) -> Providers:
-    """THE switch: the one function that turns configuration into implementations.
+    """Turn configuration into implementations: the one place that does.
 
-    The keyword arguments exist for tests: a clock they can move, a hasher that
-    does not spend 64 MiB per sign-in, instrumented storage, email and rate
-    limiter, and an MFA policy for specs of the password factor alone. MFA is
-    required unless `mfa_policy` says otherwise; it is not an operator setting.
+    The keyword arguments are for tests. MFA is required unless `mfa_policy` says
+    otherwise, and that is not an operator setting.
     """
     storage = storage or _storage(settings)
     email = email or _email(settings)

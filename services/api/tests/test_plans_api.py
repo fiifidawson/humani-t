@@ -1,14 +1,8 @@
 """Requirements for the search-planning conversation, through the HTTP API.
 
-Sources: architecture §4.3 (routes A and B; frozen, versioned; origin recorded;
-route B never touches the model), §3.9 (the question, answers and change
-requests are masked before any model call), §5.4 (sealed under the project's
-key), §5.7 (the first accept wins); UI_UX_SPEC §5.3.2 (privacy receipt),
-§5.3.3 (clarifying questions), §5.3.4 (draft and accept), §6.5 (compare with
-the previous draft, who added each term), §11.2 (a second accept gets 409).
-
-Every model call goes through `GuardedInference` to a `FakeInferenceProvider`;
-nothing in this file can reach a network.
+Plans are frozen and versioned, and the first accept wins. The question, answers and change
+requests are masked before any model call, and every call goes through `GuardedInference`
+to a `FakeInferenceProvider`, so nothing in this file can reach a network.
 """
 
 from __future__ import annotations

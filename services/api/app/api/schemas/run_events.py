@@ -1,16 +1,9 @@
 """The run event stream's payloads, published as OpenAPI components.
 
-Documentation of the wire, not a second implementation of it: the domain
-builds each payload (`domain/runs.py`, the `*_payload` functions) and the
-stream sends it as it was stored. These models describe what arrives, so the
-web app generates its types instead of hand-writing them, and a spec
-(`test_every_event_matches_its_published_schema`) checks that every event a
-run sends validates against them.
-
-One SSE event is `id:`, `event:` and `data:`; each model below is those three
-together, discriminated by `event`. Open-ended values (a summary, a gate's
-payload) are plain JSON objects: a recursive JSON type would be exact, but
-TypeScript generators cannot express one as a named component.
+These describe the wire, they do not build it: the domain builds each payload. They
+exist so the web app generates its types, and a test checks every event against them.
+Open-ended values are plain JSON objects, because TypeScript generators cannot name
+a recursive JSON type.
 """
 
 from __future__ import annotations
@@ -32,7 +25,7 @@ class StageStartedData(BaseModel):
 
 
 class ScreenedItemData(BaseModel):
-    """The screen stage's row for one paper, as UI_UX_SPEC §6.7's live list shows it."""
+    """The screen stage's row for one paper, as the live screening list shows it."""
 
     model_config = ConfigDict(extra="forbid")
 

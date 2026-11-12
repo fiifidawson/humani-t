@@ -1,9 +1,7 @@
 """The InferenceProvider and PromptGuard Protocols.
 
-`InferenceProvider` turns a `ChatRequest` into a schema-valid `ChatResult`.
-`PromptGuard` decides whether a request's text may leave at all. They are
-separate seams so the guard cannot be skipped by choosing a different model
-server: `application.inference.GuardedInference` puts one in front of the other.
+They are separate seams so choosing another model server cannot skip the guard:
+`GuardedInference` puts the guard in front of every provider.
 """
 
 from __future__ import annotations
@@ -23,9 +21,8 @@ class InferenceProvider(Protocol):
     async def chat(self, request: ChatRequest) -> ChatResult:
         """Ask the model and return an answer that matches `request.output_schema`.
 
-        Raises `InvalidStructuredOutputError` when the answer does not match,
-        and `InferenceUnavailableError` when there is no answer at all. It never
-        returns unchecked output.
+        Raise `InvalidStructuredOutputError` for a mismatch, `InferenceUnavailableError`
+        for no answer; never return unchecked output.
         """
         ...
 

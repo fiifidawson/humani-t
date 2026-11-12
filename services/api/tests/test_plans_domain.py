@@ -1,9 +1,7 @@
 """Requirements for a review's search plan, as pure domain rules.
 
-Sources: architecture §4.3 (routes A and B, frozen versions, origin recorded,
-route B never touches the model); UI_UX_SPEC §5.3.3 (clarifying questions),
-§5.3.4 (the draft and its acceptance), §6.5 (who added each term, compare with
-the previous draft), §11.1 (review states).
+Plan versions are frozen and record their origin, and a user-supplied plan (route B) never
+touches the model.
 """
 
 from __future__ import annotations
@@ -131,7 +129,7 @@ class TestReviewPlan:
             )
 
     def test_a_strict_vocabulary_can_never_be_written_by_the_model(self):
-        """Route B never routes through the model (architecture §4.3, rule 3)."""
+        """Route B never routes through the model."""
         with pytest.raises(ValueError, match="user-supplied"):
             draft(CASH, origin=VocabularyOrigin.USER_SUPPLIED)
 
@@ -484,7 +482,7 @@ class TestGateRevisions:
 
 
 class TestReviewStates:
-    """Editing an accepted plan makes a new version (architecture §4.3, rule 1)."""
+    """Editing an accepted plan makes a new version."""
 
     @pytest.mark.parametrize(
         "status",

@@ -1,10 +1,8 @@
 """Downloads: gather what one export holds, for a member, and audit that it was taken.
 
-Every export is generated on request from what is already stored, through the
-same use cases the screens read (`PaperService`, `BriefService`), so a file
-holds exactly what the screens show and nothing is kept twice: deleting the
-project leaves no export copy behind to shred. Rendering the bytes is the
-API boundary's job (`api/exports.py`).
+Exports are built on request through the same use cases the screens read, so a file holds
+what the screens show and no copy is kept to shred later. Rendering bytes is
+`api/exports.py`'s job.
 """
 
 from __future__ import annotations
@@ -68,9 +66,7 @@ class ExportService:
     ) -> ExportContent:
         """Gather one export for the review's newest run, or `run_id`; then audit it.
 
-        The default run is the one each screen shows by default: the newest
-        with papers for the dataset, PRISMA and manifest, the newest brief for
-        the brief.
+        The default run is the one the matching screen shows by default.
         """
         content = await self._gather(current, review_id, name, run_id)
         project_id = await self._project_of(current, review_id)

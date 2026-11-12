@@ -1,11 +1,9 @@
 """Test helpers shared by the authentication specs.
 
-Nothing here is a mock: the clock really moves, the hasher really hashes (just
-cheaply), and requests go through the real middleware, routes and storage.
-
-The `Tracking`/`Observing` wrappers add instruments, not behaviour: they record
-how many transactions are open at the moment something slow happens, so tests
-can prove a database connection is never held across hashing or email.
+Nothing here is a mock: the clock moves, the hasher hashes (cheaply) and requests go through
+the real middleware, routes and storage. The `Tracking`/`Observing` wrappers record how many
+transactions are open when something slow happens, to prove no connection is held across
+hashing or email.
 """
 
 from __future__ import annotations
@@ -181,11 +179,10 @@ def make_harness(
 
 
 def plant_session_cookie(client: TestClient, value: str) -> None:
-    """Put a session cookie in the jar exactly where the browser itself would.
+    """Put a session cookie in the jar where the browser itself would.
 
-    The standard library files cookies for a dotless host such as `testserver`
-    under `testserver.local`; a cookie set for plain `testserver` is never sent,
-    and a test using one would pass without testing anything.
+    The standard library files cookies for a dotless host under `testserver.local`; a cookie
+    for plain `testserver` is never sent, and its test would pass without testing anything.
     """
     client.cookies.set("__Host-session", value, domain="testserver.local")
 

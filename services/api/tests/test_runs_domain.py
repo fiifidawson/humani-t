@@ -1,11 +1,7 @@
 """Requirements for reviews, runs, run events and gates, as pure domain rules.
 
-Sources: UI_UX_SPEC §11.1 (review and run states), §11.2 (live events), §5.3.5
-(run strip: stage names), §5.3.6 (gates: who may resolve one); architecture
-§4.4 (event names and fields, gate kinds, exactly one `job.finished`).
-
-The transition tables below *are* the state machines. Changing what may follow
-what means changing a table here, so the change is a visible diff.
+The transition tables below are the state machines: changing what may follow what is a
+visible diff here.
 """
 
 from __future__ import annotations
@@ -52,16 +48,16 @@ NOW = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
 S = ReviewStatus
 T = ReviewTrigger
 
-# UI_UX_SPEC §11.1. A run may start from any state in which no run is going:
-# before acceptance the run's first stage asks for the vocabulary through a
-# `vocabulary` gate (§5.3.6), and after a run has ended it may run again.
+# A run may start from any state in which no run is going: before acceptance its
+# first stage asks for the vocabulary through a `vocabulary` gate, and after a run
+# has ended it may run again.
 REVIEW_TRANSITIONS: dict[tuple[ReviewStatus, ReviewTrigger], ReviewStatus] = {
     (S.NEW, T.CLARIFY): S.CLARIFYING,
     (S.NEW, T.DRAFT): S.DRAFTING,
     (S.CLARIFYING, T.DRAFT): S.DRAFTING,
     (S.CHANGES_REQUESTED, T.DRAFT): S.DRAFTING,
     (S.DRAFTING, T.REQUEST_CHANGES): S.CHANGES_REQUESTED,
-    # Editing an accepted plan makes its next version (architecture §4.3, rule 1).
+    # Editing an accepted plan makes its next version.
     (S.ACCEPTED, T.REQUEST_CHANGES): S.CHANGES_REQUESTED,
     (S.DONE, T.REQUEST_CHANGES): S.CHANGES_REQUESTED,
     (S.FAILED, T.REQUEST_CHANGES): S.CHANGES_REQUESTED,
@@ -433,7 +429,7 @@ class TestEvents:
 
 
 # The WHATWG "Server-sent events" reconnect: the browser sends the last id it saw.
-# Architecture §4.4: an id the server does not recognise replays from the start.
+# An id the server does not recognise replays from the start.
 RESUME_POINTS = [
     (None, 0),
     ("3", 3),
@@ -484,7 +480,7 @@ class TestEventPayloads:
             job_finished_payload(RunState.RUNNING, 0.0, None)
 
 
-# UI_UX_SPEC §5.3.6: approving masking is for owners ("Only owners can do this"),
+# Approving masking is for owners ("Only owners can do this"),
 # because checking it means reading raw text; a vocabulary is any contributor's.
 GATE_ACTIONS = {
     GateKind.VOCABULARY: Action.CONFIRM_GATE,

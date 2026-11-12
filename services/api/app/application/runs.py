@@ -1,16 +1,8 @@
 """Runs from the API's side: start one, cancel one, decide a gate, follow the stream.
 
-The worker that executes runs is in `run_worker.py`; both obey the same rules
-and write through the same log (`run_log.py`). Each use case here is one short
-transaction that checks membership first, then signals after it commits.
-
-A run, gate or event route does not name its project. Each use case resolves
-the project from the run or gate it names, so a non-member gets the same 404
-for an id that exists as for one that does not.
-
-The stream (`open_stream`) never holds a database connection while it waits:
-it reads the log in a short transaction, sends what it found, then waits for a
-signal or its poll interval with no transaction open (architecture §5.7).
+The worker side is `run_worker.py`. Each use case resolves the project from the run or
+gate it names, so a non-member gets the same 404 as for a missing id. The stream holds no
+database connection while it waits.
 """
 
 from __future__ import annotations
@@ -57,8 +49,8 @@ from app.storage.base import StorageProvider, UnitOfWork
 
 __all__ = ["KeepAlive", "RunService", "StreamEvent", "StreamItem"]
 
-# Architecture §4.4: a comment every 15 seconds keeps proxies from closing a
-# quiet connection, and the session is re-checked at least once a minute.
+# A comment every 15 seconds keeps proxies from closing a quiet connection, and the
+# session is re-checked at least once a minute.
 KEEP_ALIVE_INTERVAL = timedelta(seconds=15)
 SESSION_RECHECK_INTERVAL = timedelta(minutes=1)
 # How long a stream waits for a signal before it reads the log anyway. Signals
@@ -231,9 +223,8 @@ class RunService:
     ) -> AsyncGenerator[StreamItem]:
         """Check access now, then return the run's events from after `last_event_id`.
 
-        The stream replays what is stored, then follows the run live, with a
-        keep-alive while it is quiet. It ends after `job.finished`, or when the
-        caller's session or membership ends.
+        It replays what is stored, then follows live, and ends after `job.finished` or
+        when the caller's session or membership ends.
         """
         async with self._storage.unit_of_work() as uow:
             run = await self._run(uow, current, run_id, Action.READ_PROJECT)

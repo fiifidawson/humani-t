@@ -1,16 +1,8 @@
-"""Masking as a pure function of raw text and spans (architecture §3.9.1).
+"""Masking as a pure function of raw text and spans.
 
-What belongs here: the entity types and the lists of them each kind of text is
-masked with, a `MaskSpan` and its provenance, project `MaskingRule`s, applying
-spans to text, and the checks the prompt guard shares with the sanitiser.
-
-What does not: finding spans (detectors live in `app/privacy/`), storing them,
-or encrypting anything. Raw text is never edited; masked text is rebuilt from
-the raw text and its spans whenever the spans change.
-
-Masking is not anonymity. Detection misses formats and rare details still
-identify people; everything here is built to be checked and corrected, not
-trusted.
+Raw text is never edited: masked text is rebuilt from it whenever the spans change. Finding
+spans belongs in `app/privacy/`. Masking is not anonymity, so everything here is built to be
+checked and corrected, not trusted.
 """
 
 from __future__ import annotations
@@ -195,9 +187,8 @@ def spans_from_json(items: Sequence[Mapping[str, object]]) -> tuple[MaskSpan, ..
 class MaskedText:
     """Text with its spans applied.
 
-    `spans` point into the raw text, not into `masked`. `counts` is the number
-    of distinct masked values per entity type: what a privacy receipt shows,
-    never the values themselves.
+    `spans` point into the raw text, not into `masked`. `counts` holds distinct masked values
+    per type, which a privacy receipt shows, never the values themselves.
     """
 
     masked: str
@@ -242,10 +233,8 @@ def _value_key(value: str) -> str:
 def apply_spans(raw: str, spans: Sequence[MaskSpan]) -> MaskedText:
     """Replace every span of `raw` with a placeholder such as `[PERSON_1]`.
 
-    Overlapping spans merge into one region: over-masking wins. Within one
-    text, the same value (ignoring case and spacing) always gets the same
-    placeholder, and different values of a type are numbered in order of first
-    appearance. The result does not depend on the order of `spans`.
+    Overlapping spans merge, so over-masking wins. Within a text one value always gets the
+    same placeholder, whatever the order of `spans`.
     """
     ordered = tuple(sorted(set(spans)))
     if ordered and max(s.end for s in ordered) > len(raw):
@@ -358,8 +347,7 @@ def masking_fingerprint(
 ) -> tuple[str, ...]:
     """What a text was masked with: detectors and their versions, and the project's rules.
 
-    A stored masking with the same fingerprint is current; any other must be
-    redone, because a detector or a rule changed since.
+    A stored masking with another fingerprint is out of date and must be redone.
     """
     return (*sorted(detector_sources), *sorted(rule_source(r.id) for r in rules))
 
@@ -368,9 +356,8 @@ def masking_fingerprint(
 class PaperMask:
     """A paper's masked text and spans as stored: both sealed under the project's key.
 
-    The raw text stays where ingest kept it (`paper_texts`); this record holds
-    only what is derived from it, and `masked_with` says from what, so a re-run
-    can tell a current masking from one a detector or rule has since outdated.
+    `masked_with` says what produced them, so a re-run can tell a current masking from one a
+    detector or rule has since outdated.
     """
 
     paper_id: UUID

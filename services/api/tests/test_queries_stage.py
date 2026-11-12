@@ -1,11 +1,8 @@
 """Requirements for the `queries` stage: the accepted plan, compiled once per source.
 
-Sources: architecture §4.3 (only a confirmed vocabulary is searched; route B
-never touches the model), §4.4 (the `vocabulary` gate); UI_UX_SPEC §5.3.6 and
-§6.6 (a run started on an unconfirmed vocabulary asks for it); the wave-2
-RunManifest contract (the summary's `"manifest"` key).
-
-The stage runs in the real `RunWorker`; the model is a `FakeInferenceProvider`.
+Only a confirmed vocabulary is searched; a run started on an unconfirmed one asks for it at
+the `vocabulary` gate. The stage runs in the real `RunWorker`, and the model is a
+`FakeInferenceProvider`.
 """
 
 from __future__ import annotations

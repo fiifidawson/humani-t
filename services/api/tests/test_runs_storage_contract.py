@@ -1,19 +1,9 @@
 """One behaviour contract for review, run, event and gate storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a migrated
-database as the runtime role, exactly as in `test_storage_contract.py`.
-
-What matters most here (architecture §4.4 and §5.7):
-
-- the run table is the job queue: a queued run is claimed by exactly one
-  worker, and a claimed run is held by a lease that expires;
-- event ids increase by one within a run with no gaps or repeats, and no event
-  can follow a finished run;
-- a gate is resolved once: the first decision wins, the second learns it lost;
-- no blind overwrites: a stale copy of a run or review cannot replace a newer one.
-
-The in-memory backend runs each unit of work without interleaving, so only the
-Postgres run truly races transactions.
+The run table is the job queue: one worker claims a queued run and holds it under an
+expiring lease. Event ids rise by one with no gaps, nothing follows a finished run, a gate
+is resolved once, and stale copies cannot overwrite. Only the Postgres run truly races; it
+is skipped unless TEST_DATABASE_URL points at a migrated database as the runtime role.
 """
 
 from __future__ import annotations

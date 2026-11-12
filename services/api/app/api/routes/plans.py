@@ -1,12 +1,8 @@
-"""The search-planning conversation of one review (UI_UX_SPEC §5.3.1 to 5.3.4, §6.3 to 6.6).
+"""The search-planning conversation of one review.
 
-Paths name a review, not a project: each resolves the project from the review
-and answers a non-member with the same 404 as a missing review, before any
-body is read. The use case checks membership again as it writes.
-
-Model failures are translated here: a prompt the leak check refused is 422
-(nothing was sent), an unusable answer is 502, an unreachable model server is
-502 through the shared handler.
+Paths name a review, so a non-member gets the same 404 as a missing review before
+any body is read. A prompt the leak check refused is 422 (nothing was sent); an
+unusable answer or an unreachable model server is 502.
 """
 
 from __future__ import annotations

@@ -1,10 +1,7 @@
 """Requirements for the discover, ingest, screen and export stages, run by the real worker.
 
-Sources: the stage seam's two rules (`app/runs/base.py`: a stage may run more
-than once; everything reported is shown to every member); architecture §3.8
-(provenance on every decision) and §3.9 (nothing reaches a model unmasked);
-UI_UX_SPEC §5.3.5 and §6.7 (progress per source and one live row per paper),
-§5.3.7 (the screening summary); `CLAUDE.md`'s provenance test.
+A stage may run more than once, and everything it reports is shown to every member. Every
+decision carries its provenance, and nothing reaches a model unmasked.
 """
 
 from __future__ import annotations

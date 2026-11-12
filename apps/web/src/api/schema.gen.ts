@@ -13,10 +13,10 @@ export interface paths {
         };
         /**
          * Liveness probe
-         * @description Answers 'is this process up', not 'is the whole system healthy'.
+         * @description Answer 'is this process up', not 'is the whole system healthy'.
          *
-         *     Deliberately touches no provider and no database. Conflating the two makes
-         *     deploys hard to debug, because a failing dependency looks like a dead process.
+         *     Touches no provider and no database, so a failing dependency never looks like a
+         *     dead process.
          */
         get: operations["health_api_v1_health_get"];
         put?: never;
@@ -711,11 +711,8 @@ export interface paths {
          * Follow a run as Server-Sent Events
          * @description Replay the run's stored events after the last id seen, then follow it live.
          *
-         *     The id comes from the `Last-Event-ID` header, which the browser sends when
-         *     it reconnects, or else from `?last_event_id=`; the header wins. The stream
-         *     ends after `job.finished`, so a finished run replays and closes. It also
-         *     ends when the session or the membership does; the browser's reconnect then
-         *     gets 401 or 404.
+         *     The `Last-Event-ID` header wins over the query. The stream ends after
+         *     `job.finished`, or when the session or membership does.
          */
         get: operations["follow_run_api_v1_runs__run_id__events_get"];
         put?: never;
@@ -1317,16 +1314,8 @@ export interface paths {
          * Compile a vocabulary into a Boolean query
          * @description Show exactly what will be searched for, before anything is searched.
          *
-         *     Concepts sharing a theme are OR'd; themes are AND'd:
-         *
-         *         ("chatbot" OR "conversational agent") AND ("humanitarian" OR "crisis response")
-         *
-         *     Pure and deterministic — the same vocabulary always produces the same query,
-         *     and no model is consulted for either origin. That is what makes a
-         *     `user_supplied` vocabulary strict by construction rather than by discipline.
-         *
-         *     This endpoint exists so a reviewer can inspect and argue about the query
-         *     itself, which is the transparency commitment made concrete.
+         *     Concepts in a theme are OR'd and themes are AND'd. No model is consulted, so the
+         *     same vocabulary always gives the same query.
          */
         post: operations["compile_endpoint_api_v1_vocabulary_compile_post"];
         delete?: never;
@@ -1344,11 +1333,7 @@ export interface paths {
         };
         /**
          * Search sources available in this process
-         * @description Which repositories this deployment can currently reach.
-         *
-         *     One entry today. It becomes the list a reviewer checks to know what a run
-         *     did and did not cover — and an empty or unexpected entry here is the first
-         *     sign a run is not reproducible.
+         * @description List the repositories this deployment can currently reach.
          */
         get: operations["sources_api_v1_sources_get"];
         put?: never;
@@ -1372,13 +1357,9 @@ export interface paths {
          * Compile a vocabulary and search for papers
          * @description Run a vocabulary against the configured source.
          *
-         *     The response carries the compiled query and its provenance alongside the
-         *     results, because a result set separated from the query that produced it
-         *     cannot be audited.
-         *
-         *     Currently backed by an in-memory corpus. The endpoint, the request body and
-         *     the response shape do not change when a real source is wired in — only
-         *     `api/dependencies.py` does.
+         *     The compiled query and its provenance come back with the results, because results
+         *     without the query that produced them cannot be audited. It searches the in-memory
+         *     fake corpus, not the sources a run uses.
          */
         post: operations["search_api_v1_projects__project_id__search_post"];
         delete?: never;
@@ -2759,7 +2740,7 @@ export interface components {
         };
         /**
          * PlanMode
-         * @description How thorough a review is; the interface says Quick and Deep (UI_UX_SPEC §6.3).
+         * @description How thorough a review is; the interface says Quick and Deep.
          * @enum {string}
          */
         PlanMode: "shallow" | "deep";
@@ -3131,7 +3112,7 @@ export interface components {
         RunStreamEvent: components["schemas"]["StageStartedEvent"] | components["schemas"]["StageProgressEvent"] | components["schemas"]["StageFinishedEvent"] | components["schemas"]["AgentStepEvent"] | components["schemas"]["GateRequiredEvent"] | components["schemas"]["GateResolvedEvent"] | components["schemas"]["JobFinishedEvent"];
         /**
          * ScreenedItemData
-         * @description The screen stage's row for one paper, as UI_UX_SPEC §6.7's live list shows it.
+         * @description The screen stage's row for one paper, as the live screening list shows it.
          */
         ScreenedItemData: {
             /**
@@ -3173,7 +3154,7 @@ export interface components {
         ScreeningLabel: "include" | "exclude" | "uncertain";
         /**
          * ScreeningTier
-         * @description The names people see (UI_UX_SPEC §6.8), derived from label and priority.
+         * @description The names people see, derived from label and priority.
          * @enum {string}
          */
         ScreeningTier: "highly_relevant" | "relevant" | "possibly_relevant" | "excluded" | "uncertain";

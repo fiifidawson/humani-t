@@ -1,9 +1,7 @@
-"""Runs, their live event stream, and gates (architecture §4.4).
+"""Runs, their live event stream, and gates.
 
-These paths name a review, run or gate rather than a project. Each resolves
-the project from the id it names and answers a non-member with the same 404 as
-a missing id. Routes with a body check access in a dependency, so the refusal
-comes before the body is read; the use case checks again as it writes.
+A non-member gets the same 404 as a missing id, before any body is read; the use
+case checks again as it writes.
 """
 
 from __future__ import annotations
@@ -100,11 +98,8 @@ async def follow_run(
 ) -> StreamingResponse:
     """Replay the run's stored events after the last id seen, then follow it live.
 
-    The id comes from the `Last-Event-ID` header, which the browser sends when
-    it reconnects, or else from `?last_event_id=`; the header wins. The stream
-    ends after `job.finished`, so a finished run replays and closes. It also
-    ends when the session or the membership does; the browser's reconnect then
-    gets 401 or 404.
+    The `Last-Event-ID` header wins over the query. The stream ends after
+    `job.finished`, or when the session or membership does.
     """
     resume_after = last_event_id_header if last_event_id_header is not None else last_event_id
     stream = await runs.open_stream(current, run_id, resume_after)

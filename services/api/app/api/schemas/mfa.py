@@ -1,10 +1,7 @@
 """Request and response models for second factors.
 
-WebAuthn payloads (`credential`, `options`) are the W3C JSON serialisation and
-are passed through as objects: their shape is checked by the passkey verifier,
-which knows the specification, not here. The 1 MiB body limit bounds them.
-Responses never carry a TOTP secret after enrolment, a public key, or a
-credential id.
+WebAuthn payloads pass through as objects; the passkey verifier checks their shape.
+Responses never carry a TOTP secret after enrolment, a public key or a credential id.
 """
 
 from __future__ import annotations

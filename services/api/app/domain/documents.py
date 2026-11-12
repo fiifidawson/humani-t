@@ -1,16 +1,7 @@
 """A team's own documents: what may be uploaded, where each stands, what becomes evidence.
 
-What belongs here: the accepted types and how they are recognised from the
-bytes themselves, file names made safe to show, a `Document`'s life from upload
-to approval, its masking (`DocumentMask`) and the corrections a person makes to
-it, who decided about which masked version (`DocumentReview`), the limits and
-results of extraction, a malware scan's verdict, and cutting approved masked
-text into the passages a brief cites (`D1`, `D2`, …).
-
-What does not: reading a file's text (`app/extraction`), keeping the file
-(`app/files`), scanning it (`app/malware`), finding personal data
-(`app/privacy`), encryption, storage or HTTP. Raw text never appears in a
-record here: every stored text is a sealed field, opened by the application.
+Reading, keeping and scanning files, and finding personal data, live in their own seams.
+Raw text never appears in a record here: every stored text is sealed.
 """
 
 from __future__ import annotations
@@ -142,9 +133,8 @@ def _is_utf8_text(content: bytes) -> bool:
 def safe_filename(name: str) -> str:
     """The name to show for an upload: its last path part, without hidden or unsafe characters.
 
-    Files are stored by id, so the name is never a path; this keeps it from
-    hiding its own text (bidirectional overrides), breaking a log line or a
-    table, or growing without bound.
+    Files are stored by id, so the name is never a path. Cleaning it stops it disguising its
+    own text (bidirectional overrides) or breaking a log line.
     """
     base = re.split(r"[/\\]", name)[-1]
     base = unicodedata.normalize("NFC", base)
@@ -304,11 +294,8 @@ def _frozen_counts(counts: Mapping[str, int]) -> Mapping[str, int]:
 class Document:
     """A file a team uploaded to a project, and where it stands.
 
-    `number` gives the tag a brief cites it by (`D3`): fixed at upload, never
-    reused within the project. The name is stored only sealed. `mask_version`
-    counts maskings: 1 after processing, one more per correction, and an
-    approval names the version it approved. `claimed_by` and `lease_until` are
-    set exactly while a worker processes the file.
+    `number` gives the tag a brief cites it by (`D3`), never reused within the project.
+    `mask_version` counts maskings, and an approval names the version it approved.
     """
 
     id: UUID
@@ -508,9 +495,7 @@ class DocumentText:
 class DocumentMask:
     """One masked version of a document: masked text and its details, both sealed.
 
-    The details are the spans in force, the masks people removed and why, and
-    where each page starts in the masked text. `masked_by` is `None` when the
-    worker made it, else the person whose correction made it.
+    `masked_by` is `None` when the worker made it, else the person whose correction made it.
     """
 
     document_id: UUID
@@ -543,9 +528,8 @@ def _require_page_starts(owner: str, page_starts: Sequence[int]) -> None:
 class ExtractionLimits:
     """How much of a file is read, and the bounds that stop a hostile one.
 
-    Pages and characters past the limit are dropped and the result says so
-    (`is_truncated`); an archive past its bounds is refused outright, because
-    a zip bomb is an attack, not a long document.
+    Text past the limits is dropped and flagged `is_truncated`. An archive past its bounds
+    is refused, because a zip bomb is an attack, not a long document.
     """
 
     max_pages: int = 500
@@ -693,10 +677,8 @@ def user_span(
 def removable_spans(spans: Sequence[MaskSpan], start: int, end: int) -> tuple[MaskSpan, ...]:
     """The spans exactly over `[start, end)` that a person may remove.
 
-    Raise `LookupError` if no span covers exactly that range, and `ValueError`
-    if one of them may not be removed: a project rule (delete the rule
-    instead) or a detector's structured identifier ("not personal" is never
-    offered for those, architecture §3.9.1).
+    Raise `LookupError` if none covers exactly that range, and `ValueError` if one may not
+    be removed: a project rule, or a detector's structured identifier.
     """
     matching = tuple(s for s in spans if s.start == start and s.end == end)
     if not matching:
@@ -759,8 +741,7 @@ def masked_regions(masked: MaskedText) -> tuple[MaskedRegion, ...]:
 
 @dataclass(frozen=True, slots=True)
 class MaskDetail:
-    """What a masked version is made of: the spans in force, the masks people removed,
-    and where each page starts in the masked text. Sealed as one value."""
+    """What a masked version is made of, sealed as one value."""
 
     spans: tuple[MaskSpan, ...]
     exemptions: tuple[MaskExemption, ...]
@@ -859,11 +840,9 @@ def document_passages(
     masked_page_starts: Sequence[int],
     size: int = PASSAGE_CHARACTERS,
 ) -> tuple[Passage, ...]:
-    """Cut an approved document's masked text into passages tagged with its `D` tag.
+    """Cut an approved document's masked text into passages, all tagged with its `D` tag.
 
-    Every passage of a document shares the tag, so a citation names the
-    document and the locator says where: a page for a PDF, a range of
-    characters of the masked text otherwise.
+    The locator says where: a page for a PDF, else a character range of the masked text.
     """
     is_paged = document.file_type is DocumentType.PDF
     return tuple(

@@ -1,11 +1,7 @@
 """An in-memory PaperSearchProvider. No network, no key, no rate limit.
 
-This exists to prove the interface is right before any real source is involved.
-If a fake is awkward to write against an interface, the interface is wrong — and
-finding that out here costs nothing.
-
-It genuinely evaluates the query rather than returning a fixed list, so tests
-exercise the compiled Boolean logic instead of trivially passing.
+It evaluates the query for real rather than returning a fixed list, so tests exercise
+the compiled Boolean logic instead of passing trivially.
 """
 
 from __future__ import annotations

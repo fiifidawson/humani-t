@@ -1,15 +1,8 @@
 """The loop that answers a follow-up question from a review's evidence.
 
-The brief's machinery, not a copy of it: the same `LoopRunner` (model steps,
-BM25 retrieval, the trace), the same `revise_until_done` (Writer, checks and
-Critic each round, with the same stopping rules) and the same claim schema and
-citation check. What differs is the prompts and the shape of the answer: up to
-six claims, or none when nothing retrieved answers the question.
-
-There is no Planner: the question is already the search, and a follow-up adds
-the previous question of its thread. Only masked text goes in: the question
-is masked before it is stored, passages are masked by the pipeline, and the
-earlier turns are masked questions and answers drawn from masked passages.
+It reuses the brief's `LoopRunner` and `revise_until_done`; only the prompts differ, and
+the answer is up to six claims, or none when nothing retrieved answers it. There is no
+Planner: the question is the search. Only masked text goes in.
 """
 
 from __future__ import annotations

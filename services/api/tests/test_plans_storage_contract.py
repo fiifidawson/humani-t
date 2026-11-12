@@ -1,16 +1,9 @@
 """One behaviour contract for plan storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a database
-migrated to revision 0008 and is used as the runtime role, as in
-`test_runs_storage_contract.py`.
-
-What matters most (architecture §4.3 and §5.7):
-
-- a plan version is written once: two writers drafting "the next version"
-  cannot both succeed, and an accepted version is never rewritten;
-- accepting is conditional: the first accept wins, a second learns it lost,
-  and only the latest version can be accepted;
-- no blind overwrites: a stale copy of the conversation cannot replace a newer one.
+A plan version is written once and never rewritten after acceptance; the first accept wins
+and only the latest version can be accepted; a stale conversation cannot replace a newer
+one. The Postgres run is skipped unless TEST_DATABASE_URL points at a database migrated to
+revision 0008, as the runtime role.
 """
 
 from __future__ import annotations

@@ -1,12 +1,8 @@
 """Requirements for screening, discovery and the run manifest, as rules with no I/O.
 
-Sources: architecture §3.8 (a decision records its score, priority, rationale
-and provenance: model id, prompt version, criteria version) and §4.2
-(`RunManifest` records what makes a run reproducible); UI_UX_SPEC §5.3.7 and
-§6.8 (the labels people see: Highly relevant, Relevant, Possibly relevant,
-Excluded); the provenance test in `CLAUDE.md`: "could a reviewer reconstruct
-why this paper was included or excluded, six months from now, from what we
-stored?"
+A decision records its score, rationale and provenance (model id, prompt version, criteria
+version), so a reviewer can reconstruct it later, and `RunManifest` records what makes a
+run reproducible.
 """
 
 from __future__ import annotations
@@ -143,7 +139,7 @@ class TestScreeningDecision:
 
 
 class TestTiers:
-    """The names people see (UI_UX_SPEC §6.8) follow from label and priority alone."""
+    """The names people see follow from label and priority alone."""
 
     @pytest.mark.parametrize(
         ("priority", "tier"),

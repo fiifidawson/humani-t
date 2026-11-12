@@ -1,10 +1,8 @@
 """The entry point of the extraction child process (`isolated.py` starts it).
 
-Reads one request from stdin — a JSON header line, then the file's bytes —
-and writes one JSON answer to stdout. Before touching the file it refuses
-anything a text extractor never needs: opening a network connection, starting
-a process, or writing a file (a Python audit hook). On Linux it also caps its
-own memory, CPU time and file size. The parent kills it at the timeout.
+Reads a JSON header line and the file's bytes from stdin, writes one JSON answer to
+stdout. Before touching the file it refuses network, processes and file writes, and on
+Linux caps its own memory, CPU time and file size.
 """
 
 from __future__ import annotations

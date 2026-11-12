@@ -1,17 +1,9 @@
 """The gate in front of every route inside a project.
 
-`require(action)` is a dependency that runs before the request body is read,
-so the order of refusals is the same on every project route:
-
-1. 401 if not signed in, 403 if a write lacks its CSRF token (`api/session.py`);
-2. 404 if the project does not exist or the caller is not a member, with one
-   body for both;
-3. 403 if the caller's role does not allow the action;
-4. 401 with `reauthentication_required` if the action needs a recent sign-in.
-
-A non-member therefore learns nothing, not even whether their body was valid.
-The gate does not replace the use case's own check: each use case checks again
-inside the transaction that writes, because membership can change in between.
+`require(action)` runs before the body is read, so refusals come in the same order
+everywhere: 401 or CSRF 403, then 404 for a missing project or a non-member (one body
+for both), then 403 for the role, then 401 if the action needs a recent sign-in.
+Use cases check membership again inside the transaction that writes.
 """
 
 from __future__ import annotations

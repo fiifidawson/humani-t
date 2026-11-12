@@ -1,9 +1,7 @@
 """Typed run-event payloads: what the web app reads from the stream without parsing strings.
 
-Sources: UI_UX_SPEC §6.6 (the vocabulary gate is the draft canvas), §6.7 (one
-live row per screened paper, with its label and one-line reason), §11.2 (each
-event's fields). The older string fields stay, deprecated, while the web app
-moves over; both say the same thing, and both carry masked text only.
+The older string fields stay, deprecated, while the web app moves over; both say the same
+thing, and both carry masked text only.
 """
 
 from __future__ import annotations

@@ -1,13 +1,8 @@
 """Masking use cases: project rules, the papers' mask store, and the `mask` stage.
 
-What belongs here: sealing and opening masking rules and masked paper text
-under the project's key, the owner-only rule endpoints' use cases, and the
-stage that masks every kept paper text before anything screens it
-(architecture §3.9.1).
-
-What does not: finding spans (`app/privacy/`), the rules of masking
-(`domain/masking.py`), or the raw text, which stays where ingest kept it and is
-read only through `IngestedTextSource`. Only masked text leaves `PaperMaskStore`.
+Finding spans belongs in `app/privacy/` and the masking rules in `domain/masking.py`.
+Raw text is read only through `IngestedTextSource`, and only masked text leaves
+`PaperMaskStore`.
 """
 
 from __future__ import annotations
@@ -46,7 +41,7 @@ from app.privacy.base import Sanitizer
 from app.runs.base import StageContext, StageFailedError
 from app.storage.base import StorageProvider, UnitOfWork
 
-# Table, column; the row is the rule or the paper (architecture §5.4).
+# Table, column; the row is the rule or the paper.
 _TERM_PURPOSE = "masking_rules.term"
 _MASKED_PURPOSE = "paper_masks.masked_text"
 _SPANS_PURPOSE = "paper_masks.spans"
@@ -261,11 +256,8 @@ class DocumentsAwaitingReview(Protocol):
 class MaskStage:
     """Mask every kept paper text of the run with the narrow list and the project's rules.
 
-    A paper whose stored masking was made with the same detectors and rules is
-    skipped, so a re-run after a gate, a crash or a deploy redoes nothing, and
-    adding a rule or upgrading a detector masks everything again. If the
-    project has documents waiting for review, the stage stops at the
-    privacy_review gate first: no document is used until an owner approves.
+    A paper already masked with the same detectors and rules is skipped, so a rerun redoes
+    nothing. Documents waiting for review stop the run at the privacy_review gate first.
     """
 
     def __init__(
@@ -303,7 +295,7 @@ class MaskStage:
                 previous = await self._masks.masked_with(uow, text.paper_id)
             if previous != fingerprint:
                 # Detection runs outside any transaction: a slow model must not
-                # hold a database connection (architecture §5.7).
+                # hold a database connection.
                 result = await self._sanitizer.mask(text.text, rules=rules)
                 async with self._storage.unit_of_work() as uow:
                     if await self._masks.save(

@@ -1,10 +1,8 @@
-"""Follow-up questions with threads (UI_UX_SPEC §6.12, §5.3.9, §5.3.2, §15 P2).
+"""Follow-up questions with threads, over HTTP.
 
-Sources: "Answers only from this project"; "Nothing in this project answers
-that"; every user text sent to a model has a privacy receipt; architecture
-§4.2 (claims cite retrieved passages, checked by code), §4.4 and §5.7 (slow
-work in the background under a lease), §5.4 (sealed, shredded with the
-project), §5.5 (404 for non-members, audit ids only).
+Answers come only from this project's passages, or say "Nothing in this project answers
+that". Every text sent to a model gets a privacy receipt, slow work runs in the background
+under a lease, non-members get 404 and the audit log holds ids only.
 """
 
 from __future__ import annotations

@@ -1,9 +1,7 @@
 """Reading a decision brief: the brief, one cited source, and how it was made.
 
-Read-only, for any member of the brief's project (UI_UX_SPEC §6.9 to §6.11).
-These paths name a review or a brief rather than a project; each resolves the
-project from the id it names and answers a non-member with the same 404 as a
-missing id. Briefs are written by the `answer` stage of a run, never here.
+Read-only, for any member of the brief's project. A non-member gets the same 404 as
+a missing id. Briefs are written by the `answer` stage of a run, never here.
 """
 
 from __future__ import annotations

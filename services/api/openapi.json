@@ -12,7 +12,7 @@
           "system"
         ],
         "summary": "Liveness probe",
-        "description": "Answers 'is this process up', not 'is the whole system healthy'.\n\nDeliberately touches no provider and no database. Conflating the two makes\ndeploys hard to debug, because a failing dependency looks like a dead process.",
+        "description": "Answer 'is this process up', not 'is the whole system healthy'.\n\nTouches no provider and no database, so a failing dependency never looks like a\ndead process.",
         "operationId": "health_api_v1_health_get",
         "responses": {
           "200": {
@@ -1678,7 +1678,7 @@
           "runs"
         ],
         "summary": "Follow a run as Server-Sent Events",
-        "description": "Replay the run's stored events after the last id seen, then follow it live.\n\nThe id comes from the `Last-Event-ID` header, which the browser sends when\nit reconnects, or else from `?last_event_id=`; the header wins. The stream\nends after `job.finished`, so a finished run replays and closes. It also\nends when the session or the membership does; the browser's reconnect then\ngets 401 or 404.",
+        "description": "Replay the run's stored events after the last id seen, then follow it live.\n\nThe `Last-Event-ID` header wins over the query. The stream ends after\n`job.finished`, or when the session or membership does.",
         "operationId": "follow_run_api_v1_runs__run_id__events_get",
         "parameters": [
           {
@@ -3693,7 +3693,7 @@
           "vocabulary"
         ],
         "summary": "Compile a vocabulary into a Boolean query",
-        "description": "Show exactly what will be searched for, before anything is searched.\n\nConcepts sharing a theme are OR'd; themes are AND'd:\n\n    (\"chatbot\" OR \"conversational agent\") AND (\"humanitarian\" OR \"crisis response\")\n\nPure and deterministic — the same vocabulary always produces the same query,\nand no model is consulted for either origin. That is what makes a\n`user_supplied` vocabulary strict by construction rather than by discipline.\n\nThis endpoint exists so a reviewer can inspect and argue about the query\nitself, which is the transparency commitment made concrete.",
+        "description": "Show exactly what will be searched for, before anything is searched.\n\nConcepts in a theme are OR'd and themes are AND'd. No model is consulted, so the\nsame vocabulary always gives the same query.",
         "operationId": "compile_endpoint_api_v1_vocabulary_compile_post",
         "requestBody": {
           "content": {
@@ -3735,7 +3735,7 @@
           "search"
         ],
         "summary": "Search sources available in this process",
-        "description": "Which repositories this deployment can currently reach.\n\nOne entry today. It becomes the list a reviewer checks to know what a run\ndid and did not cover — and an empty or unexpected entry here is the first\nsign a run is not reproducible.",
+        "description": "List the repositories this deployment can currently reach.",
         "operationId": "sources_api_v1_sources_get",
         "responses": {
           "200": {
@@ -3761,7 +3761,7 @@
           "search"
         ],
         "summary": "Compile a vocabulary and search for papers",
-        "description": "Run a vocabulary against the configured source.\n\nThe response carries the compiled query and its provenance alongside the\nresults, because a result set separated from the query that produced it\ncannot be audited.\n\nCurrently backed by an in-memory corpus. The endpoint, the request body and\nthe response shape do not change when a real source is wired in — only\n`api/dependencies.py` does.",
+        "description": "Run a vocabulary against the configured source.\n\nThe compiled query and its provenance come back with the results, because results\nwithout the query that produced them cannot be audited. It searches the in-memory\nfake corpus, not the sources a run uses.",
         "operationId": "search_api_v1_projects__project_id__search_post",
         "parameters": [
           {
@@ -6809,7 +6809,7 @@
           "deep"
         ],
         "title": "PlanMode",
-        "description": "How thorough a review is; the interface says Quick and Deep (UI_UX_SPEC §6.3)."
+        "description": "How thorough a review is; the interface says Quick and Deep."
       },
       "PlanOut": {
         "properties": {
@@ -7805,7 +7805,7 @@
           "reason"
         ],
         "title": "ScreenedItemData",
-        "description": "The screen stage's row for one paper, as UI_UX_SPEC §6.7's live list shows it."
+        "description": "The screen stage's row for one paper, as the live screening list shows it."
       },
       "ScreeningLabel": {
         "type": "string",
@@ -7826,7 +7826,7 @@
           "uncertain"
         ],
         "title": "ScreeningTier",
-        "description": "The names people see (UI_UX_SPEC §6.8), derived from label and priority."
+        "description": "The names people see, derived from label and priority."
       },
       "SearchIn": {
         "properties": {

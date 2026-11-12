@@ -1,12 +1,7 @@
 """What a run found and read: its papers, the sources it asked, and the text kept for screening.
 
-This module holds the rules and the stored shapes for the `discover` and
-`ingest` stages. It holds no plaintext beyond what a caller hands in: titles,
-abstracts and queries are sealed under the project's key by the application
-layer, and a paper's identity is stored only as a keyed digest.
-
-What belongs elsewhere: identity and deduplication of a single record
-(`paper.py`), screening decisions (`screening.py`).
+Titles, abstracts and queries arrive already sealed under the project's key, and a paper's
+identity is stored only as a keyed digest. Deduplicating one record is `paper.py`'s job.
 """
 
 from __future__ import annotations
@@ -118,9 +113,7 @@ class StoredPaper:
 class PaperSet:
     """Which run's discovery a run works from.
 
-    A run that discovered has its own set (`basis_run_id == run_id`). A run
-    started without `discover` (a retry from Screen, say) adopts the newest
-    set of its review, so its papers, tags and counts are that run's.
+    A run started without `discover` (a retry from Screen, say) adopts the review's newest.
     """
 
     run_id: UUID

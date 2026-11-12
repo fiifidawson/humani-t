@@ -32,9 +32,8 @@ async def fetch_paced(
 def phrase(term: str) -> str:
     """A term as one quoted phrase that cannot break out of its quotes.
 
-    A double quote inside a term would end the phrase early and let the rest be
-    read as operators. Every source's tokenizer drops quote characters anyway,
-    so a space in its place changes nothing that is matched.
+    An inner quote would let the rest be read as operators. Sources drop quotes when
+    matching anyway, so a space in its place changes nothing.
     """
     return '"' + term.replace('"', " ").replace("\\", " ") + '"'
 

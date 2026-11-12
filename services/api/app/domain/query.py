@@ -1,17 +1,8 @@
 """Source-agnostic Boolean queries.
 
-A BooleanQuery is NOT a string. Each repository (arXiv, OpenAlex, Europe PMC,
-Google Scholar) has its own syntax, escaping rules and field names; a provider
-compiles this structure into its own dialect. Keeping the structure means one
-search is reproducible across four sources that agree on nothing.
-
-Shape, following systematic-review practice:
-
-    each Concept        ->  (term OR synonym OR synonym)
-    concepts in a theme ->  OR'd together
-    themes              ->  AND'd together
-
-    ("chatbot" OR "conversational agent") AND ("humanitarian" OR "crisis")
+A `BooleanQuery` is a structure, not a string: each provider compiles it into its own
+dialect, so one search is reproducible across sources that agree on nothing. A concept's
+terms are OR'd, the concepts in a theme are OR'd, and themes are AND'd.
 """
 
 from __future__ import annotations
@@ -54,10 +45,8 @@ class ThemeGroup:
 class BooleanQuery:
     """Themes AND'd together, plus the provenance of the terms.
 
-    `vocabulary_version` and `vocabulary_origin` travel with the query rather
-    than being looked up later. A result set must be able to answer 'which terms
-    produced me' without a database round trip, because it may be read on a
-    different machine.
+    The vocabulary's version and origin travel with the query, so a result set can say
+    which terms produced it without a database round trip.
     """
 
     themes: tuple[ThemeGroup, ...]
@@ -79,8 +68,7 @@ class BooleanQuery:
     def render(self) -> str:
         """Human-readable form, for logs, tests and the audit trail.
 
-        NOT for sending to a repository. Providers compile their own dialect —
-        if you find yourself passing this to an HTTP client, a seam has leaked.
+        Never send it to a repository: providers compile their own dialect.
         """
         clauses: list[str] = []
         for theme in self.themes:
@@ -94,11 +82,9 @@ def _group_for(concept: Concept) -> TermGroup:
 
 
 def compile_vocabulary(vocabulary: Vocabulary) -> BooleanQuery:
-    """Turn a Vocabulary into a BooleanQuery.
+    """Turn a Vocabulary into a BooleanQuery, the same way every time.
 
-    Pure and total: the same Vocabulary always compiles to the same query. No
-    model is consulted here, for either origin — expansion, if it happens at
-    all, happens before a Vocabulary exists. That is what makes a user-supplied
+    No model is consulted here, for either origin. That is what makes a user-supplied
     vocabulary strict by construction rather than by discipline.
     """
     themes = tuple(

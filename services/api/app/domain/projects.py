@@ -1,10 +1,7 @@
 """Projects, membership and the role policy: who may do what inside a project.
 
-A project is the unit of access, encryption and deletion (architecture §4.1).
-This module holds the rules that decide access and keep a project owned. It
-holds no plaintext project data: a project's name lives here only as the
-ciphertext sealed under the project's own key, which the application layer
-seals and opens.
+A project is the unit of access, encryption and deletion. Its name is held here only
+sealed under the project's own key.
 """
 
 from __future__ import annotations
@@ -32,7 +29,7 @@ class Role(StrEnum):
 
 
 class Action(StrEnum):
-    """Everything a member might do inside a project (UI_UX_SPEC §3.3)."""
+    """Everything a member might do inside a project."""
 
     READ_PROJECT = "project.read"
     ASK_QUESTIONS = "question.ask"

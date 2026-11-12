@@ -1,21 +1,9 @@
 """Requirements for projects, membership and roles, over HTTP.
 
-Sources: WEB_APP_BRIEF rules 7, 8, 15 and 16; UI_UX_SPEC §3.3 (roles), §6.14
-(project settings), §7.7 (archive, delete) and §11.4 (errors by status);
-architecture §4.1 and §5.2 to §5.5; OWASP ASVS 5.0 V8 (authorization) and V16
-(security logging).
-
-The rules, in the order the API applies them:
-
-1. not signed in: 401;
-2. not a member, or no such project: 404, with the same body either way, so a
-   project's existence is never confirmed to someone outside it;
-3. a member whose role does not allow the action: 403;
-4. a sensitive action (delete, member changes) with a sign-in older than 15
-   minutes: 401 with `reauthentication_required`;
-5. then the request itself: 422 for bad input, 409 for a conflict.
-
-MFA is specified separately (M9); here a password sign-in is a full sign-in.
+Rules apply in order: 401 when not signed in; 404 for a non-member or a missing project,
+with the same body, so a project's existence is never confirmed; 403 for a role that may
+not; 401 `reauthentication_required` for a sensitive action after 15 minutes; then 422 or
+409. A password sign-in is a full sign-in here; MFA is specified separately.
 """
 
 from __future__ import annotations
@@ -447,7 +435,6 @@ class TestMembers:
     def test_member_changes_need_a_sign_in_within_15_minutes(
         self, team, method, suffix, body, expected
     ):
-        """UI_UX_SPEC §6.14 and architecture §5.2."""
         path = team.path(fill_path(suffix, viewer_id=team.user_id(VIEWER_EMAIL)))
         _stale_sign_in(team)
 
@@ -461,7 +448,7 @@ class TestMembers:
 
 
 class TestLastOwner:
-    """UI_UX_SPEC §6.14: the last owner can't leave or be demoted (the UI explains why)."""
+    """The last owner can't leave or be demoted (the UI explains why)."""
 
     def test_the_last_owner_cannot_be_demoted(self, team):
         owner_id = team.user_id(OWNER_EMAIL)
@@ -619,7 +606,7 @@ class TestDeleteProject:
 
 
 class TestAuditTrail:
-    """Brief rule 16: every project action is on record, by id only (architecture §5.5)."""
+    """Brief rule 16: every project action is on record, by id only."""
 
     def test_every_project_action_is_recorded_in_order(self, team):
         viewer_id, reviewer_id = team.user_id(VIEWER_EMAIL), team.user_id(REVIEWER_EMAIL)

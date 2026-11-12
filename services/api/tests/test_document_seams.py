@@ -1,12 +1,8 @@
 """The file store and malware scanner seams: one behaviour for the fake and the real thing.
 
-Sources: architecture §3.3 (files reached only by the key the database names,
-never overwritten), the brief's rule 12 (malware scan), ADR-0008.
-
-The file store contract runs against the in-memory store and the volume store
-on a temporary directory. The ClamAV client is run against a small clamd on
-the loopback interface that speaks the real INSTREAM protocol and finds EICAR,
-so the client is tested byte for byte without a scanner installed.
+The file store contract runs against the in-memory store and a volume store on a temporary
+directory. The ClamAV client talks to a small loopback clamd that speaks the real INSTREAM
+protocol and finds EICAR, so it is tested byte for byte without a scanner installed.
 """
 
 from __future__ import annotations

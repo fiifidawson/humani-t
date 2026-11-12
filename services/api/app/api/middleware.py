@@ -97,23 +97,10 @@ _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 class CrossSiteRequestMiddleware:
     """Refuse state-changing requests that a browser reports as coming from elsewhere.
 
-    The first two CSRF layers; the per-session token is the third, checked once
-    the session is known (`api/session.py`):
-
-    - `Sec-Fetch-Site`, when present, must be `same-origin`.
-    - `Origin`, when present, must be exactly the public origin.
-    - A request with a body must be JSON. A cross-site HTML form can only send
-      form encodings or text/plain, and cross-site JSON needs a CORS preflight
-      this API never grants.
-
-    A request with neither header comes from a non-browser client (curl,
-    Postman). Forgery needs a victim's browser, so those pass; anything signed
-    in still needs the session's CSRF token.
-
-    `multipart_paths` (the document upload) may also send `multipart/form-data`.
-    A cross-site form can send that too, so on those paths the other two layers
-    carry the defence: the origin checks here, and the session's token, which a
-    form cannot set as a header.
+    `Sec-Fetch-Site` and `Origin`, when present, must say same origin, and a body must
+    be JSON, which a cross-site form cannot send. The session's CSRF token is checked
+    later. Requests with neither header are not from a browser, so they pass here.
+    `multipart_paths` (the upload) may send multipart and rely on the other checks.
     """
 
     def __init__(
@@ -184,12 +171,8 @@ class _BodyTooLargeError(Exception):
 class BodySizeLimitMiddleware:
     """Refuse request bodies over `max_bytes` without reading them into memory.
 
-    A declared `Content-Length` over the limit is refused before a byte is read.
-    A body without one (chunked) is counted as it streams, and refused as soon as
-    it passes the limit. The reverse proxy enforces a limit too; this one holds
-    when the app is reached some other way.
-
-    `larger_limits` gives named paths (the document upload) their own limit.
+    A chunked body is counted as it streams. The reverse proxy has a limit too; this
+    one holds when the app is reached some other way.
     """
 
     def __init__(

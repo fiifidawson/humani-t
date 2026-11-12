@@ -1,10 +1,7 @@
 """An extractor that reads every file as UTF-8 text, or fails as it is told.
 
-It reads the bytes for real, so what a test uploads is what masking sees; a
-fake returning fixed text would pass whatever the file held. `failure` makes
-every call fail with that reason, for the paths a real parser reaches only with
-a crafted file. Each call records how many transactions were open, if given a
-counter, so specs can prove no database connection is held while it runs.
+It reads the bytes for real, so what a test uploads is what masking sees. Given a
+counter, it records open transactions, so specs can prove no connection is held.
 """
 
 from __future__ import annotations

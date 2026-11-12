@@ -1,9 +1,7 @@
-"""Downloads of a review's results (UI_UX_SPEC §6.8, §6.9, §15 P2).
+"""Downloads of a review's results.
 
-Any member may download what they may read. The path names a review; a
-non-member gets the same 404 as a missing review, before the export's name is
-even looked at. Every download is audited, carries `Cache-Control: no-store`
-and is an attachment under a name built from ids only.
+Any member may download what they may read; a non-member gets the same 404 as a
+missing review. Every download is audited, never cached, and named from ids only.
 """
 
 from __future__ import annotations

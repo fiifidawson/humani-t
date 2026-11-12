@@ -106,11 +106,10 @@ class TestCompilation:
         assert compile_vocabulary(vocabulary) == compile_vocabulary(vocabulary)
 
     def test_strict_vocabulary_gains_no_terms(self):
-        """The property that makes 'strict' mean strict.
+        """The property that makes 'strict' mean strict: compilation adds no terms.
 
-        Compilation is pure: every term in the query came from the vocabulary,
-        and nothing was added. If an expansion step is ever introduced upstream,
-        this test is what catches it reaching user-supplied terms.
+        If an expansion step is ever added upstream, this test stops it reaching
+        user-supplied terms.
         """
         vocabulary = make_vocabulary(VocabularyOrigin.USER_SUPPLIED)
         supplied = {t.casefold() for c in vocabulary.concepts for t in c.terms}

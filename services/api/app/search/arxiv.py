@@ -1,16 +1,9 @@
 """arXiv: preprints, searched over title and abstract through the Atom API.
 
-API facts this relies on (info.arxiv.org/help/api, checked 2026-11-03):
-
-- `search_query` takes field prefixes (`ti:`, `abs:`), AND/OR/ANDNOT, quoted
-  phrases and parentheses. There is no combined title-and-abstract field, so
-  each term is asked for in both.
-- Terms of use: no more than one request every three seconds, one connection at
-  a time, counted across every machine a deployment runs on.
-- Errors come back as an Atom feed whose single entry is titled "Error", with
-  the reason in its summary (HTTP 400 for bad parameters).
-- Metadata is CC0; PDFs keep their authors' licences, so they are not stored
-  for redistribution.
+API facts (info.arxiv.org/help/api, checked 2026-11-03): no combined title-and-abstract
+field, so each term is asked for under `ti:` and `abs:`. Terms of use allow one request
+every three seconds, one connection at a time, across the whole deployment. Errors come
+back as an Atom entry titled "Error". PDFs keep their authors' licences, so are not stored.
 """
 
 from __future__ import annotations

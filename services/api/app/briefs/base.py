@@ -1,15 +1,7 @@
-"""The Protocols the decision brief is written through, beyond those it shares.
+"""The seams only the decision brief uses: passage retrieval and cited-paper details.
 
-- `Retriever` searches a run's passages. Today it is BM25 in process
-  (`bm25.py`, ADR-0007); the vector store named in architecture §3.6 can
-  replace it without the loop changing.
-- `SourceCatalogue` says what is known of a cited paper (title, year, its
-  screening label and rationale), captured when the brief is written.
-
-The passages themselves come through the pipeline's `EvidenceSource`
-(`domain/screening.py`); the question is masked by the mask lane's `Sanitizer`
-(`privacy/base.py`). Implementations live beside this module or in
-`application/`, chosen in `api/dependencies.py`.
+`Retriever` is BM25 today (ADR-0007); a vector store can replace it without the
+loop changing. Passages and masking come through the shared seams.
 """
 
 from __future__ import annotations

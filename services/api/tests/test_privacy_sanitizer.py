@@ -1,9 +1,7 @@
 """The Sanitizer seam, the local NER adapter, and the last check before any model call.
 
-Sources: architecture §3.9.1 (several detectors combined, a span found by any
-of them is masked; project rules; a last check on what leaves that fails
-closed), the brief's rules 1 and 4, and CLAUDE.md ("never `openai_filter`":
-every detector runs inside the deployment).
+A span found by any detector is masked, project rules apply, and the last check on what
+leaves fails closed. Every detector runs inside the deployment, never `openai_filter`.
 """
 
 from __future__ import annotations

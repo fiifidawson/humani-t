@@ -1,15 +1,8 @@
 """The always-on detector for structured identifiers: standard-library regular expressions.
 
-It finds contacts and identifiers whose shape is known — emails, phone numbers,
-medical record, national-ID-like and passport-like numbers, IBANs, card
-numbers, IP addresses and coordinates — and checks digits where a check is
-defined. Names, places and dates need a language model (`spacy_ner.py`).
-
-The same detector checks every outgoing prompt (`guard.py`), so a false
-positive here refuses a model call. Bare numbers are therefore matched only
-when a label ("MRN", "passport no.", "Tel:") or an unambiguous shape says what
-they are; an unlabelled seven-digit number is not masked. That trade-off is
-deliberate and is why masking is not anonymity.
+The prompt guard runs it too, so a false positive refuses a model call. Bare numbers
+are therefore matched only with a label ("MRN", "Tel:") or an unambiguous shape; an
+unlabelled seven-digit number is not masked, which is one reason masking is not anonymity.
 """
 
 from __future__ import annotations

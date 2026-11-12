@@ -1,12 +1,8 @@
 """The combining `Sanitizer`: every detector, plus the project's rules, over one text.
 
-A span found by any detector is masked (architecture §3.9.1): over-masking
-costs some quality, under-masking leaks. Which entity types are masked depends
-on the kind of text — the narrow list for papers, the broad one for uploaded
-documents (`domain/masking.py`) — and is fixed when the sanitiser is built in
-`api/dependencies.py`. Project rules always apply, whatever the list. An
-operator may keep country and large-region names (ADR 0011); a project rule
-still masks one.
+A span found by any detector is masked: over-masking costs some quality, under-masking
+leaks. The entity types are fixed per kind of text when the sanitiser is built, and
+project rules always apply on top.
 """
 
 from __future__ import annotations

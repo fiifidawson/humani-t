@@ -1,12 +1,9 @@
 """The wake-up signal's requirements, run against Valkey as well as memory.
 
-A signal says only "look again": the event log and the run table are the truth,
-and every waiter also wakes on its own timeout, so a lost signal costs latency,
-never an event (architecture §4.4). That is why a signal carries no data — a
-run id in the channel name at most — and why these specs check only who wakes.
-
-The Valkey run is skipped unless TEST_VALKEY_URL points at a Valkey (or Redis)
-server. Pub/sub ignores the database index, so every test uses its own prefix.
+A signal only says "look again" and carries no data: the event log is the truth and every
+waiter also wakes on its timeout, so a lost signal costs latency, never an event. The Valkey
+run needs TEST_VALKEY_URL; pub/sub ignores the database index, so each test uses its own
+prefix.
 """
 
 from __future__ import annotations

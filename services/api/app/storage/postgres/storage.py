@@ -662,10 +662,8 @@ class PostgresStorage:
     ) -> PostgresStorage:
         """Build a bounded pool whose connections time out stuck work on the server.
 
-        `pool_size` is a hard limit (no overflow), so the database sees a
-        predictable number of connections. A request that cannot get one within
-        `pool_timeout_seconds` fails fast with `StorageUnavailableError` instead
-        of queueing behind everyone else.
+        `pool_size` is a hard limit. A request that waits past `pool_timeout_seconds`
+        fails fast with `StorageUnavailableError`.
         """
         return cls(
             create_async_engine(

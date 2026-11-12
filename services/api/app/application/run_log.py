@@ -1,13 +1,8 @@
 """A run's event log, and the one way a run finishes, shared by the API and the worker.
 
-Every event is stored, encrypted under the project's data key, before anyone
-is told about it (architecture §4.4); a stream only ever reads this log. The
-ciphertext is bound to its run and its id, so a payload copied into another
-event fails to decrypt and the log cannot be silently reordered.
-
-Everything here works inside the caller's unit of work, so an event commits or
-rolls back with the change it describes: there is never a `job.finished`
-without the run having finished, nor the reverse.
+Every event is stored, sealed and bound to its run and id, before anyone is told; a stream
+only reads this log. Events commit in the caller's unit of work, so there is never a
+`job.finished` without the run having finished, nor the reverse.
 """
 
 from __future__ import annotations
@@ -128,10 +123,8 @@ class RunLog:
     ) -> Run | None:
         """End `run` — read under its lock — with exactly one `job.finished`, its last event.
 
-        `None` if the run could take no more events: it had already finished,
-        or the worker named by `lease_owner` no longer holds it. A run of a
-        deleted project ends with no event at all: its log can never be read
-        again, and its stream answers 404.
+        `None` if it had already finished or `lease_owner` no longer holds it. A run of a
+        deleted project ends with no event, since its log can never be read again.
         """
         finished = run.finished(trigger, self._clock())
         event_id = await uow.run_events.next_id(run.id, lease_owner=lease_owner)
@@ -163,7 +156,7 @@ class RunLog:
 
     @staticmethod
     async def move_review(uow: UnitOfWork, review_id: UUID, trigger: RunTrigger) -> None:
-        """Keep the review's status in step with its run (UI_UX_SPEC §11.1)."""
+        """Keep the review's status in step with its run."""
         review = await uow.reviews.get(review_id)
         if review is None:
             raise ValueError(f"review {review_id} does not exist")

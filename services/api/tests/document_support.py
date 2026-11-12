@@ -1,13 +1,9 @@
 """Helpers for the document specs: real files built in memory, and a team that can upload them.
 
-The files are real: a DOCX is a zip of WordprocessingML, a PDF has a content
-stream a reader must parse. Hostile ones (an external entity, an entity bomb, a
-zip bomb) are built the way an attacker would build them.
-
-`make_document_team` is `project_support.make_team` with the document seams
-chosen by the spec: by default the real fake scanner (it finds EICAR), the
-in-thread local extractor and an in-memory file store that counts the
-transactions open while it works, so a spec can prove none is held.
+Hostile files (an external entity, an entity bomb, a zip bomb) are built as an attacker
+would build them. `make_document_team` uses the fake scanner (it finds EICAR), the
+in-thread extractor and a file store that counts open transactions, so a spec can prove
+none is held while it works.
 """
 
 from __future__ import annotations
