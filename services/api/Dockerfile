@@ -32,7 +32,8 @@ WORKDIR /app
 # so most rebuilds reuse this layer. --locked fails the build if uv.lock is stale
 # instead of quietly resolving something different from what was tested.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev --no-install-project
+# The ner extra is spaCy and its English model: without it, names and places go unmasked.
+RUN uv sync --locked --no-dev --no-install-project --extra ner
 
 COPY alembic.ini ./
 COPY migrations ./migrations

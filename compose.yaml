@@ -47,6 +47,11 @@ x-app-environment: &app-environment
   HUMANI_T_INFERENCE_MODEL: ${HUMANI_T_INFERENCE_MODEL:-llama3.1:8b}
   HUMANI_T_PAPER_SOURCES: ${HUMANI_T_PAPER_SOURCES:-}
   HUMANI_T_MASK_COUNTRIES_AND_REGIONS: ${HUMANI_T_MASK_COUNTRIES_AND_REGIONS:-true}
+  # Fixed, not passed through: the API refuses to start without the name detector
+  # rather than quietly masking patterns only.
+  HUMANI_T_MASKING_NER: spacy
+  HUMANI_T_INFERENCE_TIMEOUT_SECONDS: ${HUMANI_T_INFERENCE_TIMEOUT_SECONDS:-300}
+  HUMANI_T_SCREENING_CONCURRENCY: ${HUMANI_T_SCREENING_CONCURRENCY:-2}
   HUMANI_T_OPENALEX_MAILTO: ${HUMANI_T_OPENALEX_MAILTO:-}
   # Uploaded files, sealed under each project's key (ADR 0008). Both the API and
   # the worker mount the `documents` volume here.
