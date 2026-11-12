@@ -2,7 +2,7 @@
 
 A masking is replaced only by a conditional `UPDATE ... WHERE masked_with = :old`,
 so two workers re-masking the same paper cannot both win, and a stale writer
-learns it lost instead of overwriting newer work (architecture §5.7).
+learns it lost instead of overwriting newer work.
 """
 
 from __future__ import annotations

@@ -1,13 +1,8 @@
 """Downloads: the screening dataset, included papers, PRISMA, the manifest and the brief.
 
-Sources: UI_UX_SPEC §6.8 ("Downloads: dataset.csv, dataset.jsonl, prisma.md"),
-§6.9 ("Download as Markdown, PDF and JSON"; the caveat on every printed page),
-§8.7, §15 P2 (`…/exports/{name}`); architecture §5.3 (`Cache-Control:
-no-store`), §5.5 (non-members get 404, audit ids only); OWASP CSV injection.
-
-The papers come from the real pipeline stages over a fake corpus
-(`tests/pipeline_support.py`); the brief from the real answer stage with a
-scripted model (`tests/brief_support.py`).
+Responses are `no-store`, non-members get 404, and CSV cells are guarded against formula
+injection. The papers come from the real pipeline stages over a fake corpus, and the brief
+from the real answer stage with a scripted model.
 """
 
 from __future__ import annotations

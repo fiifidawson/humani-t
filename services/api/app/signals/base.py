@@ -1,12 +1,8 @@
 """Wake-up signals: "something changed on this channel, look again".
 
-A signal carries no data. The truth is always in the database — the run table
-for the queue, the event log for a stream — and every waiter also wakes on its
-own timeout and looks anyway. So a lost signal costs latency, never an event,
-and the system keeps working, more slowly, with no signals at all.
-
-Channel names are internal (`runs:queued`, `run:<id>`): an id at most, never
-project content.
+A signal carries no data: the truth is in the database, and every waiter also wakes
+on a timeout, so a lost signal costs latency, never an event. Channel names hold an
+id at most, never project content.
 """
 
 from __future__ import annotations

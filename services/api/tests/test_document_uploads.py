@@ -1,9 +1,8 @@
 """The upload request: one multipart file, CSRF enforced, every refusal before storage.
 
-Sources: OWASP ASVS 5.0 V3 and the CSRF Prevention Cheat Sheet (the upload is
-the one non-JSON body, so the origin checks and the session token must carry
-the defence); the OWASP File Upload Cheat Sheet (type from content, sizes,
-names, rate); the brief's rule 12; architecture §5.3 and §5.7.
+The upload is the one non-JSON body, so the origin checks and the session token carry the
+CSRF defence. Type comes from content, and sizes, names and rate are limited, as in the
+OWASP File Upload Cheat Sheet.
 """
 
 from __future__ import annotations

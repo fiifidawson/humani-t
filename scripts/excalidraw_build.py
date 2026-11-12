@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 """Build native .excalidraw files from label-shorthand JSON sources.
 
-The MCP renderer accepts a convenience `label` field on shapes. Real Excalidraw
-does not: a labelled shape is a container plus a separate text element that
-points back at it via `containerId`, with the container listing the text in
-`boundElements`. Exporting the shorthand directly produces shapes with no text.
-
-Usage:
-    uv run --no-project python scripts/excalidraw_build.py
-    python scripts/excalidraw_build.py
-
-Reads  docs/diagrams/src/*.json
-Writes docs/diagrams/*.excalidraw
+Real Excalidraw has no `label` field: a labelled shape is a container plus a bound text
+element, so exporting the shorthand directly gives shapes with no text. Reads
+docs/diagrams/src/*.json, writes docs/diagrams/*.excalidraw.
 """
 
 from __future__ import annotations

@@ -1,8 +1,7 @@
 """A project's masking rules: terms always masked in every text of the project.
 
-Owners only, for reading too: a rule's term is usually a person's name, which
-is raw text (architecture §3.9.1). Every route passes through `require(action)`
-first (`api/access.py`), so a non-member is refused with 404.
+Owners only, for reading too: a rule's term is usually a person's name, which is
+raw text. A non-member gets 404.
 """
 
 from __future__ import annotations

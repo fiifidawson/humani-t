@@ -1,14 +1,9 @@
 """The `mask` stage, run by the real worker: papers masked before anything screens them.
 
-Sources: architecture §3.9 and §3.9.1 (masking at ingest; raw text kept apart;
-re-runs only redo what changed; uploaded documents wait for a person's review),
-§4.4 (the privacy_review gate), the brief's rules 2 to 4, and UI_UX_SPEC §6.6.
-
-Raw text comes from the pipeline lane through `IngestedTextSource`; a fake that
-serves fixed texts stands in for ingest. The masked result goes to the real
+A fake serves fixed raw texts in place of ingest. The masked result goes to the real
 `PaperMaskStore`, sealed under the project's key, and is read back through
-`MaskedTextSource` exactly as the screen stage reads it. Uploaded documents are
-P2, so the document source is a fake that proves the gate path.
+`MaskedTextSource` as the screen stage reads it. The document source is a fake that proves
+the privacy_review gate path.
 """
 
 from __future__ import annotations

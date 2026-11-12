@@ -1,22 +1,8 @@
-"""Text out of plain text, Markdown, PDF and DOCX, inside this machine and within limits.
+"""Text out of plain text, Markdown, PDF (pypdf) and DOCX (`zipfile`, `expat`), within limits.
 
-- **Text and Markdown:** UTF-8, read with the standard library.
-- **PDF:** pypdf, a pure-Python reader with no dependencies and no network
-  code. It caps how much a compressed stream may inflate to; the page and
-  character limits here cap the rest.
-- **DOCX:** the standard library's `zipfile` and `expat`. Before a byte is
-  inflated, the archive's member count, each part's declared size and its
-  compression ratio are checked; while it inflates, the real bytes are
-  counted against the same bounds, because declared sizes can lie. A part
-  with a document type declaration is refused, which rules out external
-  entities (XXE) and entity expansion bombs at the root: DOCX never needs one.
-
-Text in images is not read: a scanned page or a photographed form has no text
-here until OCR is added. The review screen says so.
-
-`extract_document` is synchronous and pure (bytes in, text out). Production
-runs it in a separate process (`isolated.py`); `LocalDocumentExtractor` runs it
-in a thread, for tests and development, where a timeout cannot stop it early.
+DOCX sizes are checked before and while inflating, because declared sizes can lie, and
+any document type declaration is refused, which rules out XXE and entity bombs. Text in
+images is not read until OCR is added.
 """
 
 from __future__ import annotations
@@ -300,9 +286,7 @@ def extract_document(
 class LocalDocumentExtractor:
     """`extract_document` in a thread of this process. For tests and development.
 
-    The timeout stops the wait, not the work: a thread cannot be killed, so a
-    file that hangs the parser keeps a thread busy until it ends.
-    `IsolatedDocumentExtractor` is the production choice for that reason.
+    The timeout stops the wait, not the work: a thread cannot be killed.
     """
 
     @property

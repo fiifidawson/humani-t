@@ -1,14 +1,8 @@
 """Extraction in a separate, short-lived process: the production choice (ADR-0009).
 
-A hostile file is parsed where it can do least harm. The child runs this
-service's own Python with `-I` (no environment variables, no user site, no
-current directory on the path) and an environment holding nothing but what the
-operating system needs, so no secret, database URL or key is ever within its
-reach. It refuses network, processes and file writes (`_child.py`), and is
-killed at the timeout: unlike a thread, a process can be stopped mid-parse.
-
-The parent never logs what the child wrote to stderr: a parser's traceback can
-quote the file.
+The child runs with `-I` and an almost empty environment, so no secret is within its
+reach, and is killed at the timeout. Its stderr is never logged: a parser's traceback
+can quote the file.
 """
 
 from __future__ import annotations

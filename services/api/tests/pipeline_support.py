@@ -1,16 +1,9 @@
 """Helpers for the pipeline specs: real stages, a real worker, and fakes for other lanes' parts.
 
-Built on `tests/run_support.py`: requests, storage, encryption, the audit log
-and the worker are all real. Faked, each with the shape the cross-lane contract
-fixes and nothing more:
-
-- the accepted plan (the plan lane's `PlanSource`): `FakePlans`;
-- masking (the mask lane's stage and store): `FakeMaskStage` reads the text
-  the ingest stage kept through `PaperStore.texts_for_run`, as the real one
-  will, and `FakeMaskedTexts` serves the result through `MaskedTextSource`;
-- paper sources: `CorpusSource` evaluates the query for real over a corpus;
-- the model: `FakeInferenceProvider`, which validates every answer against the
-  request's schema, behind the real `GuardedInference`.
+Requests, storage, encryption, the audit log and the worker are real. The plan, masking,
+paper sources and model are fakes in the cross-lane contract's shape: `FakePlans`,
+`FakeMaskStage` and `FakeMaskedTexts`, `CorpusSource` (evaluates queries for real) and
+`FakeInferenceProvider` behind the real `GuardedInference`.
 """
 
 from __future__ import annotations
@@ -211,9 +204,6 @@ class CorpusSource:
         self.calls.append(query)
         return await self._inner.search(query, limit)
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
-
 
 class FailingSource:
     """A source that cannot be searched: down, refusing, or answering unreadably."""
@@ -231,9 +221,6 @@ class FailingSource:
     ) -> Sequence[PaperRecord]:
         self.calls += 1
         raise PaperSourceUnavailableError(self._source_id, "HTTP 503 from 10.0.0.7")
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
 
 
 def criteria_ids_in(request: ChatRequest) -> list[str]:

@@ -1,9 +1,7 @@
 """Requirements for behaviour under load: connections, races and memory.
 
-Feature tests send one request at a time; these do not. Each class names the
-failure it prevents. Sources: OWASP ASVS 5.0 V2 (business logic: concurrency
-and anti-automation), V6 (throttling), V13 (configuration: resource limits),
-and the SQLAlchemy pooling and PostgreSQL timeout documentation.
+Feature tests send one request at a time; these do not. Each class names the failure it
+prevents (OWASP ASVS 5.0 V2, V6 and V13).
 """
 
 from __future__ import annotations

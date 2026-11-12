@@ -1,12 +1,7 @@
 """Reviews: a question inside a project, and the states it moves through.
 
-A review's status follows UI_UX_SPEC §11.1: the planning states (new, clarifying,
-drafting, changes requested, accepted) and then the state of its latest run.
-The transition table below is the whole state machine; nothing else may move a
-review from one status to another.
-
-This module holds no plaintext: the question lives here only as ciphertext
-sealed under the project's key, which the application layer seals and opens.
+The transition table below is the whole state machine; nothing else may move a review
+from one status to another. The question is held only sealed under the project's key.
 """
 
 from __future__ import annotations
@@ -59,9 +54,8 @@ class ReviewTrigger(StrEnum):
 _S = ReviewStatus
 _T = ReviewTrigger
 
-# A run may start from any state in which no run is going. Before acceptance,
-# the run's first stage asks for the vocabulary through a `vocabulary` gate
-# (UI_UX_SPEC §5.3.6); after a run has ended, the review may run again.
+# A run may start from any state in which no run is going. Before acceptance, the
+# run's first stage asks for the vocabulary through a `vocabulary` gate.
 _CAN_START_A_RUN = (
     _S.NEW,
     _S.CLARIFYING,

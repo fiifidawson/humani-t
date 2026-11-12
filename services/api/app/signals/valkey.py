@@ -1,13 +1,8 @@
 """Signals shared by every API and worker process, over Valkey pub/sub.
 
-Each process holds one subscription (a pattern over this deployment's prefix)
-and hands each message to its own waiters, rather than one subscription per
-waiting stream, so a thousand open streams cost one connection.
-
-Pub/sub delivers at most once and only to connected subscribers; that is
-enough, because a signal only says "look again" (see `signals/base.py`). An
-outage is logged and waited out, never raised: the callers poll on their
-timeouts and keep working.
+Each process holds one subscription and fans messages out to its waiters, so many
+open streams cost one connection. An outage is logged and waited out, never raised:
+callers poll on their timeouts and keep working.
 """
 
 from __future__ import annotations

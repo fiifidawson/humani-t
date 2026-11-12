@@ -1,13 +1,8 @@
 """An InferenceProvider for servers that speak OpenAI's Chat Completions API.
 
-That covers OpenAI, Azure OpenAI (its `/openai/v1` endpoint), Mistral, Groq,
-OpenRouter, and self-hosted vLLM or llama.cpp servers. A hosted one receives
-text only when the operator sets `allow_hosted_inference`; Settings refuses it
-otherwise. This class knows nothing of that decision, or of the API key, which
-the fetcher attaches for the one configured host.
-
-`POST {base}/chat/completions` with `response_format` of type `json_schema`
-(platform.openai.com/docs/api-reference/chat, checked 2026-11-08).
+Hosted, or self-hosted vLLM and llama.cpp. A hosted server gets text only when the
+operator sets `allow_hosted_inference`, which Settings checks; the fetcher attaches the
+API key. Posts `{base}/chat/completions` with a `json_schema` `response_format`.
 """
 
 from __future__ import annotations
@@ -169,10 +164,8 @@ def _refused_setting(response: FetchResponse) -> str | None:
     return None
 
 
-# Keywords strict structured outputs refuse (platform.openai.com/docs/guides/
-# structured-outputs, "Supported schemas", checked 2026-11-08). They are left out
-# of what is sent and still enforced, since every answer is validated against the
-# full schema.
+# Keywords OpenAI's strict mode refuses ("Supported schemas", checked 2026-11-08).
+# They are left out of what is sent but still enforced: answers meet the full schema.
 _NOT_IN_STRICT = frozenset(
     {
         "minLength",
@@ -203,8 +196,7 @@ def _response_schema(request: ChatRequest) -> dict[str, Any]:
 def _strict_copy(node: Any) -> Any:
     """`node` without the keywords strict mode refuses, or None if it cannot be strict.
 
-    Strict mode also needs every object to list all its properties as required
-    and to forbid any others.
+    Strict mode also needs every object to require all its properties and forbid others.
     """
     if isinstance(node, list):
         items = [_strict_copy(item) for item in node]

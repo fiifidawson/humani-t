@@ -1,10 +1,9 @@
 /**
- * The one way the web app talks to the API.
+ * The one way the web app talks to the API, typed by the generated schema.
  *
- * Typed by the generated schema, so a backend contract change breaks
- * `pnpm typecheck`, not a screen at
- * runtime. It adds what every request needs: the page's own origin, JSON
- * bodies only, and the CSRF token on writes. It knows nothing about screens.
+ * It adds what every request needs: the page's own origin, JSON bodies (a document
+ * upload is the one exception) and the CSRF token on writes. It knows nothing about
+ * screens.
  */
 
 import createClient, { type Client, type Middleware } from "openapi-fetch";
@@ -59,12 +58,30 @@ async function isJson(request: Request): Promise<boolean> {
 	}
 }
 
+// The API admits multipart on this one path and nowhere else
+// (services/api/app/api/routes/documents.py, UPLOAD_PATH); so does the client.
+const UPLOAD_PATH = /^\/api\/v1\/projects\/[^/]+\/documents\/?$/;
+
+function isDocumentUpload(request: Request): boolean {
+	return (
+		request.method === "POST" &&
+		UPLOAD_PATH.test(new URL(request.url).pathname) &&
+		(request.headers.get("content-type") ?? "").startsWith(
+			"multipart/form-data;",
+		)
+	);
+}
+
 const sendJsonOnly: Middleware = {
 	// The header alone is not enough: a caller can swap the serializer and
 	// still carry the default JSON content type. Bodies are capped at 1 MiB by
 	// the API, so parsing a copy costs little.
 	async onRequest({ request }) {
-		if (request.body !== null && !(await isJson(request))) {
+		if (
+			request.body !== null &&
+			!isDocumentUpload(request) &&
+			!(await isJson(request))
+		) {
 			throw new NonJsonBodyError(
 				"Refusing to send a body that is not JSON: the API accepts JSON only.",
 			);

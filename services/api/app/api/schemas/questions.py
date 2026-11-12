@@ -1,8 +1,6 @@
-"""Request and response models for follow-up questions and threads (UI_UX_SPEC §6.12).
+"""Request and response models for follow-up questions and threads.
 
-The request forbids unknown fields. Pydantic checks shape and size; the
-domain checks meaning (`normalize_question`), and its `ValueError` becomes a
-422 in the route. Responses show the question as it was sent: masked.
+Responses show the question as it was sent: masked.
 """
 
 from __future__ import annotations

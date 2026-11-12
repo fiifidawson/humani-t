@@ -37,9 +37,8 @@ class GuardedInference:
     async def chat(self, request: ChatRequest) -> ChatResult:
         """Inspect the exact request, then send it. Fails closed.
 
-        A refusal raises `PromptRefusedError`; an error inside the guard
-        propagates as it is. Either way nothing is sent: a leak check that
-        crashed has not checked anything.
+        A refusal raises `PromptRefusedError`, and a crash in the guard propagates: either
+        way nothing is sent, because a check that crashed has not checked anything.
         """
         verdict = await self._guard.inspect(request)
         if not verdict.is_allowed:

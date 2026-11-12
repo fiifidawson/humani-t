@@ -550,15 +550,24 @@ function DraftLink({
 
 /** "Accept and search", from the card or the canvas: one request, one pending state. */
 export function AcceptButton({ version }: { version: number }) {
-	const { actions } = useReview();
+	const { actions, plan, runs } = useReview();
 	const isBusy = actions.accept.isPending || actions.startRun.isPending;
+	// The name says what accepting will run (Wave 2, prompt-first).
+	const name =
+		runs.length === 0
+			? "Accept and search"
+			: plan.rerun_from === "screen"
+				? "Accept and re-screen"
+				: plan.rerun_from === null
+					? "Accept"
+					: "Accept and search again";
 	return (
 		<Button
 			size="sm"
 			disabled={isBusy}
 			onClick={() => actions.accept.mutate(version)}
 		>
-			{isBusy ? "Starting the search…" : "Accept and search"}
+			{isBusy ? "Starting the search…" : name}
 		</Button>
 	);
 }

@@ -1,15 +1,8 @@
 """Follow-up questions in threads, and their answers, as rules with no I/O.
 
-A member asks a question about a review's evidence (UI_UX_SPEC §6.12). The
-question is masked before it is stored, and answered in the background: its
-record moves pending → answering (under a worker's lease) → answered or
-failed, and a lapsed lease is claimed again up to `MAX_ATTEMPTS` times, like a
-run. Questions in one thread are numbered from 1 and answered one at a time,
-because a follow-up reads the answers before it.
-
-An answer is claims citing passages that were retrieved, checked by code like
-the brief's (`check_answer`); an answer with no claims means nothing in the
-project answers the question. Storage, the model and masking live elsewhere.
+A question is masked before it is stored, then answered in the background under a
+worker's lease, like a run. A thread answers one question at a time, because a follow-up
+reads the answers before it. Code checks an answer's citations, as it does a brief's.
 """
 
 from __future__ import annotations
@@ -22,6 +15,7 @@ from uuid import UUID
 
 from app.domain.briefs import Claim, Problem, check_claims
 from app.domain.runs import RunConflictError
+from app.domain.timestamps import require_aware
 
 MAX_QUESTION_LENGTH = 2000
 MAX_ANSWER_CLAIMS = 6
@@ -57,12 +51,6 @@ def normalize_question(text: str) -> str:
     return cleaned
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Thread:
     """A line of questioning about one review, started by one member."""
@@ -74,15 +62,13 @@ class Thread:
     created_by: UUID
 
     def __post_init__(self) -> None:
-        _require_aware("Thread", created_at=self.created_at)
+        require_aware("Thread", created_at=self.created_at)
 
 
 @dataclass(frozen=True, slots=True)
 class QuestionRecord:
     """One question as storage holds it: ids and its state in the clear, its text sealed.
 
-    `question_sealed` holds the masked question and what was masked, by type;
-    `answer_sealed` the answer, the evidence it drew on and its agent steps.
     `error` is a fixed sentence for a person, never an exception's text.
     """
 
@@ -106,7 +92,7 @@ class QuestionRecord:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "QuestionRecord",
             asked_at=self.asked_at,
             lease_expires_at=self.lease_expires_at,

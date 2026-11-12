@@ -1,19 +1,9 @@
 """A stand-in model for development: canned answers made in this process, no model server.
 
-It exists so a developer can walk the whole review flow (plan, run, screen,
-brief) on one machine without Ollama. It is chosen only by the operator
-setting `demo_inference`, which production refuses, and it says what it is in
-every answer it gives (`model_id`), so a receipt, a decision or a manifest made
-with it can never pass for a real model's.
-
-It reads the request's schema to decide what kind of answer is wanted, and the
-masked text it was sent to make that answer fit: a screening quote is cut from
-the paper's own text, a brief cites only the passages it was given. A schema it
-does not recognise gets the smallest document that matches it. Every answer is
-validated against the schema, exactly as a real provider's must be.
-
-Not for tests of behaviour: those script `FakeInferenceProvider`, which says
-exactly what each test expects.
+It lets a developer walk the whole review flow without Ollama. Production refuses
+`demo_inference`, and its `model_id` names it in every answer, so nothing it made can
+pass for a real model's. Answers are shaped by the request's schema and built from the
+masked text it was sent. Tests script `FakeInferenceProvider` instead.
 """
 
 from __future__ import annotations

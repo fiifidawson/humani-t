@@ -1,16 +1,9 @@
 """The storage contract for multi-factor credentials, run against every StorageProvider.
 
-Extends `test_storage_contract.py` with four repositories on the unit of work:
-`totp_credentials`, `recovery_codes`, `passkeys` and `webauthn_challenges`, and
-with the two new session columns, `aal` and `is_mfa_pending`.
-
-Every write a concurrent request could race with is conditional and reports
-whether it won (`architecture.md` §5.7). For MFA that is what makes a one-time
-code, a recovery code and a challenge *atomically* single-use, and what stops
-a replayed passkey assertion from moving its counter.
-
-The Postgres run is skipped unless TEST_DATABASE_URL points at a migrated
-database as the runtime role.
+Every racing write is conditional and reports whether it won, which is what makes a TOTP
+code, a recovery code and a challenge single-use, and stops a replayed passkey assertion
+moving its counter. The Postgres run is skipped unless TEST_DATABASE_URL points at a
+migrated database as the runtime role.
 """
 
 from __future__ import annotations

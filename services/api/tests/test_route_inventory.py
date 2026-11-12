@@ -1,11 +1,7 @@
 """Every route the app registers is checked for sign-in and project membership.
 
-Sources: architecture §4.1 ("every request checks membership") and §5.5 (deny
-by default); OWASP ASVS 5.0 V8.
-
-Feature specs test the routes someone remembered to test. These walk the app's
-own route table, so a route added later is covered the moment it exists — and
-a route that should be public has to be named below, where a reviewer sees it.
+These walk the app's own route table, so a route added later is covered the moment it
+exists, and a route meant to be public must be named below, where a reviewer sees it.
 """
 
 from __future__ import annotations
@@ -57,7 +53,6 @@ PROJECT_ROUTES = frozenset(
         ("POST", f"{PROJECTS}/{{project_id}}/members"),
         ("PATCH", f"{PROJECTS}/{{project_id}}/members/{{user_id}}"),
         ("DELETE", f"{PROJECTS}/{{project_id}}/members/{{user_id}}"),
-        ("POST", f"{PROJECTS}/{{project_id}}/search"),
     }
 )
 
@@ -157,11 +152,6 @@ class TestInventory:
         scoped = {r for r in registered_routes(app) if r[1].startswith(f"{PROJECTS}/")}
 
         assert all("{project_id}" in path for _, path in scoped)
-
-    def test_the_old_unscoped_search_route_is_gone(self):
-        app = make_project_harness().app
-
-        assert ("POST", "/api/v1/search") not in registered_routes(app)
 
 
 class TestSignInIsRequired:

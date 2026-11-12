@@ -1,10 +1,8 @@
 """The rules of a team's own documents, as pure functions.
 
-Sources: the brief's rules 2, 3 and 12 (raw text kept apart; documents always
-masked with the broad list; allowed types only, size limits), architecture
-§3.9.1 (masking is derived and correctable; "not personal" never for
-structured identifiers; review before use), UI_UX_SPEC §6.6, §6.13 and §8.4
-(the `D` tag a citation shows).
+Raw text is kept apart, documents are always masked with the broad list, and only allowed
+types and sizes are accepted. Masking is derived and correctable, but a structured
+identifier can never be marked "not personal".
 """
 
 from __future__ import annotations

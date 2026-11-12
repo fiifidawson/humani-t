@@ -1,22 +1,9 @@
-"""The `screen` stage: one model call per paper, on masked text, against the accepted criteria.
+"""The `screen` stage: ask the model about each paper, using its masked text only.
 
-What it guarantees:
-
-- **Nothing unmasked reaches a model.** It reads a paper's text only through
-  `MaskedTextSource`; a paper with no masked text is skipped, never sent, and
-  every call goes through `GuardedInference`, whose guard checks it again.
-- **Provenance at decision time.** Each decision stores the model id the
-  server reported, `SCREEN_PROMPT_VERSION` and the plan version whose criteria
-  it was screened against; each is audited with ids only.
-- **A repeat skips what is decided.** Decisions are stored one by one as they
-  are made, conditionally, so a crash, a deploy or a retry loses at most the
-  papers in flight.
-- **Gentle on a CPU-only model server.** At most `concurrency` papers at once.
-
-A malformed answer, or one whose label contradicts its criteria, or one that
-quotes words not in the text it was sent, is asked again once; a second failure
-is recorded as `uncertain` with the reason, so the paper is shown to a person
-instead of silently dropped.
+Every call goes through `GuardedInference`, and a paper with no masked text is skipped.
+Each decision is stored as it is made, with the model, prompt and plan version it used,
+so a retry redoes only unfinished papers. A bad answer is asked again once, then marked
+`uncertain` for a person to check.
 """
 
 from __future__ import annotations
@@ -61,14 +48,13 @@ from app.domain.screening import (
     ScreeningDecision,
     ScreeningLabel,
     ScreeningTier,
-    check_quotes,
     exclusion_reasons,
     screened_item,
 )
 from app.runs.base import StageContext, StageFailedError
 from app.storage.base import StorageProvider, UnitOfWork
 
-SCREEN_PROMPT_VERSION = "screen-2"
+SCREEN_PROMPT_VERSION = "screen-3"
 DEFAULT_CONCURRENCY = 2
 
 NO_CRITERIA = (
@@ -163,10 +149,13 @@ def screening_schema(criterion_ids: Sequence[str]) -> dict[str, Any]:
                         "answer": {"enum": [v.value for v in CriterionVerdict]},
                         "quote": {
                             "anyOf": [
+                                # No maxLength: a longer quote is shortened, not refused.
                                 {
                                     "type": "string",
                                     "minLength": 1,
-                                    "maxLength": MAX_QUOTE_LENGTH,
+                                    "description": (
+                                        f"Cut to {MAX_QUOTE_LENGTH} characters when longer."
+                                    ),
                                 },
                                 {"type": "null"},
                             ]
@@ -433,8 +422,7 @@ class ScreenStage:
         """The answer as a decision, or `ValueError` if it contradicts itself or its text."""
         label = ScreeningLabel(output["label"])
         matched = tuple(c.id for c in plan.criteria if c.id in output["criteria_matched"])
-        answers = _criterion_answers(plan, output.get("answers"))
-        check_quotes(answers, masked_text)
+        answers = _criterion_answers(plan, output.get("answers"), masked_text)
         return ScreeningDecision(
             run_id=run.id,
             paper_id=paper.paper_id,
@@ -470,16 +458,24 @@ def _refused(run: Run, paper: RunPaper, attempt: int, error: Exception) -> None:
     )
 
 
-def _criterion_answers(plan: ReviewPlan, given: Any) -> tuple[CriterionAnswer, ...]:
-    """The answers in the plan's order; `ValueError` unless every criterion has exactly one."""
+def _criterion_answers(
+    plan: ReviewPlan, given: Any, masked_text: str
+) -> tuple[CriterionAnswer, ...]:
+    """The answers in the plan's order, each quote located in `masked_text`.
+
+    `ValueError` unless every criterion has exactly one answer and every quote is found.
+    """
     if not given:
         return ()
     by_id = {a["id"]: a for a in given}
     if len(by_id) != len(given) or set(by_id) != {c.id for c in plan.criteria}:
         raise ValueError("the answers must answer every criterion exactly once")
     return tuple(
-        CriterionAnswer(
-            c.id, CriterionVerdict(by_id[c.id]["answer"]), by_id[c.id]["quote"] or None
+        CriterionAnswer.located(
+            c.id,
+            CriterionVerdict(by_id[c.id]["answer"]),
+            by_id[c.id]["quote"] or None,
+            masked_text,
         )
         for c in plan.criteria
     )

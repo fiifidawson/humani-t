@@ -1,8 +1,7 @@
 """The operator's upload settings: a scanner is a decision, never a silent default.
 
-Sources: the brief's rule 12 (malware scan), `docs/security/controls.md`
-(uploads refused in production unless a scanner, or explicitly `none`, is set),
-ADR-0008 (files on a volume; a database without one switches uploads off).
+Production refuses uploads unless a scanner, or explicitly `none`, is set, and a database
+without a file volume switches uploads off.
 """
 
 from __future__ import annotations

@@ -1,12 +1,8 @@
-"""The search-planning conversation of one review (UI_UX_SPEC §5.3.1 to 5.3.4, §6.3 to 6.6).
+"""The search-planning conversation of one review.
 
-Paths name a review, not a project: each resolves the project from the review
-and answers a non-member with the same 404 as a missing review, before any
-body is read. The use case checks membership again as it writes.
-
-Model failures are translated here: a prompt the leak check refused is 422
-(nothing was sent), an unusable answer is 502, an unreachable model server is
-502 through the shared handler.
+Paths name a review, so a non-member gets the same 404 as a missing review before
+any body is read. A prompt the leak check refused is 422 (nothing was sent); an
+unusable answer or an unreachable model server is 502.
 """
 
 from __future__ import annotations
@@ -16,8 +12,9 @@ from contextlib import contextmanager
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.api.access import require_review
 from app.api.dependencies import PlansDep
 from app.api.schemas.plans import (
     AcceptIn,
@@ -28,7 +25,7 @@ from app.api.schemas.plans import (
     PlanVersionOut,
     VocabularyUploadIn,
 )
-from app.api.session import CurrentDep, request_id
+from app.api.session import request_id
 from app.application.accounts import Current
 from app.domain.inference import InvalidStructuredOutputError, PromptRefusedError
 from app.domain.projects import Action
@@ -40,16 +37,8 @@ _CONFLICT: dict[int | str, dict[str, Any]] = {
 }
 
 
-def _review_access(action: Action) -> Any:
-    async def gate(review_id: UUID, current: CurrentDep, plans: PlansDep) -> Current:
-        await plans.authorize_review(current, review_id, action)
-        return current
-
-    return Depends(gate)
-
-
-_Reader = Annotated[Current, _review_access(Action.READ_PROJECT)]
-_Editor = Annotated[Current, _review_access(Action.EDIT_REVIEW)]
+_Reader = Annotated[Current, require_review(Action.READ_PROJECT)]
+_Editor = Annotated[Current, require_review(Action.EDIT_REVIEW)]
 
 
 @contextmanager

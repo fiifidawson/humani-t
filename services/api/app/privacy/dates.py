@@ -1,15 +1,8 @@
 """Calendar dates by regular expression, for the broad list that uploaded documents get.
 
-Brief rule 3 masks dates in a team's own documents: a date of birth, an
-interview date or a clinic visit narrows down a person. The name model finds
-dates too, but it is optional; this detector is always on for documents, needs
-no model and does no I/O.
-
-It masks dates that name a day or a month: `12/03/2024`, `2024-03-12`,
-`12 March 2024`, `March 12, 2024`, `12 March`, `March 2024`. A bare year is
-left alone, because "in 2019" is context in a report, not a person. Papers and
-questions are never run through it (`api/dependencies.py`), and the prompt
-guard does not use it, so a paper's publication date never refuses a call.
+Only dates that name a day or a month are masked: a bare year is context, not a person.
+Papers, questions and the prompt guard never use it, so a publication date never
+refuses a model call.
 """
 
 from __future__ import annotations

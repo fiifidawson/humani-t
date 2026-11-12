@@ -31,7 +31,7 @@ jobs:
       # A project name of its own, and high ports nothing on the runner image
       # listens on: the run can never touch another stack's containers or volumes.
       COMPOSE_PROJECT_NAME: humani-t-smoke
-      COMPOSE_PROFILES: local-mail
+      COMPOSE_PROFILES: local-mail,malware-scan
       HUMANI_T_DOMAIN: localhost
       HUMANI_T_HTTP_PORT: "58080"
       HUMANI_T_HTTPS_PORT: "58443"
@@ -39,6 +39,8 @@ jobs:
       HUMANI_T_SMTP_HOST: mailpit
       HUMANI_T_SMTP_PORT: "1025"
       HUMANI_T_SMTP_STARTTLS: "false"
+      HUMANI_T_MALWARE_SCANNER: clamd
+      HUMANI_T_CLAMD_ADDRESS: tcp://clamav:3310
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,9 +93,11 @@ jobs:
 
       # Naming caddy, worker and mailpit starts everything they depend on: api,
       # migrate (which must exit 0 first), postgres and valkey. Ollama is left out:
-      # its image is several gigabytes and nothing here calls a model.
+      # its image is several gigabytes and nothing here calls a model. freshclam is
+      # left out too: ClamAV's CDN rate-limits shared runners' addresses, and clamd
+      # starts on the signatures built into its image.
       - name: Start the stack
-        run: docker compose up --detach --wait --wait-timeout 300 caddy worker mailpit
+        run: docker compose up --detach --wait --wait-timeout 300 caddy worker mailpit clamav
 
       - name: The API answers through Caddy over HTTPS
         run: |
@@ -117,7 +121,7 @@ jobs:
 
       - name: Every container runs as a non-root user
         run: |
-          for service in caddy api worker postgres valkey mailpit; do
+          for service in caddy api worker postgres valkey mailpit clamav; do
             uid=$(docker compose exec -T "$service" id -u)
             echo "$service: uid $uid"
             [[ "$uid" != "0" ]] || { echo "$service runs as root"; exit 1; }
@@ -142,6 +146,25 @@ jobs:
               *) [[ -z "$published" ]] || { echo "$service publishes a port"; exit 1; } ;;
             esac
           done
+
+      - name: Only the worker reaches clamd, and clamd reaches nothing
+        run: |
+          docker compose exec -T worker python -c '
+          import asyncio
+          from app.malware.clamd import ClamdAddress, ClamdScanner
+          from app.malware.fake import EICAR
+          scanner = ClamdScanner(ClamdAddress.parse("tcp://clamav:3310"))
+          verdict = asyncio.run(scanner.scan(EICAR))
+          assert verdict.signature == "Eicar-Test-Signature", verdict
+          print(verdict)'
+          if docker compose exec -T api python -c '
+          import socket
+          socket.create_connection(("clamav", 3310), timeout=3)' 2>/dev/null; then
+            echo "the API can reach clamd"; exit 1
+          fi
+          if docker compose exec -T clamav getent hosts database.clamav.net; then
+            echo "clamd can resolve internet names"; exit 1
+          fi
 
       - name: Each container holds only its own secrets
         run: |

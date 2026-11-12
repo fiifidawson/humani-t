@@ -1,9 +1,8 @@
 """The OpenAI-compatible InferenceProvider: OpenAI, Azure OpenAI, Mistral, Groq and others.
 
-Requirements: architecture §3.1 (every model call through `InferenceProvider`,
-never unchecked output), CLAUDE.md "the one rule" (a hosted API only when the
-operator opts in; `test_settings.py` and `test_outbound_wiring.py` hold that
-side), and the provider's own wire format (platform.openai.com/docs/api-reference/chat).
+A hosted API is used only when the operator opts in; `test_settings.py` and
+`test_outbound_wiring.py` hold that side. The wire format is
+platform.openai.com/docs/api-reference/chat.
 """
 
 from __future__ import annotations

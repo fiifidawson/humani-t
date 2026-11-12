@@ -1,9 +1,7 @@
 """Requirements for a review's search plan, as pure domain rules.
 
-Sources: architecture §4.3 (routes A and B, frozen versions, origin recorded,
-route B never touches the model); UI_UX_SPEC §5.3.3 (clarifying questions),
-§5.3.4 (the draft and its acceptance), §6.5 (who added each term, compare with
-the previous draft), §11.1 (review states).
+Plan versions are frozen and record their origin, and a user-supplied plan (route B) never
+touches the model.
 """
 
 from __future__ import annotations
@@ -27,6 +25,7 @@ from app.domain.plans import (
     ReviewPlan,
     VocabularyFormat,
     diff_plans,
+    first_stage_to_redo,
     number_criteria,
     parse_strict_vocabulary,
     revision_from_gate,
@@ -130,7 +129,7 @@ class TestReviewPlan:
             )
 
     def test_a_strict_vocabulary_can_never_be_written_by_the_model(self):
-        """Route B never routes through the model (architecture §4.3, rule 3)."""
+        """Route B never routes through the model."""
         with pytest.raises(ValueError, match="user-supplied"):
             draft(CASH, origin=VocabularyOrigin.USER_SUPPLIED)
 
@@ -483,7 +482,7 @@ class TestGateRevisions:
 
 
 class TestReviewStates:
-    """Editing an accepted plan makes a new version (architecture §4.3, rule 1)."""
+    """Editing an accepted plan makes a new version."""
 
     @pytest.mark.parametrize(
         "status",
@@ -494,3 +493,57 @@ class TestReviewStates:
             next_review_status(status, ReviewTrigger.REQUEST_CHANGES)
             is ReviewStatus.CHANGES_REQUESTED
         )
+
+
+class TestWhereARunAfterAChangeStarts:
+    """Prompt-first changes after a run (Wave 2): the person only says what to
+    change, and the next run starts from the earliest stage the change affects.
+    A changed search finds different papers, so it starts again from the search;
+    changed criteria re-judge the papers already found; nothing changed, nothing
+    to redo.
+    """
+
+    def test_an_added_term_searches_again(self):
+        before = draft()
+        after = draft(
+            Concept(
+                "cash transfers", ("cash assistance", "mobile money"), theme="intervention"
+            ),
+            FOOD,
+            version=2,
+        )
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_a_removed_concept_searches_again(self):
+        before = draft(CASH, FOOD, Concept("Tigray", (), theme="setting"))
+        after = draft(CASH, FOOD, version=2)
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_changed_criteria_alone_rescreen_the_papers_already_found(self):
+        before = draft()
+        stricter = number_criteria(
+            [
+                (CriterionKind.INCLUSION, "Studies of cash or voucher programmes"),
+                (CriterionKind.EXCLUSION, "Opinion pieces"),
+                (CriterionKind.EXCLUSION, "Published before 2015"),
+            ]
+        )
+        after = draft(version=2, criteria=stricter)
+
+        assert first_stage_to_redo(before, after) == "screen"
+
+    def test_a_change_to_terms_and_criteria_searches_again(self):
+        before = draft()
+        after = draft(
+            CASH,
+            Concept("food security", ("hunger", "dietary diversity"), theme="outcome"),
+            version=2,
+            criteria=number_criteria([(CriterionKind.INCLUSION, "Any cash study")]),
+        )
+
+        assert first_stage_to_redo(before, after) == "queries"
+
+    def test_nothing_changed_redoes_nothing(self):
+        assert first_stage_to_redo(draft(), draft(version=2)) is None

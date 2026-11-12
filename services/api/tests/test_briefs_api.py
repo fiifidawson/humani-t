@@ -1,8 +1,6 @@
 """Reading a decision brief: the brief, one cited source, and how it was made.
 
-Sources: UI_UX_SPEC §6.9 (brief canvas, read-only), §6.10 (source panel),
-§6.11 (how this was made), §8 (trust patterns) and §15 P1; architecture §4.2
-and §5.5 (non-members get the same 404 as a missing id).
+The brief is read-only, and a non-member gets the same 404 as a missing id.
 """
 
 from __future__ import annotations

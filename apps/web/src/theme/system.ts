@@ -1,14 +1,9 @@
 /**
- * The Chakra UI system: LiGHT's brand as tokens (UI_UX_SPEC §9).
+ * The Chakra UI system: LiGHT's brand as tokens.
  *
- * Raw brand colours are `colors.light.*`; components read only the semantic
- * tokens below, which say what a colour is for and switch with the theme. Every
- * text and UI pair they form is measured in UI_UX_SPEC §9.2. Light Blue and both
- * yellows fail as text on white or Eggshell, so on light backgrounds they appear only as
- * decoration, never as text or as the only sign of a state.
- *
- * Only the recipes the app uses are registered, which keeps Chakra's share of
- * the first load down; a component whose recipe is missing renders unstyled.
+ * Components read only the semantic tokens, which switch with the theme. Light
+ * Blue and both yellows fail contrast on light backgrounds (UI_UX_SPEC §9.2), so
+ * there they are decoration only. Only the recipes the app uses are registered.
  */
 
 import {
@@ -30,6 +25,7 @@ import {
 	keyframes,
 	layerStyles,
 	linkRecipe,
+	nativeSelectSlotRecipe,
 	radioGroupSlotRecipe,
 	semanticTokens,
 	separatorRecipe,
@@ -270,6 +266,23 @@ const config = defineConfig({
 			alert: alertSlotRecipe,
 			checkbox: checkboxSlotRecipe,
 			dialog: dialogSlotRecipe,
+			// A menu's edge identifies it too, so it gets the inputs' 3:1 border.
+			nativeSelect: {
+				...nativeSelectSlotRecipe,
+				variants: {
+					...nativeSelectSlotRecipe.variants,
+					variant: {
+						...nativeSelectSlotRecipe.variants?.variant,
+						outline: {
+							...nativeSelectSlotRecipe.variants?.variant?.outline,
+							field: {
+								...nativeSelectSlotRecipe.variants?.variant?.outline?.field,
+								borderColor: "border.emphasized",
+							},
+						},
+					},
+				},
+			},
 			radioGroup: radioGroupSlotRecipe,
 			table: tableSlotRecipe,
 		},

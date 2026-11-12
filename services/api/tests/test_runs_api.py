@@ -1,21 +1,14 @@
 """Requirements for reviews, runs, the live event stream and gates, over HTTP.
 
-Sources: architecture §4.4 (the contract: routes, event names and fields, gate
-rules, `Last-Event-ID` replay, access), §5.4 (encryption, crypto-shredding),
-§5.5 (404 for non-members, audit with ids only); UI_UX_SPEC §11.1, §11.2,
-§5.3.5, §5.3.6 and §6.7; the WHATWG HTML standard, "Server-sent events"
-(wire format, `retry`, `Last-Event-ID`); OWASP ASVS 5.0 V8 and V16.
-
-The rules, in the order the API applies them, are the projects' own
-(`test_projects_api.py`): 401, then 404 for a non-member with the same body as
-for a missing id, then 403 for a role that may not, then the request itself.
-A run, gate or event route does not name its project, so the project is
-resolved from the review, run or gate first.
+Access rules are the projects' own (`test_projects_api.py`): 401, then 404 for a non-member
+with the same body as a missing id, then 403, then the request. Run, gate and event routes
+do not name their project, so it is resolved from the review, run or gate first.
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import uuid
 from uuid import UUID
 
@@ -146,7 +139,7 @@ class TestReviews:
 
 
 class TestReviewAuthor:
-    """UI_UX_SPEC §5.2 and §5.3.1: a question card shows who asked it, by display name."""
+    """A question card shows who asked it, by display name."""
 
     def test_a_review_names_its_author_by_id_and_display_name(self, rt):
         body = rt.owner.get(reviews_path(rt.project_id, f"/{rt.review_id}")).json()
@@ -543,7 +536,7 @@ class TestGates:
         assert len([e for e in rt.events(run_id) if e.name == "gate.resolved"]) == 1
 
     def test_only_owners_may_approve_a_privacy_review(self, rt):
-        """UI_UX_SPEC §5.3.6: checking masking means reading raw text, which is owner-only."""
+        """Checking masking means reading raw text, which is owner-only."""
         run_id = rt.start_run(["queries", "discover"])
         run_until_idle(rt.worker(_gated(GateKind.PRIVACY_REVIEW)))
 
@@ -737,7 +730,7 @@ class TestFailure:
 
 
 class TestAccess:
-    """Architecture §4.4 and §5.5: a non-member learns nothing, not even that an id exists."""
+    """A non-member learns nothing, not even that an id exists."""
 
     def _routes(self, rt: RunTeam) -> list[tuple[str, str, str]]:
         run_id = rt.start_run(["queries", "discover"])
@@ -868,3 +861,54 @@ def test_an_unknown_review_is_404(rt):
     )
 
     assert response.status_code == 404
+
+
+class TestARunStoredWithTheRetiredIndexStage:
+    """`index` was a stand-in that never did any work. Runs stored with it still read back."""
+
+    @pytest.fixture
+    def old_run(self, rt) -> str:
+        run_id = rt.start_run(["export", "answer"])
+        _restage(rt, run_id, ("export", "index", "answer"))
+        run_until_idle(rt.worker(simple_stages("export", "index", "answer")))
+        return run_id
+
+    def test_it_is_listed_with_the_stages_it_ran(self, rt, old_run):
+        listed = rt.owner.get(f"/api/v1/reviews/{rt.review_id}/runs").json()
+
+        assert (listed[0]["stages"], listed[0]["outcome"]) == (
+            ["export", "index", "answer"],
+            "done",
+        )
+
+    def test_its_events_still_stream(self, rt, old_run):
+        _, events, _ = parse_sse(rt.stream(old_run).text)
+
+        assert "index" in {e.data.get("stage") for e in events}
+        assert events[-1].name == "job.finished"
+
+    def test_its_manifest_is_complete(self, rt, old_run):
+        body = rt.owner.get(f"/api/v1/runs/{old_run}/manifest").json()
+
+        assert body["stages"] == ["export", "index", "answer"]
+        assert body["is_complete"] is True
+
+    def test_a_new_run_may_not_ask_for_it(self, rt):
+        response = send(
+            rt.owner, "POST", f"/api/v1/reviews/{rt.review_id}/runs", {"stages": ["index"]}
+        )
+
+        assert response.status_code == 422
+
+
+def _restage(rt: RunTeam, run_id: str, stages: tuple[str, ...]) -> None:
+    """Rewrite a queued run's stages as a run stored before a stage was retired."""
+
+    async def write() -> None:
+        async with rt.harness.providers.storage.unit_of_work() as uow:
+            run = await uow.runs.lock(UUID(run_id))
+            assert run is not None
+            await uow.runs.save(dataclasses.replace(run, stages=stages))
+            await uow.commit()
+
+    asyncio.run(write())

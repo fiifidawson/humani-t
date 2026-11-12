@@ -1,11 +1,7 @@
 """The agent loop that writes a decision brief: Planner, Retriever, Writer, checks, Critic.
 
-Sources: architecture §4.2 and §4.4, dependencies.md §3 (the CHITCHAT loop in
-plain Python: the Critic reviews the Writer's draft, every agent returns a
-schema, code checks the citations), UI_UX_SPEC §6.11.
-
-The model is a scripted `FakeInferenceProvider` behind the real
-`GuardedInference`; retrieval is the real BM25 retriever over a small corpus.
+The model is a scripted `FakeInferenceProvider` behind the real `GuardedInference`;
+retrieval is the real BM25 retriever over a small corpus.
 """
 
 from __future__ import annotations
@@ -391,7 +387,7 @@ class TestWriterFormat:
     """The honesty rules live in the answer format, so a strict model cannot break them.
 
     A claim is evidence that cites a passage, or a hypothesis, the model's own
-    reasoning, that cites none (UI_UX_SPEC §8.2); what a conflict means is always
+    reasoning, that cites none; what a conflict means is always
     a hypothesis. Found 2026-11-08: gpt-5-mini broke both twice in a row.
     """
 

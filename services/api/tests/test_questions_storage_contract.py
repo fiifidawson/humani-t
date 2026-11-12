@@ -1,11 +1,8 @@
 """One behaviour contract for follow-up question storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a database
-migrated to revision 0014, connected as the runtime role.
-
-What matters (architecture §5.7): a thread's position is taken once; a waiting
-question is claimed by one worker under a lease; a lapsed lease is claimed
-again while attempts remain and is found exhausted after; no blind overwrites.
+A thread position is taken once; a waiting question is claimed by one worker under a lease,
+and claimed again when the lease lapses while attempts remain. The Postgres run is skipped
+unless TEST_DATABASE_URL points at a database migrated to revision 0014, as the runtime role.
 """
 
 from __future__ import annotations

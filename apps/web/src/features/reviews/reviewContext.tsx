@@ -9,13 +9,20 @@
  * only hides actions the caller's role cannot take (§3.3) and sends the rest.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	createContext,
+	type ReactNode,
+	useCallback,
+	useContext,
+	useMemo,
+} from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
-import { keys } from "../../app/queries";
+import { keys, projectQuery, sessionQuery } from "../../app/queries";
+import { planQuery, reviewQuery, runsQuery } from "../../app/reviewQueries";
 import type { Project } from "../projects/format";
 import { PIPELINE, type StageId } from "../runs/runEvents";
 import type { PlanMode } from "./format";
@@ -25,6 +32,9 @@ export type Review = Schemas["ReviewOut"];
 export type Plan = Schemas["PlanOut"];
 export type Version = Schemas["VersionOut"];
 export type Run = Schemas["RunOut"];
+export type Thread = Schemas["ThreadOut"];
+// By position, not by name: the generated name carries the module path.
+export type FollowUp = Thread["questions"][number];
 
 export type AnswerInput =
 	| { questionId: string; answer: string | null }
@@ -119,8 +129,11 @@ export function useReviewActions(reviewId: string) {
 		onSuccess: (plan) => {
 			showPlan(plan);
 			// "Accept and search" is one step for the person (§5.3.4): the
-			// vocabulary is confirmed, then the whole pipeline starts.
-			startRun.mutate(PIPELINE);
+			// vocabulary is confirmed, then the run starts where the change matters.
+			const stages = stagesFrom(plan.rerun_from);
+			if (stages.length > 0) {
+				startRun.mutate(stages);
+			}
 		},
 		onError: reloadOnConflict,
 	});
@@ -145,7 +158,68 @@ export function useReviewActions(reviewId: string) {
 			),
 	});
 
-	return { startPlan, answer, change, accept, startRun, cancel, decide };
+	const ask = useMutation({
+		mutationFn: (input: AskInput) =>
+			unwrap(
+				api.POST("/api/v1/reviews/{review_id}/questions", {
+					params: path,
+					body: { question: input.question, thread_id: input.threadId },
+				}),
+			),
+		// The question goes into its thread before the pending state ends, so
+		// the person's turn never blinks out while the threads reload.
+		onSuccess: (question) => {
+			queryClient.setQueryData(
+				keys.threads(reviewId),
+				(threads: Thread[] | undefined) =>
+					withQuestion(threads ?? [], question),
+			);
+			void queryClient.invalidateQueries({ queryKey: keys.threads(reviewId) });
+		},
+		onError: (error) => {
+			if (isApiError(error, "conflict")) {
+				void queryClient.invalidateQueries({
+					queryKey: keys.threads(reviewId),
+				});
+			}
+		},
+	});
+
+	return { startPlan, answer, change, accept, startRun, cancel, decide, ask };
+}
+
+export interface AskInput {
+	question: string;
+	/** The thread to continue; `null` starts one. */
+	threadId: string | null;
+}
+
+/** `threads` with `question` added to its thread, or in a new thread first. */
+export function withQuestion(
+	threads: readonly Thread[],
+	question: FollowUp,
+): Thread[] {
+	if (!threads.some((thread) => thread.id === question.thread_id)) {
+		const thread: Thread = {
+			id: question.thread_id,
+			review_id: question.review_id,
+			created_at: question.asked_at,
+			created_by: question.asked_by,
+			questions: [question],
+		};
+		return [thread, ...threads];
+	}
+	return threads.map((thread) =>
+		thread.id !== question.thread_id
+			? thread
+			: {
+					...thread,
+					questions: [
+						...thread.questions.filter((q) => q.id !== question.id),
+						question,
+					].sort((a, b) => a.position - b.position),
+				},
+	);
 }
 
 export type ReviewActions = ReturnType<typeof useReviewActions>;
@@ -162,6 +236,61 @@ export interface ReviewContextValue {
 	actions: ReviewActions;
 	setComposerText: (text: string) => void;
 	focusComposer: () => void;
+}
+
+const COMPOSER_ID = "composer-input";
+
+/**
+ * Load what a review's pages share. `value` is null until everything has
+ * loaded; `failed` is the first read that failed, if any.
+ */
+export function useReviewValue(
+	projectId: string,
+	reviewId: string,
+	setComposerText: (text: string) => void,
+) {
+	const api = useApi();
+	const project = useQuery(projectQuery(api, projectId));
+	const review = useQuery(reviewQuery(api, projectId, reviewId));
+	const plan = useQuery(planQuery(api, reviewId));
+	const runs = useQuery(runsQuery(api, reviewId));
+	const session = useQuery(sessionQuery(api));
+	const actions = useReviewActions(reviewId);
+	const focusComposer = useCallback(
+		() => document.getElementById(COMPOSER_ID)?.focus(),
+		[],
+	);
+	const value = useMemo<ReviewContextValue | null>(
+		() =>
+			project.data === undefined ||
+			review.data === undefined ||
+			plan.data === undefined ||
+			runs.data === undefined
+				? null
+				: {
+						project: project.data,
+						review: review.data,
+						plan: plan.data,
+						runs: runs.data,
+						canManage: project.data.role !== "viewer",
+						userId: session.data?.user.id ?? null,
+						actions,
+						setComposerText,
+						focusComposer,
+					},
+		[
+			project.data,
+			review.data,
+			plan.data,
+			runs.data,
+			session.data,
+			actions,
+			setComposerText,
+			focusComposer,
+		],
+	);
+	const failed = [review, plan, runs].find((query) => query.isError);
+	return { value, actions, failed };
 }
 
 const ReviewContext = createContext<ReviewContextValue | null>(null);
@@ -194,9 +323,18 @@ export function useRunNumber(runId: string): number {
 }
 
 /** A run's requested stages in pipeline order, ignoring any the API may add later. */
+/**
+ * The stages a run of an accepted version needs (Wave 2, prompt-first): all of
+ * them after a changed search, Screen onwards after changed criteria alone,
+ * none when nothing changed. The API decides which (`rerun_from`).
+ */
+export function stagesFrom(rerunFrom: "queries" | "screen" | null): StageId[] {
+	if (rerunFrom === null) {
+		return [];
+	}
+	return PIPELINE.slice(PIPELINE.indexOf(rerunFrom));
+}
+
 export function stagesOf(run: Run): StageId[] {
 	return PIPELINE.filter((stage) => run.stages.includes(stage));
 }
-
-export const reviewPath = (projectId: string, reviewId: string) =>
-	`/p/${projectId}/r/${reviewId}`;

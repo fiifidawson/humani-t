@@ -1,14 +1,10 @@
 /**
  * The Content-Security-Policy, and how each server puts a nonce in it.
  *
- * Caddy (infrastructure/caddy/Caddyfile) is the source of truth in production;
- * src/csp.test.ts fails if its header differs from `contentSecurityPolicy()`.
- * Styles need a nonce because Chakra UI writes them at run time through Emotion
- * (docs/adr/0004-chakra-ui-with-a-nonce-csp.md). Scripts stay `'self'` only.
- *
- * The build writes NONCE_TEMPLATE wherever the page needs the nonce. Caddy's
- * `templates` replaces it with the request's UUID, the same value its header
- * carries; `vite preview` does the same in `previewNonce` below.
+ * Caddy is the source of truth in production; src/csp.test.ts fails if its header
+ * differs from `contentSecurityPolicy()`. Styles need a nonce because Chakra writes
+ * them at run time (docs/adr/0004); scripts stay `'self'` only. The build writes
+ * NONCE_TEMPLATE where the nonce goes, and Caddy or `previewNonce` fills it per page.
  */
 
 import { randomUUID } from "node:crypto";
@@ -49,11 +45,8 @@ export function contentSecurityPolicy(nonce: string): string {
 }
 
 /**
- * The dev server's policy: the production one with four relaxations. The nonce
- * is fixed; React Refresh needs one inline script, allowed by that nonce; hot
- * reload needs its websocket; Trusted Types is report-only (DEV_REPORT_ONLY)
- * because Vite's error overlay writes innerHTML. Plain http on localhost needs
- * no upgrade-insecure-requests.
+ * The dev server's policy: production's, relaxed for React Refresh and hot reload.
+ * Trusted Types is report-only here because Vite's error overlay writes innerHTML.
  */
 export function devContentSecurityPolicy(port = 5173): string {
 	return contentSecurityPolicy(DEV_NONCE)

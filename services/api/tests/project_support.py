@@ -1,14 +1,8 @@
 """Helpers for the project specs: one project, and a team of signed-in browsers around it.
 
-Built on `tests/support.py` and as real as it is: requests go through the real
-middleware, routes, storage, encryption and audit log. Nothing is mocked.
-
-The team is fixed so every spec reads the same way:
-
-- Amara owns the project, Kofi reviews it and Maya views it;
-- Tariq has an account but is not a member;
-- the instance administrator is not a member either, because being an
-  administrator of the deployment grants nothing inside a project.
+Nothing is mocked. Amara owns the project, Kofi reviews and Maya views; Tariq and the
+instance administrator are not members, because administering the deployment grants
+nothing inside a project.
 """
 
 from __future__ import annotations
@@ -52,7 +46,7 @@ PASSWORD = USER_PASSWORD
 PROJECT_NAME = "Cholera response, Sana'a"
 
 # How the project's name is bound when encrypted: table "projects", column
-# "name", row = the project's id (architecture §5.4).
+# "name", row = the project's id.
 NAME_PURPOSE = "projects.name"
 
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -81,11 +75,9 @@ class Team:
 
 
 def make_project_harness() -> AuthHarness:
-    """A harness in which a password sign-in is a full sign-in.
+    """Return a harness in which a password sign-in is a full sign-in.
 
-    Projects specify authorisation, not the second factor, so these specs opt out
-    of MFA explicitly; the MFA specs cover it. Until the harness accepts an MFA
-    policy, a password sign-in is already a full sign-in.
+    Project specs cover authorisation, so they opt out of MFA; the MFA specs cover it.
     """
     if "mfa_policy" not in inspect.signature(make_harness).parameters:
         return make_harness()

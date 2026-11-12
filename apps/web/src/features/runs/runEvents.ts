@@ -1,11 +1,9 @@
 /**
  * A run's live events, read off the SSE stream and folded into one state.
  *
- * The payload types are the API's own (`RunStreamEvent` in the generated
- * schema), so a contract change breaks the type check. Every field is still
- * checked at runtime, because the stream is input like any other.
- *
- * Pure: no I/O, no timers. `useRunEvents` owns the connection.
+ * The types are the generated `RunStreamEvent`, but every field is still checked
+ * at runtime: the stream is input like any other. Pure; `useRunEvents` owns the
+ * connection.
  */
 
 import type { components } from "../../api/schema.gen";
@@ -24,8 +22,7 @@ const STAGE_ORDER: Readonly<Record<StageId, number>> = {
 	mask: 4,
 	screen: 5,
 	export: 6,
-	index: 7,
-	answer: 8,
+	answer: 7,
 };
 
 export const PIPELINE: readonly StageId[] = (
@@ -273,11 +270,8 @@ function stoppedAt(state: RunState, outcome: Outcome): StageProgress[] {
 }
 
 /**
- * Apply one event. Returns the same object when the event was already applied.
- *
- * Ids increase by one within a run (architecture §4.4), so "already seen" is
- * "not above the last id". A replay after a reconnect, or after an id the
- * server did not recognise, can repeat events; this is where they stop.
+ * Apply one event, returning the same object when it was already applied.
+ * Ids rise by one within a run, so events repeated by a replay stop here.
  */
 export function applyRunEvent(state: RunState, event: RunEvent): RunState {
 	if (event.id <= state.lastEventId || state.isFinished) {

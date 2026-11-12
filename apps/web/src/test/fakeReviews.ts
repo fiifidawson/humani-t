@@ -1,17 +1,10 @@
 /**
- * The review half of the fake API: reviews, search plans, runs, gates and
- * papers, served through MSW like the rest of fakeApi.ts.
+ * The review half of the fake API: reviews, plans, runs, gates and papers.
  *
- * It applies the API's rules the screens depend on: a non-member gets the
- * same 404 as a missing id, a viewer gets 403 on every write, a plan moves
- * new → clarifying → drafting → accepted and refuses steps out of order with
- * 409, the first accept wins, one run at a time, the first gate decision wins.
- * The "model" masks known names in what it is sent, so receipts carry real
- * placeholders and counts. Responses are typed by the generated schema, so a
- * contract change breaks this file's type check, not a test at runtime.
- *
- * Shapes follow docs/api.md "Reviews and runs", "Papers" and "Search plans".
- * Run events are not served here: tests drive them through FakeEventSource.
+ * It applies the rules the screens depend on: 404 for non-members, 403 for viewer
+ * writes, plan steps in order or 409, and the first accept or gate decision wins.
+ * The "model" masks known names, so receipts carry real placeholders. Run events
+ * are not served here; tests drive them through FakeEventSource.
  */
 
 import { HttpResponse, http } from "msw";
@@ -25,6 +18,7 @@ import {
 	type Trace,
 } from "./fakeBriefs";
 import { jsonBody, nextId, problem, text } from "./fakeHttp";
+import { FakeQuestions } from "./fakeQuestions";
 
 const API = "*/api/v1";
 
@@ -38,7 +32,7 @@ type Question = Schemas["PlanOut"]["questions"][number];
 type Receipt = Schemas["ReceiptOut"];
 type SentText = Schemas["SentTextOut"];
 type Run = Schemas["RunOut"];
-type Paper = Schemas["app__api__schemas__papers__PaperOut"];
+type Paper = Schemas["PaperOut"];
 type Author = Schemas["AuthorOut"];
 type Tier = Schemas["ScreeningTier"];
 
@@ -122,6 +116,29 @@ function compile(themes: Schemas["ThemeOut"][]): string {
 					.join(" OR ")})`,
 		)
 		.join(" AND ");
+}
+
+/** As the API works it out: the current version against the one accepted before it. */
+function rerunFrom(versions: readonly Version[]): "queries" | "screen" | null {
+	const current = versions.at(-1);
+	if (current === undefined) {
+		return null;
+	}
+	const before = versions
+		.filter((v) => v.accepted_at !== null && v.version < current.version)
+		.at(-1);
+	if (before === undefined) {
+		return "queries";
+	}
+	const terms = (v: Version) =>
+		JSON.stringify(
+			v.themes.map((t) => [t.name, t.concepts.map((c) => c.terms)]),
+		);
+	const criteria = (v: Version) => JSON.stringify(v.criteria);
+	if (terms(before) !== terms(current)) {
+		return "queries";
+	}
+	return criteria(before) !== criteria(current) ? "screen" : null;
 }
 
 export function draftVersion(
@@ -246,8 +263,18 @@ export class FakeReviews {
 	}[] = [];
 	/** When true, every planning call fails as an unreachable model server does (502). */
 	isModelDown = false;
+	/** What the next change request alters: the search terms, or only the criteria. */
+	nextChange: "search" | "criteria" = "search";
 	/** When set, planning calls wait for it, so a test can see what shows meanwhile. */
 	modelReply: Promise<void> | null = null;
+	/** Follow-up questions and their threads (fakeQuestions.ts). */
+	readonly questions = new FakeQuestions({
+		reach: (reviewId, write) => this.reach(reviewId, write),
+		userId: () => this.access.userId(),
+		mask,
+		latestRunId: (reviewId) =>
+			this.runs.find((r) => r.review_id === reviewId)?.id ?? null,
+	});
 
 	constructor(private readonly access: Access) {}
 
@@ -327,7 +354,6 @@ export class FakeReviews {
 			"mask",
 			"screen",
 			"export",
-			"index",
 			"answer",
 		],
 	): Run {
@@ -452,6 +478,7 @@ export class FakeReviews {
 			pending_change: plan?.pendingChange ?? null,
 			current: versions.at(-1) ?? null,
 			accepted_version: accepted?.version ?? null,
+			rerun_from: rerunFrom(versions),
 			versions: versions.map((v) => ({
 				version: v.version,
 				origin: v.origin,
@@ -673,10 +700,13 @@ export class FakeReviews {
 						return problem(409, "There is no draft to change yet.");
 					}
 					const body = await jsonBody(request);
-					if (
-						body["based_on_version"] !== current.version ||
-						current.accepted_at !== null
-					) {
+					if (review.status === "running" || review.status === "waiting") {
+						return problem(
+							409,
+							"The plan cannot change while a run is going. Wait for it, or cancel it.",
+						);
+					}
+					if (body["based_on_version"] !== current.version) {
 						return problem(
 							409,
 							"The draft has changed since you looked. Showing the latest.",
@@ -694,15 +724,23 @@ export class FakeReviews {
 						user_id: this.access.userId(),
 					};
 					const request_text = text(body, "request");
-					const next: Draft = FIRST_DRAFT.map(([theme, concepts]) => [
-						theme,
-						concepts.map(
-							([term, synonyms]): Concept =>
-								term === "cash transfers"
-									? [term, [...synonyms, "mobile money"], person]
-									: [term, synonyms],
-						),
-					]);
+					const isCriteriaOnly = this.nextChange === "criteria";
+					const next: Draft = isCriteriaOnly
+						? FIRST_DRAFT
+						: FIRST_DRAFT.map(([theme, concepts]) => [
+								theme,
+								concepts.map(
+									([term, synonyms]): Concept =>
+										term === "cash transfers"
+											? [term, [...synonyms, "mobile money"], person]
+											: [term, synonyms],
+								),
+							]);
+					// A draft asked for after a run is dated after it, as it would be.
+					const afterRun = this.runs.some((r) => r.review_id === review.id);
+					const at = afterRun
+						? `2026-11-03T11:0${plan.versions.length + 1}:00Z`
+						: "2026-11-03T10:45:00Z";
 					this.addDraft(
 						review,
 						plan,
@@ -716,9 +754,22 @@ export class FakeReviews {
 								id: nextId("cr"),
 								text: request_text,
 								requested_by: this.access.userId() ?? "",
-								requested_at: "2026-11-03T10:45:00Z",
+								requested_at: at,
 								based_on_version: current.version,
 							},
+							...(afterRun ? { created_at: at } : {}),
+							...(isCriteriaOnly
+								? {
+										criteria: [
+											...CRITERIA,
+											{
+												id: "E2",
+												kind: "exclusion",
+												text: "Published before 2015",
+											},
+										],
+									}
+								: {}),
 						},
 					);
 					return HttpResponse.json(this.planOut(review));
@@ -981,6 +1032,8 @@ export class FakeReviews {
 					excluded_by_reason: { E1: count("exclude") },
 				});
 			}),
+
+			...this.questions.handlers(),
 		];
 	}
 }

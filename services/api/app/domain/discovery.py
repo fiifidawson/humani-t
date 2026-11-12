@@ -1,12 +1,7 @@
 """What a run found and read: its papers, the sources it asked, and the text kept for screening.
 
-This module holds the rules and the stored shapes for the `discover` and
-`ingest` stages. It holds no plaintext beyond what a caller hands in: titles,
-abstracts and queries are sealed under the project's key by the application
-layer, and a paper's identity is stored only as a keyed digest.
-
-What belongs elsewhere: identity and deduplication of a single record
-(`paper.py`), screening decisions (`screening.py`).
+Titles, abstracts and queries arrive already sealed under the project's key, and a paper's
+identity is stored only as a keyed digest. Deduplicating one record is `paper.py`'s job.
 """
 
 from __future__ import annotations
@@ -21,6 +16,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.domain.paper import PaperRecord, deduplicate
+from app.domain.timestamps import require_aware
 
 
 class TextKind(StrEnum):
@@ -33,11 +29,6 @@ class TextKind(StrEnum):
 class SourceOutcome(StrEnum):
     SEARCHED = "searched"
     FAILED = "failed"
-
-
-def _require_aware(owner: str, name: str, value: datetime) -> None:
-    if value.tzinfo is None:
-        raise ValueError(f"{owner}.{name} must be timezone-aware")
 
 
 def identity_digest(key: bytes, identity: str) -> bytes:
@@ -111,16 +102,14 @@ class StoredPaper:
             raise ValueError("StoredPaper.source_id must not be blank")
         if not self.record_sealed:
             raise ValueError("StoredPaper.record_sealed must not be empty")
-        _require_aware("StoredPaper", "created_at", self.created_at)
+        require_aware("StoredPaper", created_at=self.created_at)
 
 
 @dataclass(frozen=True, slots=True)
 class PaperSet:
     """Which run's discovery a run works from.
 
-    A run that discovered has its own set (`basis_run_id == run_id`). A run
-    started without `discover` (a retry from Screen, say) adopts the newest
-    set of its review, so its papers, tags and counts are that run's.
+    A run started without `discover` (a retry from Screen, say) adopts the review's newest.
     """
 
     run_id: UUID
@@ -128,7 +117,7 @@ class PaperSet:
     recorded_at: datetime
 
     def __post_init__(self) -> None:
-        _require_aware("PaperSet", "recorded_at", self.recorded_at)
+        require_aware("PaperSet", recorded_at=self.recorded_at)
 
     @property
     def is_own(self) -> bool:
@@ -177,7 +166,7 @@ class RunSource:
             raise ValueError("RunSource.vocabulary_version starts at 1")
         if not self.query_sealed:
             raise ValueError("RunSource.query_sealed must not be empty")
-        _require_aware("RunSource", "searched_at", self.searched_at)
+        require_aware("RunSource", searched_at=self.searched_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,7 +182,7 @@ class PaperText:
     def __post_init__(self) -> None:
         if not self.text_sealed:
             raise ValueError("PaperText.text_sealed must not be empty")
-        _require_aware("PaperText", "ingested_at", self.ingested_at)
+        require_aware("PaperText", ingested_at=self.ingested_at)
 
 
 @dataclass(frozen=True, slots=True)

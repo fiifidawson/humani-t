@@ -11,30 +11,29 @@
 import { Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import {
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useId,
-	useMemo,
-	useState,
-} from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
 import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
-import { projectQuery, sessionQuery } from "../../app/queries";
-import {
-	planQuery,
-	reviewQuery,
-	reviewsQuery,
-	runsQuery,
-} from "../../app/reviewQueries";
+import { reviewsQuery } from "../../app/reviewQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { Composer } from "../chat/Composer";
 import { CanvasWidthProvider } from "./canvasWidth";
+import {
+	AskControls,
+	FollowUpsProvider,
+	SendingQuestion,
+	ThreadList,
+	useAskSetup,
+	useAskState,
+	useFollowUpTurns,
+	useHasBrief,
+	VIEWER_ASK_NOTE,
+	ViewerNote,
+} from "./FollowUps";
 import { LiveRunProvider } from "./liveRun";
 import { totalMasked } from "./masking";
 import {
@@ -54,14 +53,12 @@ import { LatestRunCards, PastRunLine } from "./RunCards";
 import {
 	type Plan,
 	type ReviewActions,
-	type ReviewContextValue,
 	ReviewProvider,
 	type Run,
 	useReview,
-	useReviewActions,
+	useReviewValue,
 } from "./reviewContext";
 
-const COMPOSER_ID = "composer-input";
 const CHANGE_HINT =
 	"Say what to change, for example: add 'mobile money' as a synonym for cash.";
 
@@ -141,14 +138,53 @@ function composerFor(
 				actions.change.mutate({ request: text, basedOn: current.version }),
 		};
 	}
+	// After a plan is accepted, and after a run, a message changes the search: the
+	// next draft shows what changed, and accepting it runs from the stage it affects.
 	const isRunGoing = runs[0] !== undefined && runs[0].outcome === null;
+	const label = "Change the search";
+	const placeholder =
+		"Say what to change, for example: make it general, any refugees, not only Tigray";
+	if (current === null) {
+		return {
+			label,
+			placeholder,
+			unavailableReason: "There is no plan yet.",
+			onSend: ignore,
+		};
+	}
+	if (isRunGoing) {
+		return {
+			label,
+			placeholder,
+			unavailableReason:
+				"Wait for the run to finish, or cancel it, to change the search.",
+			onSend: ignore,
+		};
+	}
+	if (plan.pending_change !== null) {
+		return {
+			label,
+			placeholder,
+			unavailableReason: "The search planner is drafting the next version.",
+			onSend: ignore,
+		};
+	}
+	if (current.is_strict) {
+		return {
+			label,
+			placeholder,
+			unavailableReason:
+				"Your own terms are used exactly as given, so the model doesn't change them.",
+			onSend: ignore,
+		};
+	}
 	return {
-		label: "Ask a follow-up",
-		placeholder: isRunGoing
-			? "Ask about what's already indexed, or wait for the brief"
-			: "Ask a follow-up",
-		unavailableReason: "Follow-up questions arrive with the decision brief.",
-		onSend: ignore,
+		label,
+		placeholder,
+		note: "A change makes a new draft. Nothing runs until you accept it.",
+		...busy,
+		onSend: (text) =>
+			actions.change.mutate({ request: text, basedOn: current.version }),
 	};
 }
 
@@ -174,60 +210,75 @@ function Conversation({
 	const drafts = receipts.filter((r) => r.purpose === "draft");
 	const current = plan.current;
 	const pendingChange = change.isPending ? change.variables : undefined;
+	const followUps = useFollowUpTurns();
 
-	const turns: ReactNode[] = [];
+	// Drafts and runs in the order they happened: a draft asked for after Run 1
+	// sits below it. Within one draft, its turns keep the order they were added.
+	const turns: { at: string; node: ReactNode }[] = [];
 	let revision = 0;
 	plan.versions.forEach((summary, index) => {
 		const next = plan.versions[index + 1];
 		const isCurrent = current !== null && current.version === summary.version;
 		if (summary.version > 1 && summary.origin === "llm_assisted") {
 			const request = isCurrent ? current.change_request : null;
-			turns.push(
-				request === null ? (
-					<PastChangeTurn
-						key={`change-${summary.version}`}
-						version={summary.version}
-					/>
-				) : (
-					<ChangeTurn
-						key={`change-${summary.version}`}
-						text={request.text}
-						at={request.requested_at}
-					/>
-				),
-			);
+			turns.push({
+				at: summary.created_at,
+				node:
+					request === null ? (
+						<PastChangeTurn
+							key={`change-${summary.version}`}
+							version={summary.version}
+						/>
+					) : (
+						<ChangeTurn
+							key={`change-${summary.version}`}
+							text={request.text}
+							at={request.requested_at}
+						/>
+					),
+			});
 			// Receipts carry no version, so the n-th revision's receipt is the n-th
 			// "revise" call. A call that failed before drafting would shift this.
 			const receipt = revisions[revision];
 			const item = receipt?.items.find((i) => i.kind === "change_request");
 			revision += 1;
 			if (receipt !== undefined && item !== undefined) {
-				turns.push(
-					<PrivacyReceipt
-						key={`receipt-${receipt.id}`}
-						receipt={receipt}
-						item={item}
-						isOpenAtFirst={opensAtFirst(item.counts, false)}
-					/>,
-				);
+				turns.push({
+					at: summary.created_at,
+					node: (
+						<PrivacyReceipt
+							key={`receipt-${receipt.id}`}
+							receipt={receipt}
+							item={item}
+							isOpenAtFirst={opensAtFirst(item.counts, false)}
+						/>
+					),
+				});
 			}
 		}
 		if (next !== undefined) {
-			turns.push(
-				<ReplacedDraftLine
-					key={`draft-${summary.version}`}
-					version={summary.version}
-					by={next.version}
-				/>,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: (
+					<ReplacedDraftLine
+						key={`draft-${summary.version}`}
+						version={summary.version}
+						by={next.version}
+					/>
+				),
+			});
 		} else if (isCurrent && current.accepted_at !== null) {
-			turns.push(
-				<AcceptedLine key={`draft-${summary.version}`} version={current} />,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: (
+					<AcceptedLine key={`draft-${summary.version}`} version={current} />
+				),
+			});
 		} else if (isCurrent) {
-			turns.push(
-				<DraftCard key={`draft-${summary.version}`} version={current} />,
-			);
+			turns.push({
+				at: summary.created_at,
+				node: <DraftCard key={`draft-${summary.version}`} version={current} />,
+			});
 		}
 	});
 
@@ -271,7 +322,25 @@ function Conversation({
 					}}
 				/>
 			) : null}
-			{turns}
+			{[
+				...turns,
+				...runs.slice(1).map((run) => ({
+					at: run.created_at,
+					node: <PastRunLine key={run.id} run={run} />,
+				})),
+				...(runs[0] === undefined
+					? []
+					: [
+							{
+								at: runs[0].created_at,
+								node: <LatestRunCards key="latest-run" />,
+							},
+						]),
+				...followUps,
+			]
+				.sort((a, b) => a.at.localeCompare(b.at))
+				.map((item) => item.node)}
+			<SendingQuestion />
 			{pendingChange === undefined ? null : (
 				<ChangeTurn text={pendingChange.request} isSending />
 			)}
@@ -297,13 +366,6 @@ function Conversation({
 					}}
 				/>
 			) : null}
-			{runs
-				.slice(1)
-				.reverse()
-				.map((run) => (
-					<PastRunLine key={run.id} run={run} />
-				))}
-			<LatestRunCards />
 		</>
 	);
 }
@@ -320,7 +382,13 @@ function ReviewLayout({
 	const { review, plan, runs, canManage, actions } = useReview();
 	const { pathname } = useLocation();
 	const isCanvasOpen = !pathname.replace(/\/$/, "").endsWith(`/r/${review.id}`);
-	const setup = composerFor(plan, runs, actions);
+	const hasBrief = useHasBrief();
+	const ask = useAskState(draft, setDraft);
+	const askSetup = useAskSetup(ask);
+	const setup =
+		hasBrief && ask.choice === "ask"
+			? askSetup
+			: composerFor(plan, runs, actions);
 	const chatId = useId();
 	const [chatWidth, setChatWidth] = usePanelWidth("chat");
 	const isWide = useMediaQuery(WIDE_SCREEN);
@@ -347,47 +415,51 @@ function ReviewLayout({
 				flex={isCanvasOpen ? { base: "1", lg: `0 0 ${chatWidth}px` } : "1"}
 				maxW={isCanvasOpen ? { lg: "calc(100% - 480px)" } : undefined}
 			>
-				<Flex direction="column" flex="1" minW="0" minH="0" bg="bg.subtle">
-					{/* position: relative keeps visually hidden text, which is absolutely
+				<Flex
+					direction="column"
+					flex="1"
+					minW="0"
+					minH="0"
+					bg="bg.subtle"
+					position="relative"
+				>
+					<FollowUpsProvider ask={ask}>
+						{/* position: relative keeps visually hidden text, which is absolutely
 					    positioned, inside this scroller; without it the page itself scrolls. */}
-					<Flex
-						role="log"
-						aria-label="Project conversation"
-						flex="1"
-						minH="0"
-						position="relative"
-						overflowY="auto"
-						direction="column"
-						p="4"
-					>
-						<Stack gap="4" w="full" maxW="3xl" mx="auto">
-							<Conversation draft={draft} isFirstReview={isFirstReview} />
-						</Stack>
-					</Flex>
-					{canManage ? (
-						<Composer
-							label={setup.label}
-							placeholder={setup.placeholder}
-							draft={draft}
-							onDraftChange={setDraft}
-							onSend={setup.onSend}
-							unavailableReason={setup.unavailableReason}
-							note={setup.note}
-						/>
-					) : (
-						<Text
-							px="4"
-							py="3"
-							borderTopWidth="1px"
-							borderColor="border"
-							bg="bg"
-							fontSize="sm"
-							color="fg.muted"
-							textAlign="center"
+						<Flex
+							role="log"
+							aria-label="Project conversation"
+							flex="1"
+							minH="0"
+							position="relative"
+							overflowY="auto"
+							direction="column"
+							p="4"
 						>
-							Only owners and reviewers can change or accept the search plan.
-						</Text>
-					)}
+							<Stack gap="4" w="full" maxW="3xl" mx="auto">
+								<Conversation draft={draft} isFirstReview={isFirstReview} />
+							</Stack>
+						</Flex>
+						<ThreadList />
+						{canManage ? (
+							<Composer
+								label={setup.label}
+								placeholder={setup.placeholder}
+								draft={draft}
+								onDraftChange={setDraft}
+								onSend={setup.onSend}
+								unavailableReason={setup.unavailableReason}
+								note={setup.note}
+								above={hasBrief ? <AskControls /> : undefined}
+							/>
+						) : (
+							<ViewerNote>
+								{hasBrief
+									? VIEWER_ASK_NOTE
+									: "Only owners and reviewers can change or accept the search plan."}
+							</ViewerNote>
+						)}
+					</FollowUpsProvider>
 				</Flex>
 			</Box>
 			{isCanvasOpen && isWide && !isChatHidden ? (
@@ -413,67 +485,33 @@ export function ReviewPage() {
 	const { projectId, reviewId } = useParams({
 		from: "/signed-in/p/$projectId/r/$reviewId",
 	});
-	const project = useQuery(projectQuery(api, projectId));
-	const review = useQuery(reviewQuery(api, projectId, reviewId));
-	const plan = useQuery(planQuery(api, reviewId));
-	const runs = useQuery(runsQuery(api, reviewId));
 	const reviews = useQuery(reviewsQuery(api, projectId));
-	const session = useQuery(sessionQuery(api));
-	const actions = useReviewActions(reviewId);
 	const [draft, setDraft] = useDraft(`review:${reviewId}`);
-	const focusComposer = useCallback(
-		() => document.getElementById(COMPOSER_ID)?.focus(),
-		[],
+	const { value, actions, failed } = useReviewValue(
+		projectId,
+		reviewId,
+		setDraft,
 	);
 
 	// A review created from the workspace carries its mode here; start its plan
 	// once, now that this page can show the question and any failure.
 	const startPlan = actions.startPlan.mutate;
+	const planStatus = value?.plan.status;
 	useEffect(() => {
 		const mode = memory.planModes.get(reviewId);
-		if (mode !== undefined && plan.data?.status === "new") {
+		if (mode !== undefined && planStatus === "new") {
 			memory.planModes.delete(reviewId);
 			startPlan(mode);
 		}
-	}, [memory, reviewId, plan.data?.status, startPlan]);
+	}, [memory, reviewId, planStatus, startPlan]);
 
-	const value = useMemo<ReviewContextValue | null>(
-		() =>
-			project.data === undefined ||
-			review.data === undefined ||
-			plan.data === undefined ||
-			runs.data === undefined
-				? null
-				: {
-						project: project.data,
-						review: review.data,
-						plan: plan.data,
-						runs: runs.data,
-						canManage: project.data.role !== "viewer",
-						userId: session.data?.user.id ?? null,
-						actions,
-						setComposerText: setDraft,
-						focusComposer,
-					},
-		[
-			project.data,
-			review.data,
-			plan.data,
-			runs.data,
-			session.data,
-			actions,
-			setDraft,
-			focusComposer,
-		],
-	);
-
-	const failed = [review, plan, runs, reviews].find((query) => query.isError);
-	if (failed !== undefined) {
+	const failure = failed ?? (reviews.isError ? reviews : undefined);
+	if (failure !== undefined) {
 		return (
 			<Stack p="6" gap="4" maxW="3xl" mx="auto" w="full">
 				<ErrorNotice
-					error={failed.error}
-					onRetry={() => void failed.refetch()}
+					error={failure.error}
+					onRetry={() => void failure.refetch()}
 				/>
 			</Stack>
 		);

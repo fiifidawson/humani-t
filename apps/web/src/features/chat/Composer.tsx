@@ -1,14 +1,10 @@
 /**
- * The one text box under the chat (UI_UX_SPEC §5.4).
+ * The one text box under the chat. Controlled, so an unsent draft survives a route
+ * change or a sign-in; Enter sends, Shift+Enter adds a line.
  *
- * Controlled: the draft lives with the caller, so unsent text survives the
- * component going away (a route change, a sign-in). The label says what
- * sending will do; Enter sends, Shift+Enter adds a line.
- *
- * The box grows with its text, wrapped lines included, up to 40% of the
- * viewport, then scrolls. A hidden copy of the text in the same grid cell sets
- * the height. Chakra's `autoresize` was not used: it measures in script and
- * writes `style.height`, which src/csp.test.ts keeps out of application code.
+ * It grows to 40% of the viewport through a hidden copy of the text in the same
+ * grid cell. Chakra's `autoresize` is not used: it writes `style.height`, which
+ * src/csp.test.ts keeps out of application code.
  */
 
 import {
@@ -20,7 +16,7 @@ import {
 	VisuallyHidden,
 } from "@chakra-ui/react";
 import { ArrowUp } from "lucide-react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { useId } from "react";
 
 interface ComposerProps {
@@ -33,6 +29,8 @@ interface ComposerProps {
 	unavailableReason?: string | undefined;
 	/** A line of help for this moment, read with the box ("Say what to change, for example…"). */
 	note?: string | undefined;
+	/** Shown above the label, such as a choice of what the box does. */
+	above?: ReactNode;
 }
 
 /** The textarea and its hidden copy must lay text out identically, or the height drifts. */
@@ -53,6 +51,7 @@ export function Composer({
 	onSend,
 	unavailableReason,
 	note,
+	above,
 }: ComposerProps) {
 	const id = useId();
 	const hintId = `${id}-hint`;
@@ -105,6 +104,7 @@ export function Composer({
 			onSubmit={onSubmit}
 		>
 			<Box maxW="3xl" mx="auto">
+				{above}
 				<chakra.label
 					htmlFor="composer-input"
 					display="block"

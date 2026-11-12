@@ -1,13 +1,8 @@
 """The always-on pattern detector: structured identifiers, found with the standard library.
 
-Sources: the brief's rule 5 (medical record numbers such as `MRN 448-1207` were
-missed), rule 3 (medical record and insurance ids, phone numbers, emails) and
-architecture §3.9.1 (pattern rules for structured identifiers).
-
-Every pattern has a table of texts it must find and texts it must leave alone.
-The negatives matter as much as the positives: the same detector checks every
-outgoing prompt, and a pattern that fires on "95% CI 1.2-3.4" or a year range
-would refuse ordinary screening prompts about published papers.
+Every pattern has texts it must find and texts it must leave alone. The negatives matter as
+much: the same detector checks every outgoing prompt, so a pattern that fires on
+"95% CI 1.2-3.4" would refuse ordinary screening prompts.
 """
 
 from __future__ import annotations

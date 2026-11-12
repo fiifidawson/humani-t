@@ -157,6 +157,16 @@ This phase gives humani-t its way out to the world, and makes it safe. Every req
 - **Where:** [`app/application/pipeline.py`](../../services/api/app/application/pipeline.py) (`NOTHING_FOUND`).
 - **Proven by:** `tests/test_pipeline_stages.py::TestDiscover::test_a_search_that_finds_nothing_stops_the_run_here_and_says_so`.
 
+### D9.18 Changing the search after a run, from the chat (Wave 2)
+
+- **Decision:**
+  - After a run, the chat box asks for changes ("Change the search"), and the next draft appears in time order after the run.
+  - The plan reports `rerun_from`, worked out by `first_stage_to_redo` from the version accepted before. On acceptance the web app starts every stage, or Screen onwards, or nothing.
+  - The accept button names which: Accept and search again, Accept and re-screen, Accept.
+- **Why:** the person says what to change in a sentence and never configures stages. A changed search finds different papers, so it must search again. Changed criteria only need the papers already found judged again.
+- **Where:** [`app/domain/plans.py`](../../services/api/app/domain/plans.py) (`first_stage_to_redo`), [`app/application/planning.py`](../../services/api/app/application/planning.py) (`PlanView.rerun_from`), [`apps/web/src/features/reviews/reviewContext.tsx`](../../apps/web/src/features/reviews/reviewContext.tsx) (`stagesFrom`).
+- **Proven by:** `tests/test_plans_domain.py::TestWhereARunAfterAChangeStarts`, `tests/test_plans_api.py::TestWhereTheNextRunStarts`, `apps/web/src/features/reviews/ChangesAfterRun.test.tsx`.
+
 ## Libraries
 
 ### httpx2 2.12.0 (with httpcore2 2.12.0)
@@ -599,12 +609,18 @@ This part turns a review's question into an accepted, frozen search plan: its vo
 
 #### D9.22 Masked text never becomes a search term
 
-- **Decision:** a model-drafted term holding a placeholder such as `[LOCATION_1]` is dropped and counted in the version's `notes`.
-- **Why:** the plan's terms are sent to the paper sources; a placeholder would search for nonsense.
-- **Rejected:** restoring the original value (unmasked text would leave for a paper source).
-- **Costs:** a draft for a place-specific question may lose its place terms; a person can add them by uploading or at the gate.
-- **Where:** `_draft_from` in [`app/application/planning.py`](../../services/api/app/application/planning.py).
-- **Proven by:** `tests/test_plans_api.py::TestChanges::test_model_terms_that_hold_masked_text_are_dropped_and_noted`.
+- **Decision:**
+  - a model-drafted term holding a placeholder such as `[LOCATION_1]` is dropped and counted in the version's `notes`, also when the model rewrote it (`<LOCATION_1>`, `location_1 camps`);
+  - every planning prompt tells the model never to guess what a placeholder stands for and to keep that part of the plan general (for a masked place, no place terms). In deep mode, a clarifying question may ask the team to name the country or wider region (prompts `plan.clarify@2`, `plan.draft@2`, `plan.revise@2`).
+- **Why:** the plan's terms are sent to the paper sources; a placeholder would search for nonsense. In a real run with a hosted model, "the Sahel" reached the planner as a placeholder, and the model built a term from it or guessed a place.
+- **Rejected:**
+  - restoring the original value (unmasked text would leave for a paper source);
+  - dropping a country or region the model added on its own: it cannot be told apart from a fair synonym for a place the question kept, such as "Mali" for "the Sahel".
+- **Costs:**
+  - a draft for a place-specific question may lose its place terms; a person can add them by uploading or at the gate, or the operator can keep countries and regions ([ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md));
+  - a guessed place, or a placeholder written out in words ("Location 1"), is caught only by the prompt.
+- **Where:** `_draft_from` and `_MASKING_NOTE` in [`app/application/planning.py`](../../services/api/app/application/planning.py); `holds_placeholder` in [`app/domain/masking.py`](../../services/api/app/domain/masking.py).
+- **Proven by:** `tests/test_plans_api.py::TestChanges::test_model_terms_that_hold_masked_text_are_dropped_and_noted`, `::test_model_terms_that_hold_a_rewritten_placeholder_are_dropped_too`, `tests/test_plans_api.py::TestMaskedPlaces`; `tests/test_masking_domain.py::TestHoldsPlaceholder`.
 
 ### Libraries
 
@@ -718,13 +734,12 @@ uv run pytest tests/test_plans_domain.py tests/test_plans_storage_contract.py te
 | Id | Gap | Effect | Plan |
 | --- | --- | --- | --- |
 | G9.11 | Planning text is masked by the pattern detector only | Names and places in a question reach the model unmasked; only structured identifiers are masked | The masking lane wires its local NER detector into `_planning_sanitizer()` in `api/dependencies.py` |
-| G9.12 | Project masking rules are not applied to planning text | A term the owner marked "always mask" is masked only if a detector also finds it | Wire the mask lane's rule store as the `MaskingRuleSource` in `api/dependencies.py` (`NO_PROJECT_RULES` today) |
 | G9.13 | No automatic fitting to a source's limits, and no per-source "fits" indicator | A very long vocabulary fails at OpenAlex's URL limit during discover | A fit check per compiler, shown on the draft |
 | G9.14 | A concept moved between themes shows as removed and added | The compare view has no "moved" marker (UI_UX_SPEC §6.5) | Detect moves when the canvas needs them |
 | G9.15 | A draft can be edited directly only through the gate's revisions or an upload | No pill editing (UI_UX_SPEC §16, question 6) | A `PATCH` on the draft when the canvas allows direct edits |
 | G9.16 | A failed revision leaves the review in `changes_requested` | The old draft cannot be accepted until the change is asked for again | Ask again to retry; a "drop this request" action if it proves annoying |
 
-G9.1 (no planning conversation) and G9.6 (compiled queries not stored) are closed by this part.
+G9.1 (no planning conversation) and G9.6 (compiled queries not stored) are closed by this part. G9.12 (project masking rules not applied to planning text) is closed too: planning takes the project's `MaskingRuleService`.
 
 ### Glossary
 

@@ -1,13 +1,8 @@
 """Papers, kept texts and decisions as the use cases see them: sealed in storage, clear here.
 
-`PaperStore` is the one place that knows how each of them is sealed under the
-project's key and bound to its row, and how a run finds its papers (its own
-discovery, or one it adopted). `ScreenedEvidence` gives the brief stage the
-included papers' masked passages. `PaperService` answers the paper, PRISMA and
-manifest routes, checking membership first.
-
-Everything that leaves `PaperService` is masked text or bibliographic metadata;
-the raw kept text is read only by the mask stage, through `texts_for_run`.
+`PaperStore` is the one place that knows how each is sealed and bound to its row.
+Everything leaving `PaperService` is masked text or bibliographic metadata; raw kept text
+is read only by the mask stage, through `texts_for_run`.
 """
 
 from __future__ import annotations
@@ -21,7 +16,7 @@ from uuid import UUID
 
 from app.application.accounts import Current
 from app.application.encryption import ScopeEncryption
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
 from app.domain.discovery import (
@@ -63,7 +58,6 @@ _TEXT_PURPOSE = "paper_texts.text"
 _RATIONALE_PURPOSE = "screening_decisions.rationale"
 _ANSWERS_PURPOSE = "screening_decisions.answers"
 
-_REVIEW_NOT_FOUND = "No such review."
 _RUN_NOT_FOUND = "No such run."
 _PAPER_NOT_FOUND = "No such paper."
 _EVENTS_BATCH = 10_000
@@ -209,9 +203,8 @@ class PaperStore:
     async def screened_by(self, uow: UnitOfWork, run: Run) -> Run:
         """The run whose screening decisions apply to `run`'s papers.
 
-        The run itself if it screened. Otherwise (a retry from Brief, say) the
-        newest earlier run of the review that screened the same paper set; the run
-        itself when there is none, which then has no decisions.
+        If `run` did not screen (a retry from Brief, say), the newest earlier run that
+        screened the same paper set, else `run` itself, with no decisions.
         """
         if "screen" in run.stages:
             return run
@@ -297,9 +290,8 @@ def _answers_from_json(data: bytes) -> tuple[CriterionAnswer, ...]:
 class ScreenedEvidence:
     """`EvidenceSource`: the masked passages of a run's included papers, tagged by place.
 
-    With `documents`, the project's approved documents follow the papers, tagged
-    `D<n>`: a team's own files are evidence without being screened, because the
-    team chose them, and only once an owner approved their masking.
+    With `documents`, approved documents follow, tagged `D<n>`: the team chose them, so
+    they are evidence without screening once an owner approved their masking.
     """
 
     def __init__(
@@ -355,10 +347,8 @@ NOT_SCREENED = "not_screened"
 class PaperRow:
     """One row of the screening table: metadata, its place, and its decision if any.
 
-    `status` says what screening did with it: `screened` (it has a decision),
-    `skipped` (the screen stage had no masked abstract to send; see
-    `skipped_because`), `failed` (the privacy check stopped its text), or
-    `not_screened` (the run has not screened it).
+    `status` is `skipped` when there was no masked text to send (see `skipped_because`)
+    and `failed` when the privacy check stopped it.
     """
 
     paper_id: UUID
@@ -399,7 +389,7 @@ UNSCREENED = "unscreened"
 LABEL_FILTERS = (*(label.value for label in ScreeningLabel), UNSCREENED)
 TIER_FILTERS = (*(tier.value for tier in ScreeningTier), SKIPPED, FAILED, NOT_SCREENED)
 
-# Most relevant first, as the screening table lists them (UI_UX_SPEC §6.8).
+# Most relevant first, as the screening table lists them.
 _TIER_ORDER = {
     ScreeningTier.HIGHLY_RELEVANT: 0,
     ScreeningTier.RELEVANT: 1,
@@ -460,10 +450,6 @@ class PaperService:
         self._masked = masked
         self._log = RunLog(encryption)
 
-    async def authorize_review(self, current: Current, review_id: UUID) -> None:
-        async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
-
     async def list_papers(
         self,
         current: Current,
@@ -485,7 +471,7 @@ class PaperService:
         if page < 1:
             raise ValueError("page counts from 1")
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             run = await self._run_of(uow, review_id, run_id)
             papers = await self._store.run_papers(uow, run)
             decided = {d.paper_id: d for d in await uow.screening.list_for_run(run.id)}
@@ -516,7 +502,10 @@ class PaperService:
         self, current: Current, review_id: UUID, paper_id: UUID, *, run_id: UUID | None = None
     ) -> PaperDetail:
         async with self._storage.unit_of_work() as uow:
-            project_id = await self._review_project(uow, current, review_id)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.READ_PROJECT
+            )
+            project_id = review.project_id
             run = await self._run_of(uow, review_id, run_id)
             seen = next(
                 (p for p in await self._store.run_papers(uow, run) if p.paper_id == paper_id),
@@ -539,7 +528,7 @@ class PaperService:
         self, current: Current, review_id: UUID, *, run_id: UUID | None = None
     ) -> PrismaView:
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             run = await self._run_of(uow, review_id, run_id)
             return PrismaView(
                 run.id,
@@ -582,19 +571,6 @@ class PaperService:
                 finished.append(StageSummary(stage, float(seconds), summary))
         return assemble_manifest(run, finished)
 
-    async def _review_project(self, uow: UnitOfWork, current: Current, review_id: UUID) -> UUID:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow,
-            current.user.id,
-            review.project_id,
-            Action.READ_PROJECT,
-            not_found=_REVIEW_NOT_FOUND,
-        )
-        return review.project_id
-
     async def _run_of(self, uow: UnitOfWork, review_id: UUID, run_id: UUID | None) -> Run:
         """The named run of this review, or its newest run that has papers."""
         if run_id is not None:
@@ -612,9 +588,8 @@ class PaperService:
     ) -> dict[UUID, tuple[str, str | None]]:
         """Why each paper has no decision in this run, and for a skipped one, what was missing.
 
-        Failed papers are named by the screen stage's own rows in the run's log,
-        written when the privacy check stopped them. Skipped ones are those the
-        stage passes over (no abstract, or no masked text), once it has finished.
+        Failed papers come from the screen stage's rows in the run's log; skipped ones are
+        those it passed over once it has finished.
         """
         if not papers:
             return {}

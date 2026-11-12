@@ -1,11 +1,7 @@
 """In-process sliding-window limiter for tests and single-process development.
 
-Each API worker would hold its own counts, so production uses Valkey instead
-(Settings refuses to start without it).
-
-Memory stays bounded: `check` never creates an entry, and keys whose newest
-event has left every window are swept periodically. Without the sweep, every
-email address and IP ever seen would stay in memory for the life of the process.
+Production uses Valkey, because each worker would keep its own counts here. Old keys
+are swept, or every email and IP ever seen would stay in memory.
 """
 
 from __future__ import annotations

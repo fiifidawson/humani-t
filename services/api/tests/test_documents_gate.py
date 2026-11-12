@@ -1,12 +1,8 @@
 """The privacy_review gate, fed by real uploaded documents.
 
-Sources: architecture §3.9.1 and §4.4 (an uploaded document is not used until a
-person approves its masking; the run waits for it without a worker) and
-UI_UX_SPEC §6.6 ("Approving the last document resumes the run").
-
-The worker is the real `RunWorker` and the documents come from the real
-upload route and `DocumentProcessor`, with the production extractor: a child
-process. Only the papers' raw text is a stand-in, as in `test_mask_stage.py`.
+A document is not used until a person approves its masking, and the run waits without a
+worker. The worker, upload route, `DocumentProcessor` and child-process extractor are real;
+only the papers' raw text is a stand-in, as in `test_mask_stage.py`.
 """
 
 from __future__ import annotations

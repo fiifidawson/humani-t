@@ -12,7 +12,6 @@ const STAGES: Readonly<Record<StageId, { name: string; activity: string }>> = {
 	mask: { name: "Mask", activity: "Masking" },
 	screen: { name: "Screen", activity: "Screening" },
 	export: { name: "Export", activity: "Exporting" },
-	index: { name: "Index", activity: "Preparing for questions" },
 	answer: { name: "Brief", activity: "Writing the brief" },
 };
 

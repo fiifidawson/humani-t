@@ -1,12 +1,9 @@
 /**
- * The decision brief (UI_UX_SPEC §6.9), read-only, in the order the API's
- * renderer uses: summary, options, trade-offs, disagreements, if this matters
- * most, gaps, sources, then the quality checks folded.
+ * The decision brief, read-only, in the order the API's renderer uses.
  *
- * What the person picks as mattering most only reorders and highlights: the
- * brief has no scores per cell and this screen invents none (§6.9). The order
- * of the options is the Writer's, and nothing is ranked or highlighted unless
- * the person asks.
+ * What the person picks as mattering most only reorders and highlights: the brief
+ * has no per-cell scores and this screen invents none. Options stay in the Writer's
+ * order, and nothing is ranked unless the person asks.
  */
 
 import {
@@ -35,6 +32,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Canvas } from "../reviews/Canvas";
+import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
 import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
@@ -732,6 +730,7 @@ function BriefView({ brief }: { brief: Brief }) {
 	return (
 		<Canvas
 			title="Decision brief"
+			downloads={briefDownloads(review.id, brief.run_id)}
 			panel={
 				search.source === undefined ? null : (
 					<SourcePanel

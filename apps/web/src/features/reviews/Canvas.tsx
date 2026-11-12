@@ -6,13 +6,29 @@
  * open, takes Esc first (it listens in the capture phase and claims the key).
  */
 
-import { Box, Flex, Heading, IconButton } from "@chakra-ui/react";
+import {
+	Box,
+	Button,
+	chakra,
+	Flex,
+	Heading,
+	IconButton,
+} from "@chakra-ui/react";
 import { useNavigate } from "@tanstack/react-router";
-import { Maximize2, Minimize2, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useId, useRef } from "react";
+import { FileDown, Maximize2, Minimize2, Printer, X } from "lucide-react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { HEADER_HEIGHT } from "../../shell/railStyles";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { useCanvasWidth } from "./canvasWidth";
+import type { Download } from "./exports";
 import { useReview } from "./reviewContext";
 
 /** Esc inside a dialog belongs to the dialog. */
@@ -23,12 +39,16 @@ export function Canvas({
 	title,
 	children,
 	panel,
+	downloads,
 }: {
 	title: string;
 	children: ReactNode;
 	/** The source panel (§6.10), over the canvas's right edge, leaving it open beneath. */
 	panel?: ReactNode;
+	/** Files of what the canvas shows, behind a Download button in its header. */
+	downloads?: readonly Download[];
 }) {
+	const [isDownloadsOpen, setDownloadsOpen] = useState(false);
 	const { project, review } = useReview();
 	const navigate = useNavigate();
 	const heading = useRef<HTMLHeadingElement>(null);
@@ -110,6 +130,15 @@ export function Canvas({
 				>
 					{title}
 				</Heading>
+				{downloads === undefined ? null : (
+					<DisclosureButton
+						isOpen={isDownloadsOpen}
+						controls={`${id}-downloads`}
+						onToggle={() => setDownloadsOpen(!isDownloadsOpen)}
+					>
+						Download
+					</DisclosureButton>
+				)}
 				{isWide ? (
 					<IconButton
 						variant="ghost"
@@ -133,6 +162,41 @@ export function Canvas({
 					<X />
 				</IconButton>
 			</Flex>
+			{downloads !== undefined && isDownloadsOpen ? (
+				<chakra.ul
+					id={`${id}-downloads`}
+					role="list"
+					aria-label="Downloads"
+					display="flex"
+					flexWrap="wrap"
+					gap="2"
+					listStyleType="none"
+					m="0"
+					px={{ base: "4", md: "6" }}
+					py="3"
+					borderBottomWidth="1px"
+					borderColor="border"
+					bg="bg.subtle"
+				>
+					{downloads.map((file) => (
+						<li key={file.href}>
+							<Button asChild size="xs" variant="outline">
+								{file.isPrintable ? (
+									<a href={file.href} target="_blank" rel="noopener noreferrer">
+										<Printer />
+										{file.label}
+									</a>
+								) : (
+									<a href={file.href} download>
+										<FileDown />
+										{file.label}
+									</a>
+								)}
+							</Button>
+						</li>
+					))}
+				</chakra.ul>
+			) : null}
 			{/* position: relative keeps visually hidden text, which is absolutely
 			    positioned, inside this scroller; without it the page itself scrolls. */}
 			<Box

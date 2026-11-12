@@ -1,17 +1,9 @@
 """Projects and their members: create, read, rename, archive, share and delete.
 
-Each public method is one use case in one short transaction. Every one of them
-checks the caller's membership and `can(role, action)` inside that transaction,
-even when the HTTP layer has already checked: membership can change between
-the two, and only the check made alongside the write decides.
-
-Two rules shape the writes (architecture §5.7):
-
-- membership changes take the project's row lock first, so two owners stepping
-  down at once are decided one after the other and one owner always remains;
-- the audit event is the last write, and records ids only. The project's name
-  is sealed under the project's own key and never leaves this module in the
-  clear except in a return value.
+Each use case checks membership inside its own transaction, even after the HTTP layer
+has: only the check made alongside the write decides. Membership changes take the
+project's row lock first, so one owner always remains. The name is sealed; the audit log
+gets ids only.
 """
 
 from __future__ import annotations
@@ -45,7 +37,7 @@ from app.domain.projects import (
 from app.domain.sessions import SessionPolicy
 from app.storage.base import StorageProvider, UnitOfWork
 
-# Table "projects", column "name"; the row is the project itself (architecture §5.4).
+# Table "projects", column "name"; the row is the project itself.
 _NAME_PURPOSE = "projects.name"
 
 
@@ -66,10 +58,13 @@ class ProjectView:
 
 @dataclass(frozen=True, slots=True)
 class MemberView:
+    """A member as the caller may see them: `email` is `None` unless they manage members."""
+
     user_id: UUID
     display_name: str
     role: Role
     added_at: datetime
+    email: str | None = None
 
 
 class ProjectService:
@@ -181,9 +176,7 @@ class ProjectService:
     ) -> None:
         """Crypto-shred the project. Irreversible once committed.
 
-        Destroying the data key makes every ciphertext of the project unreadable,
-        including copies in backups once their retention passes. The row stays
-        as a tombstone; the memberships go, because who worked on what is
+        The row stays as a tombstone; memberships go, because who worked on what is
         sensitive too.
         """
         async with self._storage.unit_of_work() as uow:
@@ -203,9 +196,12 @@ class ProjectService:
 
     async def list_members(self, current: Current, project_id: UUID) -> list[MemberView]:
         async with self._storage.unit_of_work() as uow:
-            await self._access(uow, current, project_id, Action.READ_PROJECT)
+            _, own = await self._access(uow, current, project_id, Action.READ_PROJECT)
+            # Owners need the email to tell two people with the same display name
+            # apart before changing their access; nobody else needs it.
+            shows_email = can(own.role, Action.MANAGE_MEMBERS)
             return [
-                await self._member_view(uow, m)
+                await self._member_view(uow, m, shows_email=shows_email)
                 for m in await uow.memberships.list_for_project(project_id)
             ]
 
@@ -237,7 +233,7 @@ class ProjectService:
             await uow.memberships.add(membership)
             await self._record_member(uow, current, request_id, "membership.added", membership)
             await uow.commit()
-        return MemberView(user.id, user.display_name, role, membership.added_at)
+        return MemberView(user.id, user.display_name, role, membership.added_at, user.email)
 
     async def change_role(
         self,
@@ -267,7 +263,7 @@ class ProjectService:
                     uow, current, request_id, "membership.role_changed", changed
                 )
                 await uow.commit()
-            return await self._member_view(uow, changed)
+            return await self._member_view(uow, changed, shows_email=True)
 
     async def remove_member(
         self, current: Current, project_id: UUID, user_id: UUID, request_id: str | None = None
@@ -317,7 +313,7 @@ class ProjectService:
         lock: bool = False,
     ) -> tuple[Project, Membership]:
         # One message for "no such project" and "not yours": a project's
-        # existence is not an outsider's business (architecture §5.5).
+        # existence is not an outsider's business.
         project = await (uow.projects.lock if lock else uow.projects.get)(project_id)
         membership = await uow.memberships.get(project_id, current.user.id)
         if project is None or project.is_deleted or membership is None:
@@ -346,11 +342,14 @@ class ProjectService:
         )
 
     @staticmethod
-    async def _member_view(uow: UnitOfWork, membership: Membership) -> MemberView:
+    async def _member_view(
+        uow: UnitOfWork, membership: Membership, *, shows_email: bool
+    ) -> MemberView:
         user = await uow.users.get(membership.user_id)
         display_name = user.display_name if user is not None else "Unknown account"
+        email = user.email if user is not None and shows_email else None
         return MemberView(
-            membership.user_id, display_name, membership.role, membership.added_at
+            membership.user_id, display_name, membership.role, membership.added_at, email
         )
 
     async def _seal_name(self, uow: UnitOfWork, project_id: UUID, name: str) -> bytes:

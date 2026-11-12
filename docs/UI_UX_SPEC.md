@@ -223,6 +223,13 @@ Yellow marks a caution only as an icon or a bar, never as text colour: yellow te
 
 **PRISMA flow.** The papers panel opens on the PRISMA 2020 flow: Identified → Unique → Screened → Included. Each step shows what left beneath it. Included, excluded, uncertain and not screened are buttons that filter the table, which keeps its rows while a new filter loads.
 
+**Downloads (Wave 2).** The papers and brief panels have a **Download** button in their header. It opens a list of plain file links, each with its run's id:
+
+- **Papers panel:** Papers (CSV), Papers (JSON lines), Included papers for a reference manager (RIS), PRISMA report, and Run record.
+- **Brief panel:** Brief (Markdown), Brief to print or save as PDF (opens in a new tab; "Save as PDF" in the browser's print dialog), and Brief (JSON).
+
+Every member may download what they may read. The API records each download in the audit log.
+
 **Controls.**
 
 - **Card actions:** a card's main action is a solid button; its other actions are outlined buttons with an icon, on one row.
@@ -376,6 +383,14 @@ L0 when accepted:  ✓ Search plan accepted · 3 categories · Open
 - **The vocabulary gate.** "Accept and search" is the confirmation of the vocabulary (architecture §4.3). After it, the draft becomes version-numbered and frozen. The accepted card says which version.
 - Source: `SearchPlan` from `POST …/plan`, `…/plan/answers`, `…/plan/changes`; `POST …/plan/accept`.
 
+**Changing the search after a run (Wave 2, prompt-first).** Once a plan is accepted, and after a run, the chat box is labelled "Change the search". The person writes what to change; the next draft card appears after the run, in time order, and shows what changed. Its main button says what accepting will run:
+
+- **Accept and search again:** the search terms changed, so it runs every stage.
+- **Accept and re-screen:** only the criteria changed, so it re-judges the papers already found, from Screen onwards.
+- **Accept:** nothing changed, so nothing runs.
+
+The API decides which (`rerun_from`); the person never picks stages. While a run is going, the box says "Wait for the run to finish, or cancel it, to change the search." Follow-up questions about results come with the follow-up threads later in Wave 2.
+
 #### 5.3.5 Run strip
 
 The run strip is one card that updates in place for the whole job. It never adds new chat turns while it runs.
@@ -488,6 +503,8 @@ L1  ┌ Answer ─────────────────────�
 - Citation chips work the same as in the brief.
 - "Add to brief notes" pins the answer to the brief's notes section **(new, needs API)**.
 - Source: `POST /projects/{id}/questions`.
+
+**Built so far (Wave 2):** the answer card ("Answer") shows its claims with the brief's citation chips and reasoning marks, then one line: the number of sources and how many items of the question were masked. A chip opens the source panel over the chat, with the masked passages the answer drew on (an answer may cite passages the brief never cited, so it does not reuse the brief's evidence); for a paper it also shows the title and year, read from `GET /reviews/{id}/papers/{paper_id}?run_id=` with the answer's `run_id`. Closing the panel, with Close or Esc, gives focus back to the chip. "Nothing in this project answers that." shows as plain text, with **Change the search** for owners and reviewers (see 6.12). A failed answer is a problem card, "The answer couldn't be made", with the API's reason and **Try again**, which asks again in the same thread. See [6.12](#612-ask-follow-up-questions).
 
 #### 5.3.10 Error
 
@@ -1002,11 +1019,13 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
 ### 6.12 Ask (follow-up questions)
 
-- Follow-up questions live in the project chat, after the brief. Each question and answer pair is a thread **(the API's `POST …/questions` today has no thread id; new, needs API)**.
+- Follow-up questions live in the project chat, after the brief. Questions belong to threads: a follow-up carries its thread's last few questions and answers, and `POST …/questions` names the `thread_id` to continue, or none to start one.
 - A thread can be opened on its own (`/p/:project/ask/:thread`) from the history.
 - Each answer: card per [5.3.9](#539-follow-up-answer-ask), privacy receipt per [5.3.2](#532-privacy-receipt).
 - **Answers only from this project.** The composer hint says so: "Answers use only the papers and documents in this project."
 - When nothing relevant is found, the answer card says "Nothing in this project answers that" and offers "Start a new search".
+
+**Built so far (Wave 2):** once the latest run has a decision brief, two pressed-or-not buttons sit above the box: **Ask about the evidence** (chosen at first) and **Change the search**. Without a brief the box only changes the search. A question continues the latest thread, or starts one when there is none (`POST /reviews/{id}/questions`). Once a thread exists, an outlined **New thread** button sits beside the choice while asking is chosen; pressed (it shows as pressed, and the box's placeholder says "Ask a question to start a new thread"), the next question starts a thread, and the one after continues it. Pressed again, it goes back to continuing the latest thread. A new thread need not wait for the last answer, since the API answers one question at a time per thread. In the chat, every thread but the oldest opens with a quiet "New thread" divider. Under the conversation, a disclosure ("2 threads") lists the threads, newest first, each with its first question, how many questions it has and when it started; choosing one scrolls to its first question and moves focus there, and its **Open** link goes to the thread's own page (`/p/:project/ask/:thread`, from `GET /threads/{id}`): its questions and answers in order, a link back to the review, and, for owners and reviewers, a box that asks in that thread, so an older thread can be continued there. Viewers see the list, the dividers and the thread page too. An answer longer than 60 words shows its first 60 and **Read all**, which expands it in place. Your question shows at once with "Sending your question…", then as the API stored it (masked words as tags) with "Searching the evidence…" while the browser polls `GET /questions/{id}` every 2 seconds. The box waits until the last question is answered, unless New thread is pressed. Questions and answers sit in the chat by the time they were asked, so they come after the brief they follow. Viewers read them; their box says "You can read the answers. Only owners and reviewers can ask." When nothing in the project answers, the answer card offers **Change the search** rather than "Start a new search": it switches the box to changing the search and fills it with the question as a starting point, unless something is already typed there, which is kept. A new search is a new review; most often the question shows the current search missed something, which a change fixes. Not built yet: "Add to brief notes" and the full privacy receipt.
 
 ### 6.13 Documents
 
@@ -1028,7 +1047,17 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 - A `D` tag (`D0002`) is shown next to each approved file, so people can match citations.
 - Deleting a document asks for confirmation and says the brief may cite it.
 
+**Built so far (Wave 2).** `/p/:project/documents`, opened from a Documents link in the workspace header, beside Project settings ([`features/documents/Documents.tsx`](../apps/web/src/features/documents/Documents.tsx)).
+
+- **Upload, owners only:** choose a file or drag one onto the upload area. The accepted types and the largest file come from the API's listing; a file over the limit is refused before it is sent, and any refusal from the API (wrong type, empty, quota, rate limit, uploads switched off) is shown in the API's own words. Reviewers and viewers read "Only owners can upload documents." The upload is the client's one non-JSON body: `api/client.ts` allows multipart on the upload path only, as the API does.
+- **The list:** tag, name, size, who uploaded it ("You", a member's name, or "A former member"), and the status in words: Checking for viruses, Reading the text, Waiting for privacy review, Ready, Rejected, Failed (with the API's reason). The list is fetched again every 3 seconds while any file is still being processed, and not at all otherwise.
+- **The privacy review:** an owner opens a document waiting for review (`?document=<id>`), reads its masked text with the counts by type and the "masking is not anonymity" caution, and approves or rejects the masked version shown. Any member can open "See masked text" for a masked document, without the decision buttons. The original text (`…/review`) is never requested on this screen.
+- **Delete, owners only:** a Delete button on every row, whatever the status, opens a dialog: "This deletes the file and its text. A brief that already cites D1 keeps the passages it quoted. This can't be undone." After **Delete** the list is fetched again and the page says "D1 report.txt is deleted."; if another owner deleted it first, "… was already deleted." The API asks for no recent sign-in here, so neither does the screen. Reviewers and viewers see no Delete button.
+- **Not built yet:** the original text side by side with the masks; masking missed text or removing a mask ("Not personal"); "Make a project rule"; the Type and Masked columns of the sketch above; the chat's privacy review gate card linking here.
+
 ### 6.14 Project settings
+
+**Built so far (Wave 2):** the page at `/p/:project/settings`, opened from the settings icon ("Project settings") in the workspace header, holds the danger zone. Owners see **Delete project…**. Its dialog lists what becomes unreadable, says it can't be undone, and enables **Delete project** only once the project's name is typed exactly. A stale sign-in brings up "Sign in again" first. Afterwards the person lands on Home, and the project leaves the rail. Others read "Only owners can delete a project." Above it, **General** lets owners rename the project; the API's refusal of a name shows at the field, and others read "Only owners can rename the project." **Members** lists everyone by name and role, with a "You" badge on your own row. Owners also see each member's email under the name, to tell people apart; the API sends emails to owners only, so reviewers and viewers see names alone. Owners change a role from a menu on each row, remove someone after a dialog that says they lose access straight away, and add someone by email with a role; an email with no account here gets the API's message at the field. Each of these asks for the password first when the sign-in is not recent ("Changing members needs you to sign in again."). When the list shows a single owner, that owner's role menu is locked and the page says "A project needs at least one owner. Make someone else an owner first."; if the API refuses a change for that reason anyway, its message shows above the list. Reviewers and viewers see the list read-only and "Only owners can change who's in the project." In **General**, owners also see **Archive project**, with one sentence on what it does: it hides the project from Home and the project list, nothing is deleted, and members can still open it. No dialog, because it can be undone. Once archived, General shows an "Archived" badge with the date and **Unarchive project**; reviewers and viewers see the badge and date only. Home, the rail and the default project list already leave archived projects out (`GET /projects` without `include_archived`), so archiving or unarchiving refreshes those lists. In the **Danger zone**, every member sees **Leave project…**, whose dialog says they lose access straight away; leaving needs no recent sign-in. When the list shows you are the only owner, the button is disabled and the page says "You're the only owner, so you can't leave. Make someone else an owner first."; if the API refuses anyway, its message shows in the dialog. After leaving, the project leaves the cached lists and the rail, and the person lands on Home. A `404` from archiving or leaving means access had already gone, so it also goes to Home. Collection, tags and pinning come later in Wave 2.
 
 - **General:** name, collection, tags, pinned (per user), archive.
 - **Members:** list with roles; invite by email; change role; remove. Changing members needs a recent sign-in. The last owner can't leave or be demoted (the UI explains why).

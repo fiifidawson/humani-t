@@ -1,11 +1,7 @@
 """A scripted InferenceProvider and PromptGuard. No model, no network.
 
-`FakeInferenceProvider` validates every scripted answer against the request's
-schema exactly as a real provider must, so a test that scripts a malformed
-answer sees the same `InvalidStructuredOutputError` production would.
-
-`FakePromptGuard` allows everything unless told to refuse. Production runs
-the real leak check, `privacy.guard.LeakCheckPromptGuard` (architecture §3.9.1).
+Scripted answers are validated against the request's schema, as a real provider's are,
+so a malformed one fails here as it would in production.
 """
 
 from __future__ import annotations

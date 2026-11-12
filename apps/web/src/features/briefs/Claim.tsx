@@ -12,7 +12,14 @@ import { STRENGTHS, type Strength } from "./words";
 
 type Schemas = components["schemas"];
 export type Claim = Schemas["ClaimOut"];
-export type BriefSource = Schemas["app__api__schemas__briefs__SourceOut"];
+export type BriefSource = Schemas["SourceOut"];
+/** What a chip needs of a source: a brief's sources and an answer's both give it. */
+export type ChipSource = Pick<
+	BriefSource,
+	"tag" | "has_passage" | "source_kind" | "title" | "year"
+>;
+/** Open the source panel for `tag`; `chip` is the chip pressed, which takes focus back on close. */
+export type OnOpenSource = (tag: string, chip: HTMLElement) => void;
 
 /** The word is the label; the meter repeats it and is hidden from screen readers (§10.2). */
 export function EvidenceBadge({ strength }: { strength: Strength }) {
@@ -72,8 +79,8 @@ export function CitationChip({
 	onOpen,
 }: {
 	tag: string;
-	source: BriefSource | undefined;
-	onOpen: (tag: string) => void;
+	source: ChipSource | undefined;
+	onOpen: OnOpenSource;
 }) {
 	const isMissing = source === undefined || !source.has_passage;
 	const isDocument = source?.source_kind === "document" || tag.startsWith("D");
@@ -84,7 +91,7 @@ export function CitationChip({
 		<Chip
 			type="button"
 			aria-label={`Source ${tag}${details === "" ? "" : `, ${details}`}`}
-			onClick={() => onOpen(tag)}
+			onClick={(event) => onOpen(tag, event.currentTarget)}
 			color={isMissing ? "caveat.fg" : "link"}
 		>
 			{isMissing ? (
@@ -110,8 +117,8 @@ export function ClaimText({
 	onOpen,
 }: {
 	claim: Claim;
-	sources: readonly BriefSource[];
-	onOpen: (tag: string) => void;
+	sources: readonly ChipSource[];
+	onOpen: OnOpenSource;
 }) {
 	if (claim.support === "hypothesis") {
 		return (
@@ -154,8 +161,8 @@ export function Claims({
 	onOpen,
 }: {
 	claims: readonly Claim[];
-	sources: readonly BriefSource[];
-	onOpen: (tag: string) => void;
+	sources: readonly ChipSource[];
+	onOpen: OnOpenSource;
 }) {
 	return (
 		<Text>

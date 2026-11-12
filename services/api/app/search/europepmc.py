@@ -1,16 +1,10 @@
 """Europe PMC: life-sciences literature, including PubMed and preprints.
 
-API facts this relies on (checked against the live API, 2026-11-03):
-
-- `TITLE_ABS:` restricts a phrase to title and abstract; AND/OR, quoted phrases
-  and parentheses work as expected. An unknown field name is not an error: it
-  quietly matches nothing, so field codes here are fixed, never built from input.
-- `pageSize` is at most 1000. Some errors arrive as HTTP 200 with `errCode` and
-  `errMsg` in the body.
-- `pubYear` is a string, `isOpenAccess` is "Y" or "N", and `abstractText` carries
-  JATS/HTML markup.
-- The service team states 10 requests per second per IP on their support forum;
-  the documentation pages could not be read to confirm it.
+API facts (live API, checked 2026-11-03): an unknown field name silently matches
+nothing, so field codes are fixed here, never built from input. Some errors arrive as
+HTTP 200 with `errCode` in the body. `pageSize` is at most 1000. `pubYear` is a string,
+`isOpenAccess` is "Y" or "N", and `abstractText` carries JATS/HTML markup. The rate
+limit, 10 requests per second per IP, is stated on the support forum only.
 """
 
 from __future__ import annotations
@@ -82,10 +76,6 @@ class EuropePmcProvider:
             raise PaperSourceUnavailableError(SOURCE_ID, "the response has no result list")
         records = (_to_record(r) for r in results if isinstance(r, dict))
         return tuple(r for r in records if r is not None)[:limit]
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        # Full text arrives with PDF retrieval and extraction (build order step 10).
-        return None
 
 
 def _to_record(result: Mapping[str, Any]) -> PaperRecord | None:

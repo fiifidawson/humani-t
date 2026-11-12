@@ -5,7 +5,7 @@
 
 ## Context
 
-The agent loop that writes a `DecisionBrief` needs to search a run's evidence: the planner's sub-questions first, then whatever the Critic asks for. [`architecture.md` §3.6](../architecture.md#36-vectorstoreprovider) names Milvus, through mmore, as the vector store. In P1 the evidence is the masked abstracts of a run's included papers: a few dozen to a few hundred passages per run.
+The agent loop that writes a `DecisionBrief` needs to search a run's evidence: the planner's sub-questions first, then whatever the Critic asks for. [`architecture.md` §3.4](../architecture.md#34-planned-not-built) names Milvus, through mmore, as the vector store. In P1 the evidence is the masked abstracts of a run's included papers: a few dozen to a few hundred passages per run.
 
 A vector store brings a new service to deploy and secure, an embedding model to run, and stored vectors that must be rebuilt whenever masking changes the text. It also makes a search harder to reproduce: the ranking depends on the embedding model and its version.
 

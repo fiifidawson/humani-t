@@ -1,18 +1,8 @@
 """Signing in, staying signed in, and getting back in.
 
-Each public method is one use case and owns its transactions (the Unit of Work
-pattern). Every method follows the same shape, because the alternatives fail
-under load:
-
-1. a short transaction to read what is needed;
-2. slow work — password hashing — with no database connection held;
-3. a short transaction to write, with race-safe operations (conditional claims,
-   version-checked saves) and the audit event last, so the audit chain's lock
-   is held for as little time as possible;
-4. side effects — email — only after the commit.
-
-Raw tokens (session, CSRF, invitation, reset) exist only in return values and
-outgoing email. Storage only ever sees their SHA-256.
+Each public method is one use case: a short read, the slow hashing with no database
+connection held, a short race-safe write with the audit event last, then any email.
+Raw tokens exist only in return values and outgoing email; storage sees only their SHA-256.
 """
 
 from __future__ import annotations

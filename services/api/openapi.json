@@ -12,7 +12,7 @@
           "system"
         ],
         "summary": "Liveness probe",
-        "description": "Answers 'is this process up', not 'is the whole system healthy'.\n\nDeliberately touches no provider and no database. Conflating the two makes\ndeploys hard to debug, because a failing dependency looks like a dead process.",
+        "description": "Answer 'is this process up', not 'is the whole system healthy'.\n\nTouches no provider and no database, so a failing dependency never looks like a\ndead process.",
         "operationId": "health_api_v1_health_get",
         "responses": {
           "200": {
@@ -1678,7 +1678,7 @@
           "runs"
         ],
         "summary": "Follow a run as Server-Sent Events",
-        "description": "Replay the run's stored events after the last id seen, then follow it live.\n\nThe id comes from the `Last-Event-ID` header, which the browser sends when\nit reconnects, or else from `?last_event_id=`; the header wins. The stream\nends after `job.finished`, so a finished run replays and closes. It also\nends when the session or the membership does; the browser's reconnect then\ngets 401 or 404.",
+        "description": "Replay the run's stored events after the last id seen, then follow it live.\n\nThe `Last-Event-ID` header wins over the query. The stream ends after\n`job.finished`, or when the session or membership does.",
         "operationId": "follow_run_api_v1_runs__run_id__events_get",
         "parameters": [
           {
@@ -3686,128 +3686,6 @@
           }
         }
       }
-    },
-    "/api/v1/vocabulary/compile": {
-      "post": {
-        "tags": [
-          "vocabulary"
-        ],
-        "summary": "Compile a vocabulary into a Boolean query",
-        "description": "Show exactly what will be searched for, before anything is searched.\n\nConcepts sharing a theme are OR'd; themes are AND'd:\n\n    (\"chatbot\" OR \"conversational agent\") AND (\"humanitarian\" OR \"crisis response\")\n\nPure and deterministic — the same vocabulary always produces the same query,\nand no model is consulted for either origin. That is what makes a\n`user_supplied` vocabulary strict by construction rather than by discipline.\n\nThis endpoint exists so a reviewer can inspect and argue about the query\nitself, which is the transparency commitment made concrete.",
-        "operationId": "compile_endpoint_api_v1_vocabulary_compile_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VocabularyIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CompiledQueryOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/sources": {
-      "get": {
-        "tags": [
-          "search"
-        ],
-        "summary": "Search sources available in this process",
-        "description": "Which repositories this deployment can currently reach.\n\nOne entry today. It becomes the list a reviewer checks to know what a run\ndid and did not cover — and an empty or unexpected entry here is the first\nsign a run is not reproducible.",
-        "operationId": "sources_api_v1_sources_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/app__api__schemas__SourceOut"
-                  },
-                  "type": "array",
-                  "title": "Response Sources Api V1 Sources Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/projects/{project_id}/search": {
-      "post": {
-        "tags": [
-          "search"
-        ],
-        "summary": "Compile a vocabulary and search for papers",
-        "description": "Run a vocabulary against the configured source.\n\nThe response carries the compiled query and its provenance alongside the\nresults, because a result set separated from the query that produced it\ncannot be audited.\n\nCurrently backed by an in-memory corpus. The endpoint, the request body and\nthe response shape do not change when a real source is wired in — only\n`api/dependencies.py` does.",
-        "operationId": "search_api_v1_projects__project_id__search_post",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SearchIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
@@ -4368,7 +4246,7 @@
           },
           "sources": {
             "items": {
-              "$ref": "#/components/schemas/app__api__schemas__briefs__SourceOut"
+              "$ref": "#/components/schemas/SourceOut"
             },
             "type": "array",
             "title": "Sources",
@@ -4692,37 +4570,6 @@
           "by"
         ],
         "title": "ConceptChangeOut"
-      },
-      "ConceptIn": {
-        "properties": {
-          "term": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Term",
-            "description": "Canonical spelling."
-          },
-          "synonyms": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Synonyms",
-            "description": "Alternatives matching the same idea."
-          },
-          "theme": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Theme",
-            "description": "Concepts sharing a theme are OR'd; themes are AND'd.",
-            "default": "general"
-          }
-        },
-        "type": "object",
-        "required": [
-          "term"
-        ],
-        "title": "ConceptIn",
-        "description": "One research concept and the words that stand in for it."
       },
       "ConceptOut": {
         "properties": {
@@ -6412,6 +6259,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Added At"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Sent to owners only; absent for everyone else."
           }
         },
         "type": "object",
@@ -6528,7 +6387,7 @@
             "title": "Run Id"
           },
           "paper": {
-            "$ref": "#/components/schemas/app__api__schemas__papers__PaperOut"
+            "$ref": "#/components/schemas/PaperOut"
           },
           "text_kind": {
             "anyOf": [
@@ -6563,6 +6422,133 @@
         ],
         "title": "PaperDetailOut"
       },
+      "PaperOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag",
+            "description": "How the brief cites it: P and its place in the run."
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Its own link, else https://doi.org/<doi>, else null."
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "The source whose record was kept."
+          },
+          "found_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Found By",
+            "description": "Every source that returned it in this run."
+          },
+          "is_open_access": {
+            "type": "boolean",
+            "title": "Is Open Access"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None until it is screened."
+          },
+          "screening_status": {
+            "type": "string",
+            "enum": [
+              "screened",
+              "skipped",
+              "failed",
+              "not_screened"
+            ],
+            "title": "Screening Status",
+            "description": "skipped: no masked abstract to send; failed: the privacy check stopped its text; not_screened: this run has not screened it.",
+            "default": "screened"
+          },
+          "skipped_because": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "no_abstract",
+                  "not_masked"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Because",
+            "description": "Set when skipped."
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "tag",
+          "position",
+          "title",
+          "year",
+          "doi",
+          "url",
+          "source_id",
+          "found_by",
+          "is_open_access",
+          "decision"
+        ],
+        "title": "PaperOut"
+      },
       "PaperPageOut": {
         "properties": {
           "run_id": {
@@ -6593,7 +6579,7 @@
           },
           "papers": {
             "items": {
-              "$ref": "#/components/schemas/app__api__schemas__papers__PaperOut"
+              "$ref": "#/components/schemas/PaperOut"
             },
             "type": "array",
             "title": "Papers"
@@ -6797,7 +6783,7 @@
           "deep"
         ],
         "title": "PlanMode",
-        "description": "How thorough a review is; the interface says Quick and Deep (UI_UX_SPEC §6.3)."
+        "description": "How thorough a review is; the interface says Quick and Deep."
       },
       "PlanOut": {
         "properties": {
@@ -6860,6 +6846,22 @@
             "title": "Accepted Version",
             "description": "The version runs use; null if none."
           },
+          "rerun_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "queries",
+                  "screen"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerun From",
+            "description": "Where a run of the current version would start: `queries` when the search changed since the version accepted before it, or none was; `screen` when only the criteria changed, re-judging the papers already found; null when nothing did."
+          },
           "versions": {
             "items": {
               "$ref": "#/components/schemas/VersionSummaryOut"
@@ -6885,6 +6887,7 @@
           "pending_change",
           "current",
           "accepted_version",
+          "rerun_from",
           "versions",
           "receipts"
         ],
@@ -7517,9 +7520,9 @@
               "type": "string"
             },
             "type": "array",
-            "maxItems": 8,
+            "maxItems": 7,
             "title": "Stages",
-            "description": "Stage ids, any order; they run in pipeline order: queries, discover, ingest, mask, screen, export, index, answer. Empty or left out: the whole pipeline."
+            "description": "Stage ids, any order; they run in pipeline order: queries, discover, ingest, mask, screen, export, answer. Empty or left out: the whole pipeline."
           }
         },
         "additionalProperties": false,
@@ -7776,7 +7779,7 @@
           "reason"
         ],
         "title": "ScreenedItemData",
-        "description": "The screen stage's row for one paper, as UI_UX_SPEC §6.7's live list shows it."
+        "description": "The screen stage's row for one paper, as the live screening list shows it."
       },
       "ScreeningLabel": {
         "type": "string",
@@ -7797,94 +7800,7 @@
           "uncertain"
         ],
         "title": "ScreeningTier",
-        "description": "The names people see (UI_UX_SPEC §6.8), derived from label and priority."
-      },
-      "SearchIn": {
-        "properties": {
-          "concepts": {
-            "items": {
-              "$ref": "#/components/schemas/ConceptIn"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Concepts"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/VocabularyOrigin",
-            "default": "llm_assisted"
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Version",
-            "default": 1
-          },
-          "limit": {
-            "type": "integer",
-            "maximum": 200.0,
-            "minimum": 1.0,
-            "title": "Limit",
-            "default": 25
-          }
-        },
-        "type": "object",
-        "required": [
-          "concepts"
-        ],
-        "title": "SearchIn",
-        "description": "A vocabulary plus how many results to return.",
-        "example": {
-          "concepts": [
-            {
-              "synonyms": [
-                "conversational agent",
-                "dialogue system"
-              ],
-              "term": "chatbot",
-              "theme": "technology"
-            },
-            {
-              "synonyms": [
-                "crisis response"
-              ],
-              "term": "humanitarian",
-              "theme": "setting"
-            }
-          ],
-          "limit": 25,
-          "origin": "llm_assisted"
-        }
-      },
-      "SearchOut": {
-        "properties": {
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "query": {
-            "$ref": "#/components/schemas/CompiledQueryOut"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/app__api__schemas__PaperOut"
-            },
-            "type": "array",
-            "title": "Results"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source_id",
-          "query",
-          "total",
-          "results"
-        ],
-        "title": "SearchOut",
-        "description": "Results, plus the query and provenance that produced them."
+        "description": "The names people see, derived from label and priority."
       },
       "SentTextKind": {
         "type": "string",
@@ -8100,6 +8016,116 @@
         ],
         "title": "SourceDetailsOut"
       },
+      "SourceOut": {
+        "properties": {
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PassageSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null if no passage has this tag."
+          },
+          "paper_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paper Id"
+          },
+          "has_passage": {
+            "type": "boolean",
+            "title": "Has Passage",
+            "description": "False only for a citation the checks flagged."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "screening_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Label"
+          },
+          "citations": {
+            "type": "integer",
+            "title": "Citations",
+            "description": "How many times the brief cites this tag."
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag",
+          "source_kind",
+          "paper_id",
+          "has_passage",
+          "title",
+          "year",
+          "doi",
+          "url",
+          "screening_label",
+          "citations"
+        ],
+        "title": "SourceOut"
+      },
       "SpanOut": {
         "properties": {
           "start": {
@@ -8170,7 +8196,6 @@
               "mask",
               "screen",
               "export",
-              "index",
               "answer"
             ],
             "title": "Stage"
@@ -8230,7 +8255,6 @@
               "mask",
               "screen",
               "export",
-              "index",
               "answer"
             ],
             "title": "Stage"
@@ -8327,7 +8351,6 @@
               "mask",
               "screen",
               "export",
-              "index",
               "answer"
             ],
             "title": "Stage"
@@ -9127,55 +9150,6 @@
         "title": "VocabularyGatePayload",
         "description": "A `vocabulary` gate's payload: the draft to confirm, as the draft canvas shows it."
       },
-      "VocabularyIn": {
-        "properties": {
-          "concepts": {
-            "items": {
-              "$ref": "#/components/schemas/ConceptIn"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Concepts"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/VocabularyOrigin",
-            "description": "user_supplied marks the vocabulary STRICT: it is used exactly as given, with no model-driven expansion.",
-            "default": "llm_assisted"
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Version",
-            "default": 1
-          }
-        },
-        "type": "object",
-        "required": [
-          "concepts"
-        ],
-        "title": "VocabularyIn",
-        "description": "A vocabulary as submitted over HTTP.",
-        "example": {
-          "concepts": [
-            {
-              "synonyms": [
-                "conversational agent",
-                "dialogue system"
-              ],
-              "term": "chatbot",
-              "theme": "technology"
-            },
-            {
-              "synonyms": [
-                "crisis response"
-              ],
-              "term": "humanitarian",
-              "theme": "setting"
-            }
-          ],
-          "origin": "llm_assisted"
-        }
-      },
       "VocabularyOrigin": {
         "type": "string",
         "enum": [
@@ -9236,345 +9210,6 @@
         ],
         "title": "WebAuthnOptionsOut",
         "description": "Pass `options` to `PublicKeyCredential.parse…OptionsFromJSON` in the browser."
-      },
-      "app__api__schemas__PaperOut": {
-        "properties": {
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "external_id": {
-            "type": "string",
-            "title": "External Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year"
-          },
-          "doi": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Doi"
-          },
-          "is_open_access": {
-            "type": "boolean",
-            "title": "Is Open Access",
-            "default": false
-          },
-          "abstract": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Abstract"
-          },
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url"
-          },
-          "identity": {
-            "type": "string",
-            "title": "Identity",
-            "description": "Dedup key: DOI, else normalised title + year."
-          }
-        },
-        "type": "object",
-        "required": [
-          "source_id",
-          "external_id",
-          "title",
-          "identity"
-        ],
-        "title": "PaperOut"
-      },
-      "app__api__schemas__SourceOut": {
-        "properties": {
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "live": {
-            "type": "boolean",
-            "title": "Live",
-            "description": "False for in-memory sources that make no requests."
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source_id",
-          "live",
-          "description"
-        ],
-        "title": "SourceOut"
-      },
-      "app__api__schemas__briefs__SourceOut": {
-        "properties": {
-          "tag": {
-            "type": "string",
-            "title": "Tag"
-          },
-          "source_kind": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PassageSourceKind"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Null if no passage has this tag."
-          },
-          "paper_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Paper Id"
-          },
-          "has_passage": {
-            "type": "boolean",
-            "title": "Has Passage",
-            "description": "False only for a citation the checks flagged."
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year"
-          },
-          "doi": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Doi"
-          },
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url"
-          },
-          "screening_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Screening Label"
-          },
-          "citations": {
-            "type": "integer",
-            "title": "Citations",
-            "description": "How many times the brief cites this tag."
-          }
-        },
-        "type": "object",
-        "required": [
-          "tag",
-          "source_kind",
-          "paper_id",
-          "has_passage",
-          "title",
-          "year",
-          "doi",
-          "url",
-          "screening_label",
-          "citations"
-        ],
-        "title": "SourceOut"
-      },
-      "app__api__schemas__papers__PaperOut": {
-        "properties": {
-          "paper_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Paper Id"
-          },
-          "tag": {
-            "type": "string",
-            "title": "Tag",
-            "description": "How the brief cites it: P and its place in the run."
-          },
-          "position": {
-            "type": "integer",
-            "title": "Position"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year"
-          },
-          "doi": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Doi"
-          },
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url",
-            "description": "Its own link, else https://doi.org/<doi>, else null."
-          },
-          "source_id": {
-            "type": "string",
-            "title": "Source Id",
-            "description": "The source whose record was kept."
-          },
-          "found_by": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Found By",
-            "description": "Every source that returned it in this run."
-          },
-          "is_open_access": {
-            "type": "boolean",
-            "title": "Is Open Access"
-          },
-          "decision": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DecisionOut"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "None until it is screened."
-          },
-          "screening_status": {
-            "type": "string",
-            "enum": [
-              "screened",
-              "skipped",
-              "failed",
-              "not_screened"
-            ],
-            "title": "Screening Status",
-            "description": "skipped: no masked abstract to send; failed: the privacy check stopped its text; not_screened: this run has not screened it.",
-            "default": "screened"
-          },
-          "skipped_because": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "no_abstract",
-                  "not_masked"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Skipped Because",
-            "description": "Set when skipped."
-          }
-        },
-        "type": "object",
-        "required": [
-          "paper_id",
-          "tag",
-          "position",
-          "title",
-          "year",
-          "doi",
-          "url",
-          "source_id",
-          "found_by",
-          "is_open_access",
-          "decision"
-        ],
-        "title": "PaperOut"
       },
       "app__api__schemas__plans__QuestionOut": {
         "properties": {
@@ -9754,14 +9389,6 @@
     {
       "name": "projects",
       "description": "Projects and their members. A project is the unit of access, encryption and deletion: non-members get 404 for everything about it."
-    },
-    {
-      "name": "vocabulary",
-      "description": "Turning curated terms into a Boolean query. Concepts sharing a theme are OR'd; themes are AND'd. A user-supplied vocabulary is used exactly as given."
-    },
-    {
-      "name": "search",
-      "description": "Running a compiled query against a source. Results always travel with the query and provenance that produced them."
     },
     {
       "name": "reviews",

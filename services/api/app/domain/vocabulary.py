@@ -94,9 +94,8 @@ class Vocabulary:
     def is_strict(self) -> bool:
         """True when the user supplied these terms themselves.
 
-        A strict Vocabulary must reach the search providers exactly as given:
-        no model-driven expansion, no synonym enrichment. See architecture.md
-        section 4.1 — this is a correctness property, not a preference.
+        They must then reach the search providers exactly as given: a correctness property,
+        not a preference.
         """
         return self.origin is VocabularyOrigin.USER_SUPPLIED
 

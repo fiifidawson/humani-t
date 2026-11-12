@@ -5,7 +5,7 @@
 
 ## Context
 
-An uploaded document has to become text before it can be masked, reviewed and cited. [`dependencies.md` §2](../dependencies.md#2-mmore) names mmore as the extraction library, behind our own interface, and [`architecture.md` §3.9](../architecture.md#39-sanitizationprovider) puts it in the provider packages. The brief's rule 13 asks that documents be processed "in an isolated worker with no network access except the job queue".
+An uploaded document has to become text before it can be masked, reviewed and cited. [`dependencies.md` §2](../dependencies.md#2-mmore) names mmore as the extraction library, behind our own interface, and [`architecture.md` §3.9](../architecture.md#39-masking) puts it in the provider packages. The brief's rule 13 asks that documents be processed "in an isolated worker with no network access except the job queue".
 
 mmore's `process` extra reads PDFs, Office files, images and audio, and does so with a large dependency tree (PyTorch-based models among them), model downloads on first use, and a much larger attack surface than the four formats P2 accepts (PDF, DOCX, TXT, MD). Every file it parses was chosen by someone outside the deployment.
 
