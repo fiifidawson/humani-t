@@ -1,14 +1,8 @@
 """Requirements for the rules of multi-factor authentication, without I/O.
 
-Source: RFC 6238 (TOTP) and RFC 4226 (HOTP, which TOTP builds on); W3C WebAuthn
-Level 3 (sign counters, challenges); NIST SP 800-63B rev 4 (authenticator
-assurance levels, replay resistance, look-up secrets of at least 64 bits);
-OWASP ASVS 5.0 V6.
-
-Everything here is pure: `app.domain.mfa` may import the standard library and
-other domain modules only (`hmac`, `hashlib` and `secrets` are enough for TOTP
-and recovery codes). The WebAuthn ceremony itself is verified by a provider and
-specified in `test_mfa_api.py`.
+Covers TOTP (RFC 6238), recovery codes, and WebAuthn sign counters and challenges.
+`app.domain.mfa` uses the standard library only; the WebAuthn ceremony itself is verified
+by a provider and specified in `test_mfa_api.py`.
 """
 
 from __future__ import annotations

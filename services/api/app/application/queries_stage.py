@@ -1,14 +1,8 @@
 """The `queries` stage: the review's accepted plan, compiled into each source's query.
 
-A run searches only a confirmed vocabulary (architecture §4.3). With no
-accepted plan the stage drafts one if none exists, then asks for the
-`vocabulary` gate and accepts what the person approved through
-`PlanService.accept_at_gate`. Its summary carries the RunManifest facts under
-`"manifest"`: the plan's versions, origin and drafting model, and the exact
-query string each source will be sent.
-
-What does not belong here: running the queries (the `discover` stage) and
-choosing which sources are enabled (`api/dependencies.py` passes `compilers`).
+A run searches only a confirmed vocabulary: with no accepted plan, the stage drafts one and
+waits at the `vocabulary` gate. Its summary carries the manifest facts, including the exact
+query each source will be sent. Running the queries is the `discover` stage's job.
 """
 
 from __future__ import annotations

@@ -1,16 +1,8 @@
 """Requirements for reviews, runs, the live event stream and gates, over HTTP.
 
-Sources: architecture §4.4 (the contract: routes, event names and fields, gate
-rules, `Last-Event-ID` replay, access), §5.4 (encryption, crypto-shredding),
-§5.5 (404 for non-members, audit with ids only); UI_UX_SPEC §11.1, §11.2,
-§5.3.5, §5.3.6 and §6.7; the WHATWG HTML standard, "Server-sent events"
-(wire format, `retry`, `Last-Event-ID`); OWASP ASVS 5.0 V8 and V16.
-
-The rules, in the order the API applies them, are the projects' own
-(`test_projects_api.py`): 401, then 404 for a non-member with the same body as
-for a missing id, then 403 for a role that may not, then the request itself.
-A run, gate or event route does not name its project, so the project is
-resolved from the review, run or gate first.
+Access rules are the projects' own (`test_projects_api.py`): 401, then 404 for a non-member
+with the same body as a missing id, then 403, then the request. Run, gate and event routes
+do not name their project, so it is resolved from the review, run or gate first.
 """
 
 from __future__ import annotations
@@ -146,7 +138,7 @@ class TestReviews:
 
 
 class TestReviewAuthor:
-    """UI_UX_SPEC §5.2 and §5.3.1: a question card shows who asked it, by display name."""
+    """A question card shows who asked it, by display name."""
 
     def test_a_review_names_its_author_by_id_and_display_name(self, rt):
         body = rt.owner.get(reviews_path(rt.project_id, f"/{rt.review_id}")).json()
@@ -543,7 +535,7 @@ class TestGates:
         assert len([e for e in rt.events(run_id) if e.name == "gate.resolved"]) == 1
 
     def test_only_owners_may_approve_a_privacy_review(self, rt):
-        """UI_UX_SPEC §5.3.6: checking masking means reading raw text, which is owner-only."""
+        """Checking masking means reading raw text, which is owner-only."""
         run_id = rt.start_run(["queries", "discover"])
         run_until_idle(rt.worker(_gated(GateKind.PRIVACY_REVIEW)))
 
@@ -737,7 +729,7 @@ class TestFailure:
 
 
 class TestAccess:
-    """Architecture §4.4 and §5.5: a non-member learns nothing, not even that an id exists."""
+    """A non-member learns nothing, not even that an id exists."""
 
     def _routes(self, rt: RunTeam) -> list[tuple[str, str, str]]:
         run_id = rt.start_run(["queries", "discover"])

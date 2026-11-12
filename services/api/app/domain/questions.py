@@ -1,15 +1,8 @@
 """Follow-up questions in threads, and their answers, as rules with no I/O.
 
-A member asks a question about a review's evidence (UI_UX_SPEC §6.12). The
-question is masked before it is stored, and answered in the background: its
-record moves pending → answering (under a worker's lease) → answered or
-failed, and a lapsed lease is claimed again up to `MAX_ATTEMPTS` times, like a
-run. Questions in one thread are numbered from 1 and answered one at a time,
-because a follow-up reads the answers before it.
-
-An answer is claims citing passages that were retrieved, checked by code like
-the brief's (`check_answer`); an answer with no claims means nothing in the
-project answers the question. Storage, the model and masking live elsewhere.
+A question is masked before it is stored, then answered in the background under a
+worker's lease, like a run. A thread answers one question at a time, because a follow-up
+reads the answers before it. Code checks an answer's citations, as it does a brief's.
 """
 
 from __future__ import annotations
@@ -81,8 +74,6 @@ class Thread:
 class QuestionRecord:
     """One question as storage holds it: ids and its state in the clear, its text sealed.
 
-    `question_sealed` holds the masked question and what was masked, by type;
-    `answer_sealed` the answer, the evidence it drew on and its agent steps.
     `error` is a fixed sentence for a person, never an exception's text.
     """
 

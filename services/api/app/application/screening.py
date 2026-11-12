@@ -1,22 +1,9 @@
-"""The `screen` stage: one model call per paper, on masked text, against the accepted criteria.
+"""The `screen` stage: ask the model about each paper, using its masked text only.
 
-What it guarantees:
-
-- **Nothing unmasked reaches a model.** It reads a paper's text only through
-  `MaskedTextSource`; a paper with no masked text is skipped, never sent, and
-  every call goes through `GuardedInference`, whose guard checks it again.
-- **Provenance at decision time.** Each decision stores the model id the
-  server reported, `SCREEN_PROMPT_VERSION` and the plan version whose criteria
-  it was screened against; each is audited with ids only.
-- **A repeat skips what is decided.** Decisions are stored one by one as they
-  are made, conditionally, so a crash, a deploy or a retry loses at most the
-  papers in flight.
-- **Gentle on a CPU-only model server.** At most `concurrency` papers at once.
-
-A malformed answer, or one whose label contradicts its criteria, or one that
-quotes words not in the text it was sent, is asked again once; a second failure
-is recorded as `uncertain` with the reason, so the paper is shown to a person
-instead of silently dropped.
+Every call goes through `GuardedInference`, and a paper with no masked text is skipped.
+Each decision is stored as it is made, with the model, prompt and plan version it used,
+so a retry redoes only unfinished papers. A bad answer is asked again once, then marked
+`uncertain` for a person to check.
 """
 
 from __future__ import annotations

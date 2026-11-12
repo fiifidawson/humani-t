@@ -1,14 +1,8 @@
 """A project's own documents: upload, status, masked text, the owner's masking review.
 
-Every route passes through `require(action)` first (`api/access.py`), so a
-non-member gets 404 before a byte of the body is read. Following UI_UX_SPEC
-§3.3: any member lists documents and reads their masked text; only owners
-upload, delete, see raw text, correct masks and approve or reject.
-
-The upload is the API's only non-JSON body. It keeps every CSRF layer but the
-JSON-only rule, which a file cannot meet: the browser's `Sec-Fetch-Site` and
-`Origin` (`api/middleware.py`, which admits multipart on `UPLOAD_PATH` alone)
-and the session's `X-CSRF-Token`, which a cross-site form cannot send.
+Any member lists documents and reads masked text; only owners upload, delete, see
+raw text, correct masks and approve. The upload is the only non-JSON body, so it
+keeps every CSRF layer except the JSON-only rule.
 """
 
 from __future__ import annotations

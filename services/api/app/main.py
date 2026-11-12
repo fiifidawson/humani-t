@@ -217,11 +217,9 @@ async def _start_development_conveniences(
 def _install(app: FastAPI, settings: Settings) -> None:
     install_error_handlers(app)
 
-    # Starlette runs the last-added middleware first: the client address is
-    # settled before anything reads it, the request id is bound before anything
-    # can log, and security headers wrap even the cross-site refusals, which
-    # answer without reaching a route. Unhandled errors become a 500 inside the
-    # headers and the request id, so that 500 carries both.
+    # Order matters: Starlette runs the last-added middleware first, so the client
+    # address and request id are settled before anything logs, and security headers
+    # wrap even the cross-site refusals and the 500 for unhandled errors.
     app.add_middleware(
         CrossSiteRequestMiddleware,
         public_origin=settings.public_origin,

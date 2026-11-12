@@ -1,19 +1,9 @@
 """Uploaded documents: the upload, the worker that reads and masks them, review, evidence.
 
-- `DocumentService` answers the document routes: upload, list, read the masked
-  text, the owner's review (raw text, audited), corrections, approve or
-  reject, delete. Every use case checks membership inside its own transaction.
-- `DocumentProcessor` is the worker's side: it claims an uploaded document
-  under a lease, scans it, extracts its text in isolation and masks it with
-  the broad list and the project's rules, then leaves it for a person.
-- `DocumentReviewQueue` tells the mask stage which documents wait for review
-  (the `privacy_review` gate); `DocumentEvidence` gives the brief and
-  follow-up questions the approved documents' masked passages, tagged `D<n>`.
-
-Nothing here holds a database connection across file I/O, a scan, extraction
-or masking (architecture §5.7): each step is a short read, the slow work, then
-a short conditional write. Raw text leaves this module only to the owner's
-review screen; a model only ever receives approved masked passages.
+`DocumentService` serves the routes; `DocumentProcessor` is the worker that scans,
+extracts and masks; `DocumentEvidence` feeds approved masked passages to the brief. No
+database connection is held across file I/O, scanning, extraction or masking. Raw text
+goes only to the owner's review screen; a model sees only approved masked passages.
 """
 
 from __future__ import annotations
@@ -94,7 +84,7 @@ DOCUMENTS_CHANNEL = "documents:queued"
 MASK_STAGE = "mask"
 
 # Table, column; the row is the document, and a masking is bound to its version
-# too, so an older masking copied over a newer one fails to decrypt (§5.4).
+# too, so an older masking copied over a newer one fails to decrypt.
 _NAME_PURPOSE = "documents.name"
 _FILE_PURPOSE = "documents.file"
 _RAW_PURPOSE = "document_texts.raw"
@@ -292,8 +282,8 @@ class DocumentService:
     async def admit_upload(self, current: Current, project_id: UUID) -> None:
         """Refuse an upload before its body is read: switched off, or too many lately.
 
-        Counted before the slow part (reading, scanning), so parallel requests
-        cannot all slip through a check-then-count gap (architecture §5.7).
+        Counted before the slow part, so parallel requests cannot all slip through a
+        check-then-count gap.
         """
         if not self._policy.is_enabled:
             raise DocumentRefusedError(
@@ -663,10 +653,8 @@ class DocumentService:
     ) -> None:
         """Approve the open privacy-review gates once no document waits for review.
 
-        UI_UX_SPEC §6.6: deciding the last document resumes the run. The gate's
-        decision is the person's who decided last, through the same conditional
-        write as the gate route, so a person deciding the gate at the same
-        moment wins or loses cleanly.
+        Uses the gate route's conditional write, so a person deciding the gate at the
+        same moment wins or loses cleanly.
         """
         if self._runs is None:
             return

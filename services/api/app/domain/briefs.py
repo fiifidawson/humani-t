@@ -1,18 +1,8 @@
 """The decision brief and the trace of the loop that wrote it, as rules with no I/O.
 
-A `DecisionBrief` compares the options a decision-maker faces (architecture
-§4.2): options with their benefits and risks, a criteria-by-options trade-off
-matrix, where the sources disagree, "if this matters most", and the gaps. Every
-statement is a `Claim`, either evidence (citing retrieved passages) or a
-hypothesis (the model's reasoning, uncited). Code, not the model, checks that
-every cited passage was retrieved (`check_citations`).
-
-Nothing here names a winning option, a rank or a total score: the person
-decides (UI_UX_SPEC §1, principle 6).
-
-Also here: the passages the loop retrieves, the details of a cited source, an
-`AgentStep` of the loop, and `BriefRecord`, the sealed form storage holds.
-Prompts, model calls, retrieval and encryption live elsewhere.
+Every statement is a `Claim`: evidence citing retrieved passages, or an uncited hypothesis.
+Code, not the model, checks that every cited passage was retrieved. Nothing here ranks the
+options or names a winner: the person decides.
 """
 
 from __future__ import annotations
@@ -43,7 +33,7 @@ MIN_BOTTOM_LINE = 2
 MAX_BOTTOM_LINE = 3
 
 # An option named "Cash (recommended)" would rank options inside the brief
-# itself, which the brief must never do (UI_UX_SPEC §1, principle 6).
+# itself, which the brief must never do.
 _WINNER_LABEL = re.compile(
     r"\b(recommended|recommendation|winner|winning|best option|top choice|preferred)\b|#\s*\d",
     re.IGNORECASE,
@@ -343,9 +333,8 @@ def check_citations(brief: BriefBody, retrieved_tags: Collection[str]) -> tuple[
 def check_brief(brief: BriefBody, retrieved_tags: Collection[str]) -> tuple[Problem, ...]:
     """Everything code checks in a draft that the types alone cannot refuse.
 
-    The citations, a humanitarian principle among the criteria, and evidence
-    behind every option rated on evidence. The caveat needs no check: code
-    adds it, and `DecisionBrief` refuses a brief without one.
+    The citations, a humanitarian principle among the criteria, and evidence behind every
+    option rated on evidence.
     """
     problems = list(check_citations(brief, retrieved_tags))
     if not any(row.is_humanitarian for row in brief.trade_offs):
@@ -442,11 +431,10 @@ class SourceDetails:
 
 @dataclass(frozen=True, slots=True)
 class AgentStep:
-    """One step of the loop that wrote a brief (architecture §4.4).
+    """One step of the loop that wrote a brief.
 
-    `round_number` is 0 for the Planner and the first retrieval. `output` is
-    the role's answer as masked text and labels; `error` is a plain sentence
-    for a person, never an exception's text.
+    `round_number` is 0 for the Planner and the first retrieval. `output` is masked;
+    `error` is a plain sentence for a person, never an exception's text.
     """
 
     round_number: int
@@ -546,10 +534,8 @@ def _check_rounds(owner: str, rounds: int, kept_round: int, max_rounds: int) -> 
 class DecisionBrief:
     """The loop's output for one run: one version of a review's brief.
 
-    `question` is the masked question, exactly as the model saw it. `rounds`
-    is how many rounds ran and `kept_round` the one whose draft is the
-    `body`. `warnings` are the checks still failing on that draft; `quality`
-    is the Critic's review of it, `None` if the Critic gave none.
+    `question` is the masked question as the model saw it. `body` is the draft of
+    `kept_round`, and `warnings` are the checks still failing on it.
     """
 
     id: UUID
@@ -583,10 +569,7 @@ class DecisionBrief:
 class BriefRecord:
     """A brief as storage holds it: ids and loop facts in the clear, every text sealed.
 
-    `content_sealed` holds the question, the body, the caveat, the warnings
-    and the Critic's scores; `evidence_sealed` the passages the Writer saw
-    and their sources' details; `trace_sealed` the agent steps and the
-    manifest. Each is encrypted under the project's key, bound to this row.
+    Each sealed field is encrypted under the project's key and bound to this row.
     """
 
     id: UUID

@@ -1,13 +1,8 @@
-"""Screening: what was decided about one paper, why, by what, and how the run's papers add up.
+"""Screening: what was decided about one paper, why, by what, and how a run's papers add up.
 
-A `ScreeningDecision` is the answer to "why was this paper included or
-excluded?" six months later. It is valid by construction: it names the model,
-the prompt version and the criteria version that produced it, and an exclusion
-always carries the criteria behind it, so PRISMA can count exclusions by reason.
-
-Also here: the passages the brief stage cites (`Passage`, `EvidenceSource`),
-the seam the screen stage reads masked text through (`MaskedTextSource`), and
-the PRISMA-style counts. Storage, encryption and the model call live elsewhere.
+A `ScreeningDecision` answers "why was this paper included or excluded?" months later: it
+names the model, prompt and criteria version that produced it, and an exclusion always
+carries its criteria, so PRISMA can count exclusions by reason.
 """
 
 from __future__ import annotations
@@ -47,7 +42,7 @@ class Priority(StrEnum):
 
 
 class ScreeningTier(StrEnum):
-    """The names people see (UI_UX_SPEC §6.8), derived from label and priority."""
+    """The names people see, derived from label and priority."""
 
     HIGHLY_RELEVANT = "highly_relevant"
     RELEVANT = "relevant"
@@ -116,9 +111,8 @@ class CriterionAnswer:
 def check_quotes(answers: Sequence[CriterionAnswer], text: str) -> None:
     """Refuse, with `ValueError`, any quote that is not a piece of `text`.
 
-    Runs of whitespace count as one space on both sides, since a model may
-    rejoin a line break; any other difference means the words are the model's
-    own, and a reviewer would be shown them as the paper's.
+    Runs of whitespace count as one space, since a model may rejoin a line break. Any other
+    difference would show a reviewer the model's words as the paper's.
     """
     haystack = _SPACES.sub(" ", text).strip()
     for answer in answers:
@@ -138,11 +132,8 @@ def exclusion_reasons(
 ) -> tuple[str, ...]:
     """The criteria that exclude a paper, or `ValueError` if the label contradicts them.
 
-    `criteria_matched` names the criteria the paper meets: inclusion criteria
-    satisfied and exclusion criteria triggered. An inclusion must trigger no
-    exclusion criterion. An exclusion's reasons are the exclusion criteria it
-    triggers, then the inclusion criteria it misses, in the plan's order; it
-    must have at least one.
+    An inclusion must trigger no exclusion criterion. An exclusion's reasons are the exclusion
+    criteria it triggers, then the inclusion criteria it misses; it needs at least one.
     """
     known = set(inclusion_ids) | set(exclusion_ids)
     unknown = sorted(set(criteria_matched) - known)
@@ -169,12 +160,8 @@ def exclusion_reasons(
 class ScreeningDecision:
     """One run's assessment of one paper, with what produced it.
 
-    `criteria_matched` names the criteria the paper meets; `exclusion_reasons`
-    is set for an exclusion only (see `exclusion_reasons`). `evidence_kind`
-    says what was read: the abstract, never yet the full text. `is_unreadable`
-    marks the fallback recorded when the model's answer could not be read.
-    `criterion_answers`, when there are any, answer every criterion once and
-    agree with `criteria_matched`; decisions made before they existed have none.
+    `evidence_kind` says what was read: the abstract, never yet the full text. Decisions made
+    before per-criterion answers existed have no `criterion_answers`.
     """
 
     run_id: UUID
@@ -257,13 +244,10 @@ class ScreeningDecision:
 
 @dataclass(frozen=True, slots=True)
 class StoredDecision:
-    """A `ScreeningDecision` as stored: the rationale sealed under the project's key.
+    """A `ScreeningDecision` as stored: the rationale and per-criterion answers sealed.
 
-    The rationale is model output about a paper, so it is project data. The
-    label, priority, score and criterion ids stay in the clear so a run's
-    papers can be filtered and counted without opening every row. The
-    per-criterion answers quote the paper, so they are sealed too
-    (`answers_sealed`, absent for decisions made without them).
+    Both are model output about a paper, so they are project data. Labels, scores and
+    criterion ids stay in the clear so a run's papers can be counted without opening rows.
     """
 
     run_id: UUID
@@ -398,9 +382,8 @@ class PassageSourceKind(StrEnum):
 def passage_tag(position: int) -> str:
     """The tag a brief cites a paper by: its place in the run's papers, `P1`, `P2`, …
 
-    Taken from the place, not from the order of inclusion, so a tag never moves
-    when another paper's label changes, and a run that adopts another run's
-    papers cites them by the same tags.
+    Taken from the place, not the order of inclusion, so a tag never moves when another
+    paper's label changes.
     """
     if position < 1:
         raise ValueError("a passage tag needs a position counting from 1")

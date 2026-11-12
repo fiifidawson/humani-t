@@ -1,10 +1,7 @@
 """Requirements for signing in, staying signed in, and getting back in.
 
-Source: WEB_APP_BRIEF rules 6, 9 and 16; NIST SP 800-63B rev 4; OWASP ASVS 5.0
-V6 (Authentication), V7 (Session Management) and V16 (Security Logging).
-
-MFA is specified in `test_mfa_api.py`. These specs cover the password factor
-alone, so they opt out of the MFA requirement explicitly in the fixture below.
+Sources: NIST SP 800-63B rev 4 and OWASP ASVS 5.0 V6, V7 and V16. These specs cover the
+password factor alone and opt out of MFA in the fixture below; MFA is in `test_mfa_api.py`.
 """
 
 from __future__ import annotations
@@ -177,7 +174,7 @@ class TestCurrentSession:
 
 
 class TestReauthentication:
-    """Step-up rotates the token (architecture §5.2), so a token seen before it is spent."""
+    """Step-up rotates the token, so a token seen before it is spent."""
 
     def _reauthenticate(self, browser, password: str = USER_PASSWORD):
         return browser.post(

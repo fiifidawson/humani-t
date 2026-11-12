@@ -1,21 +1,8 @@
 """The run manifest: everything needed to reproduce a run, or to say why two runs differ.
 
-Each stage records its own facts at the moment it finishes, under a
-`"manifest"` key in its summary (architecture §4.2). This module gathers them,
-with the run's own dates, into one `RunManifest`. It never reconstructs a fact
-a stage did not record, and it never picks one value when two stages disagree:
-both are kept, so a run that mixed versions says so.
-
-The keys a stage may record, and how they combine:
-
-- `vocabulary_version`, `criteria_version`, `plan_version` (int): every distinct value;
-- `sources` (list of str) and `queries` (source -> rendered query);
-- `model_id` (str) or `model_ids` (list of str): every distinct model;
-- `prompt_version` (str), filed under the stage, or `prompt_versions`
-  (name -> version), filed under `stage.name`;
-- `papers_from_run` (str): the run whose discovery a later run worked from.
-
-Any other key is kept in that stage's `facts` as it was recorded.
+Each stage records its own facts under `"manifest"` in its summary as it finishes; this
+module only gathers them. It never reconstructs a fact a stage did not record, and when two
+stages disagree it keeps both, so a run that mixed versions says so.
 """
 
 from __future__ import annotations

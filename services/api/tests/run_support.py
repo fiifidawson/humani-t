@@ -1,16 +1,9 @@
 """Helpers for the run specs: a team with a review, workers with scripted stages, and the log.
 
-Built on `tests/project_support.py` and as real as it is: requests go through
-the real middleware, routes, storage, encryption and audit log, and the worker
-is the real `RunWorker`. Only the stages are scripted, because the real ones
-(discover, mask, screen, brief) belong to other phases.
-
-Two instruments, neither of which changes behaviour:
-
-- `ClockAdvancingSignals` makes every wait return at once and moves the fake
-  clock by the whole timeout, so a quiet stream's minutes pass in microseconds;
-- it also records how many transactions were open at each wait, so a test can
-  prove a stream never holds a database connection while it waits.
+Requests, storage, encryption, the audit log and `RunWorker` are real; only the stages are
+scripted. `ClockAdvancingSignals` makes every wait return at once, moving the fake clock by
+the timeout, and records the transactions open at each wait, so a test can prove a stream
+holds no database connection while it waits.
 """
 
 from __future__ import annotations

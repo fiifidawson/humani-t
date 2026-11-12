@@ -1,8 +1,7 @@
-"""The rules every download keeps, as plain functions (UI_UX_SPEC §6.8, §6.9).
+"""The rules every download keeps, as plain functions.
 
-Sources: OWASP "CSV Injection" (a cell starting with = + - @, a tab or a
-carriage return is run as a formula by spreadsheet programs), RFC 6266
-(`Content-Disposition`), and the export list in UI_UX_SPEC §6.8 and §6.9.
+Spreadsheet programs run a CSV cell starting with = + - @, a tab or a carriage return as a
+formula (OWASP "CSV Injection"); `Content-Disposition` follows RFC 6266.
 """
 
 from __future__ import annotations

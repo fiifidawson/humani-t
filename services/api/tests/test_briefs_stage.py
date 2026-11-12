@@ -1,12 +1,8 @@
 """The `answer` stage: write the decision brief, store it once, and report every step.
 
-Sources: architecture §4.2, §4.4 (agent.step, a stage may run more than once),
-§5.4 (encrypted under the project's key, shredded with it) and §5.5 (audit ids
-only); the one rule in CLAUDE.md (masked text only reaches the model).
-
-Everything is real except the model (scripted), the evidence the pipeline
-stages would have stored (a fake source) and the question masker (a fake that
-masks one place name): a real worker, storage, encryption and audit log.
+Everything is real except the model (scripted), the stored evidence (a fake source) and the
+question masker (a fake that masks one place name). The stage may run more than once, and
+only masked text reaches the model.
 """
 
 from __future__ import annotations

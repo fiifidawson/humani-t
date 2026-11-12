@@ -1,12 +1,7 @@
 """A request to a language model and what comes back, independent of any model server.
 
-Every call asks for structured output: a JSON document that must match a
-schema. Free text from a model is not something the rest of the system can
-check, cite or store as a decision, so it is not offered.
-
-The result carries the model id and token usage because a `RunManifest` must
-be able to say exactly which model produced a decision, and at what cost.
-Wire formats (Ollama's, OpenAI's) never appear here.
+Every call asks for JSON matching a schema: free text cannot be checked, cited or stored
+as a decision. The result names the model and its token usage, for the run manifest.
 """
 
 from __future__ import annotations

@@ -1,11 +1,8 @@
 """Second factors: completing a sign-in with one, and managing the account's own.
 
-Two routers with different gates:
-
-- `/auth/mfa/*` accepts only a **pending** session — one past the password and
-  waiting for its second factor. Success replaces it with a new aal 2 session.
-- `/account/mfa/*` accepts a completed sign-in that may not have enrolled yet,
-  because enrolling is how an account gets past the enrolment gate.
+`/auth/mfa/*` accepts only a pending session, one waiting for its second factor.
+`/account/mfa/*` accepts a signed-in account that may not have enrolled yet, because
+enrolling is how it gets past the enrolment gate.
 """
 
 from __future__ import annotations

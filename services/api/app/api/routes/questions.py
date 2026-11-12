@@ -1,9 +1,8 @@
-"""Follow-up questions in threads (UI_UX_SPEC §6.12, §15 P2).
+"""Follow-up questions in threads.
 
-Asking returns at once with the question masked and queued; the worker
-answers it, and the browser polls `GET /questions/{id}` until it is answered
-or failed. These paths name a review, thread or question; a non-member gets
-the same 404 as a missing id, before the body is read.
+Asking returns at once with the question masked and queued; the worker answers it
+while the browser polls. A non-member gets the same 404 as a missing id, before the
+body is read.
 """
 
 from __future__ import annotations

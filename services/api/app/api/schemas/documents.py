@@ -1,13 +1,7 @@
 """Request and response models for a project's uploaded documents.
 
-Pydantic checks shape and size; the domain checks meaning (`user_span`,
-`normalize_reason`, `Document.decided`), and its errors become 404, 409 or 422
-in the route. The upload itself is multipart and has no model here
-(`api/uploads.py`).
-
-Raw text appears in exactly one response, `DocumentReviewOut`, which only an
-owner can get and every request for which is audited. Every other response
-carries masked text, counts and ids.
+Raw text appears in exactly one response, `DocumentReviewOut`, which only an owner
+can get and which is audited. Every other response carries masked text, counts and ids.
 """
 
 from __future__ import annotations

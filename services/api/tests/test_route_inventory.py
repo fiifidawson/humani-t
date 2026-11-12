@@ -1,11 +1,7 @@
 """Every route the app registers is checked for sign-in and project membership.
 
-Sources: architecture §4.1 ("every request checks membership") and §5.5 (deny
-by default); OWASP ASVS 5.0 V8.
-
-Feature specs test the routes someone remembered to test. These walk the app's
-own route table, so a route added later is covered the moment it exists — and
-a route that should be public has to be named below, where a reviewer sees it.
+These walk the app's own route table, so a route added later is covered the moment it
+exists, and a route meant to be public must be named below, where a reviewer sees it.
 """
 
 from __future__ import annotations

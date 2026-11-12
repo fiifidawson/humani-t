@@ -25,10 +25,10 @@ OFFLINE_SOURCES = {"fake"}
 
 @router.get("/health", summary="Liveness probe")
 async def health() -> HealthOut:
-    """Answers 'is this process up', not 'is the whole system healthy'.
+    """Answer 'is this process up', not 'is the whole system healthy'.
 
-    Deliberately touches no provider and no database. Conflating the two makes
-    deploys hard to debug, because a failing dependency looks like a dead process.
+    Touches no provider and no database, so a failing dependency never looks like a
+    dead process.
     """
     return HealthOut(status="ok")
 
@@ -48,12 +48,7 @@ async def ready(storage: StorageDep) -> ReadyOut | JSONResponse:
 
 @info_router.get("/info", summary="What is wired into this process")
 async def info(provider: SearchProviderDep) -> InfoOut:
-    """Reports which implementations are active behind the interfaces.
-
-    Worth having early: the whole design rests on implementations being
-    swappable, and this is the endpoint that makes the current choice visible
-    instead of buried in a config file.
-    """
+    """Report which implementations are active behind the interfaces."""
     return InfoOut(
         name=API_NAME,
         version=API_VERSION,

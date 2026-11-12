@@ -1,12 +1,8 @@
-"""Masking as a pure function of the raw text and its spans (architecture §3.9.1).
+"""Masking as a pure function of the raw text and its spans.
 
-Sources: the brief's rules 1 to 5 (mask before any model; counts, never values;
-masking is not anonymity) and UI_UX_SPEC §8.5 (a placeholder's number keeps one
-person apart from another in the same text).
-
-The property tests carry the invariants that matter most: nothing inside a
-masked span survives, the result does not depend on the order spans arrive in,
-and the spans keep pointing into the raw text, which never changes.
+The property tests carry the invariants: nothing inside a masked span survives, the result
+does not depend on span order, and spans keep pointing into the unchanged raw text. A
+placeholder's number keeps one person apart from another in the same text.
 """
 
 from __future__ import annotations
@@ -178,7 +174,7 @@ class TestApplySpans:
         )
 
     def test_counts_are_distinct_values_by_type_never_the_values(self):
-        """The receipt says '2 people, 1 location' (brief rule 4, UI_UX_SPEC §8.5)."""
+        """The receipt says '2 people, 1 location'."""
         raw = "Amina met Kofi and Amina again in Marib."
         spans = spans_of(
             raw,

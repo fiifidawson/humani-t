@@ -1,14 +1,8 @@
 """Helpers for the planning specs: a team with a review, a scripted model and a fake sanitiser.
 
-Built on `tests/run_support.py` and as real as it is: requests go through the
-real middleware, routes, storage, encryption and audit log, and model calls go
-through the real `GuardedInference`. Only the model and the sanitiser are
-scripted, and neither is a mock:
-
-- `ScriptedPlanner` wraps `FakeInferenceProvider`, which validates every answer
-  against the request's JSON schema exactly as a real provider must;
-- `FakeSanitizer` really masks: it finds known names and places and applies
-  them with the domain's own `apply_spans`, in the `Sanitizer` contract's shape.
+Everything is real except the model and the sanitiser, and neither is a mock:
+`ScriptedPlanner` validates every answer against the request's JSON schema, and
+`FakeSanitizer` really masks known names and places with the domain's `apply_spans`.
 """
 
 from __future__ import annotations

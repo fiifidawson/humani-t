@@ -1,14 +1,8 @@
 """Runs, their event log and their gates, as rules with no I/O.
 
-A run executes some of a review's pipeline stages as a background job
-(architecture §4.4). This module decides what may follow what — the run's
-state table, where a crashed run goes, which stages a run may ask for — and
-what each event says. Storage, encryption, the worker and the stream live
-elsewhere and obey these rules.
-
-Event payloads carry counts, labels and masked text only. They are encrypted
-under the project's key before they are stored; this module builds them in
-the clear and never sees them again.
+This module decides what may follow what: the run's states, where a crashed run goes and
+which stages a run may ask for. Event payloads carry counts, labels and masked text only,
+and are encrypted under the project's key before they are stored.
 """
 
 from __future__ import annotations
@@ -25,8 +19,7 @@ from app.domain.reviews import InvalidTransitionError
 
 type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
-# The prototype's pipeline, in run order (UI_UX_SPEC §6.7). A run covers some
-# of these, always in this order.
+# The pipeline, in run order. A run covers some of these, always in this order.
 STAGES: tuple[str, ...] = (
     "queries",
     "discover",
@@ -38,7 +31,7 @@ STAGES: tuple[str, ...] = (
     "answer",
 )
 
-# Words a non-technical user knows (UI_UX_SPEC §5.3.5). Used in error messages.
+# Words a non-technical user knows, for error messages.
 STAGE_LABELS: Mapping[str, str] = {
     "queries": "Queries",
     "discover": "Discover",
@@ -74,9 +67,8 @@ class RunConflictError(Exception):
 def plan_stages(requested: Sequence[str], available: Collection[str]) -> tuple[str, ...]:
     """The stages a run will execute, in pipeline order. None asked for means all of them.
 
-    Refuses an unknown or repeated stage, and a stage this deployment has no
-    implementation for, so a run never starts that is bound to fail at a stage
-    nobody can run.
+    Refuses an unknown or repeated stage, or one this deployment cannot run, so no run
+    starts that is bound to fail.
     """
     requested = requested or STAGES
     unknown = [s for s in requested if s not in STAGES]
@@ -147,10 +139,8 @@ def _require_aware(owner: str, **timestamps: datetime | None) -> None:
 class Run:
     """One execution of some of a review's stages. Its row is also its job in the queue.
 
-    `stages_finished` counts the stages done; the stage at that index is the
-    current one. A stage interrupted by a gate or a crash runs again from its
-    start, so stages must be safe to repeat. `stage_started_at` stays set
-    across those interruptions, so `stage.started` is sent once per stage.
+    A stage interrupted by a gate or a crash runs again from its start, so stages must be
+    safe to repeat. `stage_started_at` survives that, so `stage.started` is sent once.
     """
 
     id: UUID
@@ -346,9 +336,8 @@ class RunEvent:
 def resume_point(last_event_id: str | None, last_id: int) -> int:
     """The id after which a reconnecting stream resumes; 0 replays from the start.
 
-    An id this run does not have — malformed, out of range, or beyond the run's
-    latest event as an id from another run usually is — replays everything.
-    The browser may then see an event twice, never miss one.
+    An id this run does not have replays everything: the browser may see an event twice,
+    but never miss one.
     """
     if last_event_id is None or not _EVENT_ID.fullmatch(last_event_id.strip()):
         return 0
@@ -436,8 +425,8 @@ class GateDecision(StrEnum):
     REJECT = "reject"
 
 
-# Approving masking means reading the documents' raw text, which only owners
-# may (UI_UX_SPEC §3.3, §5.3.6); confirming a vocabulary is any contributor's.
+# Approving masking means reading the documents' raw text, which only owners may;
+# confirming a vocabulary is any contributor's.
 _GATE_ACTIONS: Mapping[GateKind, Action] = {
     GateKind.VOCABULARY: Action.CONFIRM_GATE,
     GateKind.PRIVACY_REVIEW: Action.MANAGE_DOCUMENTS,

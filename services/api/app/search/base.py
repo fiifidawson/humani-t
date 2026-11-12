@@ -1,12 +1,6 @@
 """The PaperSearchProvider Protocol.
 
-This is the most important interface in the system. Everything downstream —
-screening, the decision brief, the audit trail — inherits the provenance it
-establishes.
-
-A Protocol rather than an ABC: implementations do not inherit from anything, so
-a provider can be written, tested and swapped without importing this module at
-runtime. Structural typing means conformance is checked by shape.
+Screening, the brief and the audit trail all inherit the provenance this seam records.
 """
 
 from __future__ import annotations
@@ -26,10 +20,7 @@ class PaperSearchProvider(Protocol):
 
     @property
     def source_id(self) -> str:
-        """Stable short name, e.g. 'openalex'. Stored on every PaperRecord.
-
-        Must not change once results referencing it have been persisted.
-        """
+        """Stable short name, e.g. 'openalex', stored on every PaperRecord: never change it."""
         ...
 
     async def search(
@@ -37,16 +28,13 @@ class PaperSearchProvider(Protocol):
     ) -> Sequence[PaperRecord]:
         """Run a compiled query and return what this source knows.
 
-        The implementation compiles `query` into its own dialect. It must not
-        add, expand or reinterpret terms — a strict vocabulary stays strict all
-        the way down.
+        Never add, expand or reinterpret terms: a strict vocabulary stays strict.
         """
         ...
 
     async def fetch_fulltext(self, record: PaperRecord) -> str | None:
         """Return full text, or None when the document is not openly available.
 
-        None is a normal outcome, not an error. Much of the corpus will be
-        metadata-only, and screening has to work on abstracts alone.
+        None is a normal outcome, not an error.
         """
         ...

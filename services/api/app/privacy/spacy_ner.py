@@ -1,15 +1,8 @@
 """Names, places and dates from a spaCy pipeline installed on this machine.
 
-The optional `ner` extra installs spaCy and `en_core_web_sm` (MIT-licensed,
-about 13 MB; walkthrough 10 compares it with GLiNER).
-A model is loaded only from an installed Python package or a local folder:
-anything that looks like a URL or a hub id is refused, never downloaded,
-because "fully local" has to hold at run time and not only at install time.
-`spacy.load` itself never fetches anything; `spacy download` does, and it is
-an operator's install step, not something this module calls.
-
-What does not belong here: deciding whether NER is on (`api/dependencies.py`)
-or which entity types a text is masked with (`domain/masking.py`).
+A model loads only from an installed package or a local folder. A URL or hub id is
+refused, never downloaded, so "fully local" holds at run time too; `spacy download`
+is an operator's install step, never called here.
 """
 
 from __future__ import annotations
@@ -111,8 +104,7 @@ class SpacyNerDetector:
     def is_available(model: str) -> bool:
         """Whether spaCy and `model` are installed here, without loading or fetching anything.
 
-        Raises `RemoteModelRefusedError` for a model that is not on this machine,
-        rather than answering False and letting a typo pass as "not installed".
+        Raise `RemoteModelRefusedError`, not False, for a model that is not local.
         """
         _require_local(model)
         if importlib.util.find_spec("spacy") is None:
@@ -158,9 +150,8 @@ def _installed_meta(model: str) -> Mapping[str, Any]:
 class LazySpacyNerDetector:
     """A `SpacyNerDetector` that loads its model on first use, once per process.
 
-    Building the API's providers must stay fast (every test builds them), and
-    most processes never mask a document, so the model is not loaded until a
-    text actually needs it.
+    Building providers must stay fast (every test does it), and most processes never
+    mask a document.
     """
 
     def __init__(self, model: str) -> None:

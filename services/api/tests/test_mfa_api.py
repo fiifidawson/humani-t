@@ -1,26 +1,10 @@
-"""Requirements for multi-factor authentication (M9), through the HTTP API.
+"""Requirements for multi-factor authentication through the HTTP API (NIST SP 800-63B AAL2).
 
-Source: WEB_APP_BRIEF rule 6; NIST SP 800-63B rev 4 at AAL2 (two factors,
-replay resistance, reauthentication, notification of authenticator changes);
-RFC 6238 (TOTP); W3C WebAuthn Level 3 (registration and authentication
-ceremonies, §7.1 and §7.2); OWASP ASVS 5.0 V6 (Authentication), V7 (Session
-Management) and V16 (Security Logging).
-
-The shape of sign-in after M9:
-
-1. `POST /auth/login` checks the password. If the account has an authenticator,
-   the answer is `"status": "mfa_required"` with a **pending** session: `aal` 1,
-   five minutes long, good only for `/auth/mfa/*` and sign-out.
-2. A second factor — a passkey, a TOTP code or a recovery code — completes
-   sign-in under a **new** session token at `aal` 2.
-
-MFA is required by default. An account without an authenticator signs in at
-`aal` 1 with `"status": "mfa_enrolment_required"` and can reach only enrolment,
-sign-out and its own account basics until it enrols one.
-
-Passkey specs use `tests/webauthn_authenticator.py`: real ES256 keys, real
-signatures, real CBOR. A server that passes them has verified a ceremony; one
-that skips a check fails the forgery that targets it.
+A password sign-in on an account with an authenticator gets a pending `aal` 1 session, good
+only for `/auth/mfa/*` and sign-out; a second factor completes it under a new token at
+`aal` 2. MFA is required by default, so an account without an authenticator can reach
+little but enrolment. Passkey specs use real keys and signatures from
+`tests/webauthn_authenticator.py`.
 """
 
 from __future__ import annotations

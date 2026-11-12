@@ -1,10 +1,7 @@
-"""Passkey verification with py_webauthn.
+"""Passkey verification with py_webauthn, the only module that imports `webauthn`.
 
-The only module that imports `webauthn`. It turns the library's types into the
-domain's `VerifiedRegistration`/`VerifiedAssertion`, and every library failure
-— a bad signature, a wrong origin, malformed CBOR — into one
-`PasskeyVerificationError`, so callers cannot accidentally treat one kind of
-failure as success.
+Every library failure becomes one `PasskeyVerificationError`, so a caller cannot
+mistake one kind of failure for success.
 """
 
 from __future__ import annotations

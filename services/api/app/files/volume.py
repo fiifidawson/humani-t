@@ -1,11 +1,7 @@
-"""A `FileStore` on a local directory: a Docker volume in the compose deployment (ADR-0008).
+"""A `FileStore` on a local directory, a Docker volume in the compose deployment.
 
-Each file is `<root>/<project id>/<document id>.sealed`, holding ciphertext
-only. Writes go to a temporary file in the same directory, are flushed to
-disk, and are moved into place in one rename, so a crash leaves either the
-whole file or none of it. Files are created readable by the API's user alone.
-
-The disk work runs in a thread, so a slow volume never stalls the event loop.
+Writes go to a temporary file and are renamed into place, so a crash leaves the whole
+file or none of it. Files are readable by the API's user alone.
 """
 
 from __future__ import annotations

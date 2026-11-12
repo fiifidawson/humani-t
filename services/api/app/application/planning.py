@@ -1,19 +1,9 @@
 """The search-planning conversation: from a review's question to an accepted plan.
 
-Route A (architecture §4.3): the model asks clarifying questions (deep mode),
-drafts themes, concepts and criteria, and redrafts on each change request,
-until a person accepts a version. Route B: a person uploads their own terms,
-parsed by code; the model is never called. The `queries` stage reads the
-accepted plan (`accepted_plan`, the `PlanSource`) and asks for the vocabulary
-gate through this module when there is none.
-
-Every model call is masked first and goes through `GuardedInference`. Each use
-case follows architecture §5.7: a short read, then masking and the model call
-with no transaction open, then a short write that re-checks what it read. What
-the model received is stored as a privacy receipt; everything stored is sealed
-under the project's key; the audit log gets ids only.
-
-What does not belong here: the rules themselves (`domain/plans.py`) and HTTP.
+Either the model drafts and redrafts until a person accepts a version, or a person
+uploads their own terms and no model is called. Model input is masked first, goes through
+`GuardedInference` with no transaction open, and is kept as a privacy receipt. The audit
+log gets ids only. The rules themselves live in `domain/plans.py`.
 """
 
 from __future__ import annotations
@@ -199,7 +189,7 @@ DRAFT_SCHEMA: dict[str, Any] = {
     },
 }
 
-# Each bound to its table, column and row (architecture §5.4).
+# Each bound to its table, column and row.
 _CONVERSATION_PURPOSE = "plan_conversations.body"
 _VERSION_PURPOSE = "plan_versions.body"
 _RECEIPT_PURPOSE = "plan_receipts.body"
@@ -241,7 +231,7 @@ NO_PROJECT_RULES: MaskingRuleSource = _NoProjectRules()
 
 @dataclass(frozen=True, slots=True)
 class PlanView:
-    """What the planning screens show for one review (UI_UX_SPEC §5.3.2 to 5.3.4, §6.5)."""
+    """What the planning screens show for one review."""
 
     review_id: UUID
     status: ReviewStatus
@@ -1013,9 +1003,8 @@ def _draft_from(
 ) -> tuple[tuple[Concept, ...], tuple[Criterion, ...], tuple[str, ...]]:
     """Concepts and criteria from a schema-valid draft, and notes on what was changed.
 
-    A term holding a masked placeholder, in any form a model rewrote it to, is
-    dropped: it would search for "[LOCATION_1]", and the plan's terms reach the
-    paper sources.
+    A term holding a masked placeholder in any form is dropped, since plan terms reach
+    the paper sources and it would search for "[LOCATION_1]".
     """
     concepts: list[Concept] = []
     notes: list[str] = []

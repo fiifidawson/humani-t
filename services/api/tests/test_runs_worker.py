@@ -1,15 +1,8 @@
 """Requirements for the worker and the live stream, below HTTP.
 
-Sources: architecture §4.4 (events stored before sent, exactly one
-`job.finished`, waiting costs nothing, any instance serves a stream, the
-session re-checked at least once a minute, keep-alive every 15 seconds) and
-§5.7 (no connection held across slow work; leases instead of locks held while
-a person thinks).
-
-The HTTP test client buffers a whole response, so a stream that has not ended
-cannot be read through it. These specs drive the stream the route serves —
-`RunService.open_stream` — directly, with a clock that moves only when a wait
-times out, so a quiet hour passes in microseconds and nothing sleeps.
+The test client buffers a whole response, so these drive `RunService.open_stream`
+directly, with a clock that moves only when a wait times out: a quiet hour passes in
+microseconds and nothing sleeps.
 """
 
 from __future__ import annotations
@@ -311,7 +304,7 @@ class TestTheLiveStream:
         assert ids == list(range(1, len(ids) + 1))
 
     def test_every_open_stream_sees_a_gate_resolution(self, rt):
-        """Other tabs and other members see the decision (architecture §4.4)."""
+        """Other tabs and other members see the decision."""
         run_id = rt.start_run(["queries", "discover"])
         run_until_idle(rt.worker(_gated()))
         replay = len(rt.events(run_id))

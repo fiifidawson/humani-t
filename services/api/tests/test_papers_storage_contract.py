@@ -1,16 +1,9 @@
 """One behaviour contract for paper and screening storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a database
-migrated to revision 0009, as the runtime role.
-
-What matters most here:
-
-- a paper is stored once per review, found again by its identity digest, so a
-  re-run neither duplicates papers nor loses their ids;
-- a run records which papers it saw, in order, and which sources it asked;
-- writes that a re-run repeats are conditional and say whether they won: a
-  run's paper set, a paper's text and a run's decision on a paper are each
-  stored once, and a second attempt changes nothing.
+A paper is stored once per review and found again by its identity digest, so a re-run
+neither duplicates papers nor loses their ids. Writes a re-run repeats are conditional and
+say whether they won. The Postgres run is skipped unless TEST_DATABASE_URL points at a
+database migrated to revision 0009, as the runtime role.
 """
 
 from __future__ import annotations

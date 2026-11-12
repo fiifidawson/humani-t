@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """Create local development secrets and a matching services/api/.env.
 
-Usage (from the repository root):
-    python scripts/dev_secrets.py
-
-Writes random values into ./secrets/ (git-ignored) for Docker Compose, and a
-services/api/.env (git-ignored) pointing the API at the dev database. Existing
-files are never overwritten, so re-running it is safe; delete a file to rotate it.
-
-For development only. A production deployment generates its own secrets and
-stores them outside the repository.
+Run `python scripts/dev_secrets.py` from the repository root. Both outputs are
+git-ignored, and existing files are never overwritten: delete one to rotate it.
+For development only; production keeps its secrets outside the repository.
 """
 
 from __future__ import annotations

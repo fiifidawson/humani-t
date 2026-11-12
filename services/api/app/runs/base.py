@@ -1,19 +1,9 @@
 """The seam a pipeline stage plugs into: what a stage is given, and what it may raise.
 
-A stage (discover, mask, screen, the brief…) is a `Stage`. The worker hands it a
-`StageContext` to report through and to pause with; the stage returns its
-summary. Concrete stages live in their own lanes and are chosen in
-`api/dependencies.py`, like every other provider.
-
-Two rules every stage must keep, because the worker relies on them:
-
-- **A stage may run more than once.** A gate, a crash or a deploy interrupts
-  it, and the worker then runs it again from its start. Work already stored
-  must be found and skipped, not repeated or duplicated.
-- **Everything reported is shown to every member.** Progress items, agent
-  steps, gate payloads, summaries and `StageFailedError` messages carry
-  counts, labels and masked text only — never a document's raw text, an
-  unmasked prompt or an exception's text.
+Every stage must keep two rules. It may run more than once after a gate, crash or
+deploy, so stored work must be found and skipped, not repeated. And everything it
+reports is shown to every member, so it carries counts, labels and masked text only:
+never raw text, an unmasked prompt or an exception's text.
 """
 
 from __future__ import annotations
@@ -61,9 +51,7 @@ class StageContext(Protocol):
     ) -> None:
         """Report one step: `done` of `total`, and a label for the latest item.
 
-        Send one per item; the interface throttles its own redraws. `screened`
-        is the screen stage's structured row for the paper just decided
-        (`domain.screening.screened_item`); other stages leave it out.
+        Send one per item. Only the screen stage passes `screened`.
         """
         ...
 
@@ -76,10 +64,8 @@ class StageContext(Protocol):
     ) -> GateResolution:
         """Return the decision on this stage's gate of `kind`, pausing the run until one exists.
 
-        The first call stores the gate, tells every member through the stream,
-        and ends this execution of the stage: the run waits without a worker.
-        Once someone decides, the run is queued again, the stage runs again from
-        its start, and this call returns the decision instead of pausing.
+        The first call ends this execution of the stage. Once someone decides, the stage
+        runs again from its start and this call returns the decision.
         """
         ...
 

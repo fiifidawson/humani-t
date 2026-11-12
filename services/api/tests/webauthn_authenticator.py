@@ -1,14 +1,9 @@
 """A software WebAuthn authenticator, for proving passkey verification is real.
 
-It does what a security key or a phone does, with a real ES256 key pair: it
-builds `clientDataJSON` and `authenticatorData` byte for byte, signs assertions
-with ECDSA P-256, and packs registrations as a CBOR attestation object in the
-"none" format. A server that accepts its output has checked real signatures;
-a server that skips a check is caught by the knobs below, which forge exactly
-one thing at a time.
-
-Nothing here imports the application. The CBOR encoder covers only the types
-WebAuthn uses (integers, byte and text strings, maps), so no dependency is needed.
+It builds `clientDataJSON` and `authenticatorData` byte for byte and signs with a real
+ES256 key, and its knobs forge one thing at a time, so a server that skips a check is
+caught. It imports nothing from the app, and its CBOR encoder covers only the types
+WebAuthn uses.
 """
 
 from __future__ import annotations

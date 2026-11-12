@@ -1,20 +1,8 @@
 """A review's search plan: the vocabulary and criteria its runs search and screen with.
 
-What belongs here: the plan's versions and their rules, the planning
-conversation (clarifying questions, change requests), how one version differs
-from the one before and who wrote each term, the documented parser for a
-user-supplied (strict) vocabulary, and `PlanSource`, the read other stages use.
-
-The rules (architecture §4.3):
-
-- an accepted version never changes; editing makes the next version;
-- accepting freezes the vocabulary at that version;
-- a user-supplied vocabulary is used exactly as given, and no version that
-  holds one may be written by the model.
-
-What does not: encryption, storage and model calls (`application/planning.py`).
-Everything here is plaintext and does no I/O; the stored forms at the end hold
-only ciphertext and the ids and dates needed to find them.
+An accepted version never changes; editing makes the next one. A user-supplied (strict)
+vocabulary is used exactly as given, and no version holding one may be written by the
+model. Encryption, storage and model calls belong in `application/planning.py`.
 """
 
 from __future__ import annotations
@@ -106,7 +94,7 @@ def number_criteria(entries: Iterable[tuple[CriterionKind, str]]) -> tuple[Crite
 
 
 class PlanMode(StrEnum):
-    """How thorough a review is; the interface says Quick and Deep (UI_UX_SPEC §6.3)."""
+    """How thorough a review is; the interface says Quick and Deep."""
 
     SHALLOW = "shallow"
     DEEP = "deep"
@@ -195,9 +183,8 @@ class ChangeRequest:
 class PlanConversation:
     """The planning conversation of one review, between its versions.
 
-    Holds the clarifying questions while they are being answered, and a change
-    request while the model drafts from it. Each version then keeps a copy of
-    what informed it, so the conversation can move on without losing provenance.
+    Each version keeps a copy of what informed it, so the conversation can move on without
+    losing provenance.
     """
 
     review_id: UUID
@@ -508,11 +495,9 @@ type RedoStage = Literal["queries", "screen"]
 
 
 def first_stage_to_redo(before: ReviewPlan, after: ReviewPlan) -> RedoStage | None:
-    """The earliest pipeline stage a change from `before` to `after` affects.
+    """The earliest pipeline stage a change from `before` to `after` affects, or `None`.
 
-    A changed search finds different papers, so it starts again from `queries`.
-    Changed criteria alone re-judge the papers already found, from `screen`.
-    `None` when the search and the criteria are the same: there is nothing to redo.
+    A changed search starts again from `queries`; changed criteria alone redo `screen`.
     """
     diff = diff_plans(before, after)
     if diff.concepts or diff.terms:
@@ -551,18 +536,10 @@ _CSV_HEADER = ("theme", "term", "synonyms")
 
 
 def parse_strict_vocabulary(content: str, format: VocabularyFormat) -> tuple[Concept, ...]:
-    """Parse a user's own vocabulary by code. No model, and nothing added or respelled.
+    """Parse a user's own vocabulary by code: no model, nothing added or respelled.
 
-    Text: one concept per line, `term; synonym; synonym`. A line `[theme]`
-    starts a theme; lines before any belong to "general". Blank lines and lines
-    starting with `#` are ignored.
-
-    CSV: a header `theme,term,synonyms`, then one concept per row, synonyms
-    separated by `;`. A blank theme means "general".
-
-    Both: each term is trimmed of surrounding spaces and otherwise kept exactly.
-    An empty term, a term repeated within its concept and a concept repeated
-    within its theme are refused with the line number, never silently dropped.
+    The text and CSV formats are documented in `docs/api.md`. A bad line is refused with
+    its number, never silently dropped.
     """
     rows = _text_rows(content) if format is VocabularyFormat.TEXT else _csv_rows(content)
     concepts: list[Concept] = []
@@ -728,13 +705,8 @@ class SentText:
 class PrivacyReceipt:
     """What one model call received of the people's text, for the "Sent as" receipt.
 
-    Written whether or not the call succeeded, once the text may have left: a
-    failed call can still have been read. A call the prompt guard refused sent
-    nothing and has no receipt.
-
-    `plan_version` is the version the call was drafting (`None` for clarifying
-    questions), named even when the call failed, so a retry's receipt names it
-    too. `change_request_id` is the change request a revision was drafted from.
+    Written once the text may have left, whether or not the call succeeded: a failed call
+    can still have been read. A call the prompt guard refused sent nothing and has none.
     """
 
     id: UUID

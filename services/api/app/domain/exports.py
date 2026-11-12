@@ -1,9 +1,7 @@
 """What can be downloaded, and the rules every download keeps, with no I/O.
 
-The export list follows UI_UX_SPEC §6.8 and §6.9. Rendering each file belongs
-to the API boundary (`api/exports.py`); gathering what goes in it, to
-`application/exports.py`. What is here cannot depend on either: the name and
-media type of each export, a spreadsheet-safe cell, and a header-safe filename.
+Rendering belongs in `api/exports.py` and gathering in `application/exports.py`. Here: each
+export's name and media type, a spreadsheet-safe cell, and a header-safe filename.
 """
 
 from __future__ import annotations

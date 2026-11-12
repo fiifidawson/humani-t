@@ -25,9 +25,8 @@ _ALSO_BLOCKED: tuple[IPv4Network | IPv6Network, ...] = (
 def is_blocked_address(address: IPv4Address | IPv6Address) -> bool:
     """True for anything but an ordinary public unicast address.
 
-    Addresses that embed an IPv4 address (mapped, NAT64) are judged by the
-    address they embed. 6to4 and Teredo are tunnels to wherever the embedded
-    address points; no paper source uses them, so they are refused outright.
+    Mapped and NAT64 addresses are judged by the IPv4 address they embed; 6to4 and
+    Teredo tunnels are refused outright.
     """
     if isinstance(address, IPv6Address):
         if address.ipv4_mapped is not None:
@@ -48,10 +47,8 @@ def is_blocked_address(address: IPv4Address | IPv6Address) -> bool:
 def parse_ip_literal(host: str) -> IPv4Address | IPv6Address | None:
     """Read `host` as an IP address if it is one, in any spelling a resolver accepts.
 
-    Returns None for a name. IPv4 is read the way C's `inet_aton` reads it, so
-    `2130706433`, `0177.0.0.1`, `0x7f.1` and `127.1` are all 127.0.0.1. Resolvers
-    accept these forms, so a check that only understood dotted decimal would let
-    them through.
+    Returns None for a name. IPv4 is read like `inet_aton`, so `2130706433` and `127.1`
+    are 127.0.0.1: resolvers accept these, so a dotted-decimal check would miss them.
     """
     candidate = host.strip().strip("[]")
     if ":" in candidate:

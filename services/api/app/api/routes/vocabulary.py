@@ -22,16 +22,8 @@ router = APIRouter(
 async def compile_endpoint(payload: VocabularyIn) -> CompiledQueryOut:
     """Show exactly what will be searched for, before anything is searched.
 
-    Concepts sharing a theme are OR'd; themes are AND'd:
-
-        ("chatbot" OR "conversational agent") AND ("humanitarian" OR "crisis response")
-
-    Pure and deterministic — the same vocabulary always produces the same query,
-    and no model is consulted for either origin. That is what makes a
-    `user_supplied` vocabulary strict by construction rather than by discipline.
-
-    This endpoint exists so a reviewer can inspect and argue about the query
-    itself, which is the transparency commitment made concrete.
+    Concepts in a theme are OR'd and themes are AND'd. No model is consulted, so the
+    same vocabulary always gives the same query.
     """
     try:
         vocabulary = payload.to_domain()

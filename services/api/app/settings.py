@@ -1,12 +1,8 @@
 """Configuration read from the environment and from Docker secret files.
 
-This is one of the two places Pydantic is allowed (the other is `api/schemas`),
-because the environment is untrusted input just like a request body. Only the
-composition root — `main.py`, `api/dependencies.py`, `cli.py` — may import
-`Settings`. Everything below it receives plain values or domain policy objects.
-
-Secrets are read from `/run/secrets/<name>` when that directory exists, so a
-production deployment never needs a secret in an environment variable.
+The environment is untrusted input, so Pydantic is allowed here. Only the composition
+root may import `Settings`; lower layers get plain values or domain policy objects.
+Secrets are read from `/run/secrets/<name>` when it exists.
 """
 
 from __future__ import annotations

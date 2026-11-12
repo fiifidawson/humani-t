@@ -1,9 +1,6 @@
 """Requirements for the paper, PRISMA and manifest routes.
 
-Sources: UI_UX_SPEC §5.3.7 (screening summary), §6.8 (screening results: the
-labels, the expanded row with its rule and what was read), §6.11 (how this was
-made); architecture §4.2 (`RunManifest`) and §5.5 (404 for a non-member,
-identical to a missing id). Members see masked text only.
+Members see masked text only, and a non-member gets the same 404 as a missing id.
 """
 
 from __future__ import annotations
@@ -277,7 +274,7 @@ def _screen(script: Any = reasonable_answer, guard: FakePromptGuard | None = Non
 
 
 class TestScreeningStatus:
-    """UI_UX_SPEC §5.3.7 and §6.8: Skipped and Failed are separate chips, never one bucket."""
+    """Skipped and Failed are separate chips, never one bucket."""
 
     def test_each_row_says_whether_it_was_screened_skipped_or_failed(self, screened):
         p, _ = screened
@@ -363,7 +360,7 @@ class TestLinks:
 
 
 class TestCriterionAnswers:
-    """UI_UX_SPEC §6.8's expanded row: each criterion's answer, with its quote."""
+    """The expanded row shows each criterion's answer, with its quote."""
 
     def test_each_criterion_is_answered_with_a_quote_from_the_masked_text(self):
         p = _screen(_with_answers)

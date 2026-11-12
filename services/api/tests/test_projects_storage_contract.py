@@ -1,14 +1,8 @@
 """One behaviour contract for project and membership storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a migrated
-database as the runtime role, exactly as in `test_storage_contract.py`.
-
-Two guarantees matter most here (architecture §5.7):
-
-- no blind overwrites: a stale copy of a project cannot replace a newer one;
-- membership changes on one project are serialised, so the last-owner rule
-  holds even when owners act at the same moment. The in-memory backend runs
-  coroutines one after another, so only the Postgres run truly races them.
+No blind overwrites, and membership changes on a project are serialised so the last-owner
+rule holds when owners act at once. Only the Postgres run truly races; it is skipped unless
+TEST_DATABASE_URL points at a migrated database as the runtime role.
 """
 
 from __future__ import annotations

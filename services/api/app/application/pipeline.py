@@ -1,16 +1,9 @@
 """The `discover`, `ingest` and `export` stages: find a run's papers, keep their text, count.
 
-Each is a `Stage` (`app/runs/base.py`) and keeps its two rules. A stage may run
-more than once, so each stores its work in one transaction guarded by a
-conditional write, and a repeat finds that work and reports it instead of
-redoing it. Everything reported is shown to every member, so progress items
-and summaries carry counts, source ids and the plan's own query, never paper
-text or a source's internal error.
-
-`discover` compiles its query from the accepted plan (`PlanSource`) rather than
-reading the `queries` stage's summary: the plan is typed and versioned, a run
-may start without `queries`, and the version used is recorded with the result.
-Screening is in `screening.py`.
+A stage may run more than once, so each stores its work under a conditional write and a
+repeat reports that work instead of redoing it. Progress is shown to every member, so it
+carries counts, source ids and the plan's query, never paper text or a source's error.
+`discover` compiles its query from the accepted plan, not the `queries` stage's summary.
 """
 
 from __future__ import annotations

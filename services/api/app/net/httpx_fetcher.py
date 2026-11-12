@@ -1,19 +1,10 @@
 """The SSRF-guarded HttpFetcher, built on httpx2 and its connection layer, httpcore2.
 
-The guard sits in the network backend, the one place a TCP connection is
-opened. There the host is resolved once, every address is checked, and the
-socket is opened to the checked address itself. TLS still presents the original
-host name (SNI and certificate checks) and the Host header is untouched, so
-servers see an ordinary request. A second DNS answer cannot swap the address,
-because nothing ever asks DNS again for that connection.
-
-Rejected: checking the URL's host before handing it to an ordinary client. The
-client resolves again at connect time, so a name answering 1.2.3.4 to the check
-and 127.0.0.1 to the connection (DNS rebinding) walks straight through.
-
-Redirects are followed here, by hand, so every hop goes through the same
-allowlist and address check. No proxy settings, cookies or `.netrc` are read
-from the environment: requests leave exactly as this module builds them.
+The guard sits where the TCP connection opens: the host is resolved once, every
+address checked, and the socket opened to that checked address. Checking the URL
+before an ordinary client would not do, because the client resolves again and DNS
+rebinding walks through. Redirects are followed by hand through the same checks, and
+no proxy, cookie or `.netrc` settings are read from the environment.
 """
 
 from __future__ import annotations

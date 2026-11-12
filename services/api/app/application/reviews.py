@@ -23,7 +23,7 @@ from app.domain.projects import Action
 from app.domain.reviews import Review, ReviewStatus, normalize_question
 from app.storage.base import StorageProvider, UnitOfWork
 
-# Table "reviews", column "question"; the row is the review (architecture §5.4).
+# Table "reviews", column "question"; the row is the review.
 _QUESTION_PURPOSE = "reviews.question"
 _NOT_FOUND = "No such review."
 

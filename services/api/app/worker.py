@@ -1,20 +1,9 @@
 """The worker process: `uv run python -m app.worker`.
 
-A composition root, like `cli.py`: it builds the same providers the API does
-(`api/dependencies.py` chooses every implementation) and runs queued runs until
-it is told to stop. Run as many as the machine allows; they share the queue
-through Postgres and never take the same run.
-
-On SIGTERM or Ctrl+C it stops taking work and hands any run in progress back to
-the queue at once, so a deploy does not wait for a lease to expire.
-
-`python -m app.worker --check-health` is the container's health check. The
-worker touches a heartbeat file at least once per poll interval (each turn of
-its loop, and each lease renewal during a long stage); the check succeeds only
-while that file is younger than three poll intervals.
-
-`running_in_process` runs the same worker inside the API process instead, for
-development with in-memory storage, which no other process can see.
+A composition root like `cli.py`, which runs queued runs until told to stop. Workers
+share the queue through Postgres and never take the same run. On SIGTERM it hands its
+run back to the queue at once. `--check-health` passes while the heartbeat file is
+younger than three poll intervals.
 """
 
 from __future__ import annotations

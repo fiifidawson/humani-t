@@ -1,19 +1,8 @@
 """Follow-up questions in threads: asking, reading back, and answering in the background.
 
-Asking masks the question with the question sanitiser and the project's
-rules, then stores only the masked text and its counts, sealed under the
-project's key. The raw question is never stored and never leaves.
-
-Answering takes a model one to four calls, so minutes on a local model: far
-too long to hold a request open. A question is queued like a run (the
-questions table is the queue; `QuestionWorker` claims under a lease) and the
-browser polls `GET /questions/{id}`. The answer comes from the review's
-evidence: the included passages of its latest brief's run (or newest run with
-any), plus the passages that brief cited.
-
-A follow-up in a thread carries the thread's last few questions and answers,
-all masked, and searches with the previous question too. A thread answers one
-question at a time, so a follow-up always reads the answer before it.
+Only the masked question is stored; the raw one never is and never leaves. Answering can
+take minutes on a local model, so questions are queued like runs and the browser polls.
+A thread answers one question at a time, so a follow-up always sees the answer before it.
 """
 
 from __future__ import annotations
@@ -226,9 +215,8 @@ class QuestionService:
     ) -> QuestionView:
         """Mask the question, store it masked, and queue it to be answered.
 
-        Raises `ValueError` for an unusable question, after the membership
-        check, and `QuestionConflictError` while the thread's last question is
-        still being answered.
+        Raises `ValueError` for an unusable question, and `QuestionConflictError` while the
+        thread's last question is still being answered.
         """
         async with self._storage.unit_of_work() as uow:
             project_id = await self._review_project(

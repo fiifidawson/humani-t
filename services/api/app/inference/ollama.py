@@ -1,21 +1,8 @@
 """The default InferenceProvider: an Ollama server the operator runs.
 
-Uses Ollama's native `POST /api/chat` with `format` set to the JSON schema and
-`stream: false` (docs.ollama.com/api/chat and /capabilities/structured-outputs,
-checked 2026-11-03). Chosen over the OpenAI-compatible `/v1/chat/completions`
-because:
-
-- structured output with a full JSON schema is documented only for the native
-  `format` field; the compatibility page lists `response_format` but never the
-  `json_schema` type, and a silently ignored schema would surface as bad output;
-- the native response reports the model and token counts (`prompt_eval_count`,
-  `eval_count`) that a RunManifest records.
-
-The cost is a wire format only Ollama speaks. Another server (vLLM, llama.cpp)
-becomes another implementation of the same Protocol, not a change here.
-
-The base URL and any bearer token are the operator's. The token is attached
-by the fetcher's policy for that one host; this class never sees it.
+Native `POST /api/chat` with `format` set to the JSON schema (docs.ollama.com, checked
+2026-11-03), not the OpenAI-compatible endpoint: only the native one documents full
+JSON-schema output. The fetcher attaches any bearer token; this class never sees it.
 """
 
 from __future__ import annotations
