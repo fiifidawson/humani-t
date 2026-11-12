@@ -144,11 +144,25 @@ The table is the domain function `can(role, action)` in `app/domain/projects.py`
   "name": "Cholera response, Sana'a",
   "role": "owner",
   "created_at": "2026-11-03T09:00:00Z",
-  "archived_at": null
+  "archived_at": null,
+  "status": "brief_ready"
 }
 ```
 
 `role` is the caller's own role. The name is stored encrypted under the project's own key; only members ever see it in the clear.
+
+`status` is derived, never set (UI_UX_SPEC §11.1), by `project_status` in `app/domain/projects.py`. It comes from the newest review and that review's latest run:
+
+| `status` | When |
+| --- | --- |
+| `planning` | No review yet, or the newest review is `new`, `clarifying`, `drafting`, `changes_requested` or `accepted` |
+| `running` | A run is going |
+| `needs_you` | The run waits at a gate |
+| `brief_ready` | The latest run finished and wrote a brief |
+| `done_without_brief` | The latest run finished without the brief stage |
+| `failed` | The latest run failed |
+| `cancelled` | The latest run was cancelled |
+| `archived` | An owner archived the project, whatever its review |
 
 ### `POST /api/v1/projects`
 

@@ -286,6 +286,8 @@ A **Project** is what the brief calls a project. It is the boundary for three th
 
 The fixed review vocabulary below (`Review`, `Vocabulary`, …) lives inside a Project.
 
+A project's status (planning, running, needs you, brief ready, …) is not stored: `project_status` in the domain derives it from the newest review and its latest run each time a project is read ([UI_UX_SPEC.md](UI_UX_SPEC.md) §11.1).
+
 Role permissions are a pure domain function, `can(role, action)`. It is tested as a table, so a change to who may do what is a visible diff. The actions follow [UI_UX_SPEC.md](UI_UX_SPEC.md) §3.3: viewers read and may leave; reviewers also search, run, confirm gates, relabel and ask; only owners rename, archive, manage members and documents, see raw text and delete. Being an instance administrator grants nothing inside a project.
 
 Membership changes on one project take the project's row lock first, so the last-owner rule holds under concurrent requests ([ADR-0002](adr/0002-project-row-lock-for-membership-changes.md)).

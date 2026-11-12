@@ -38,9 +38,31 @@ describe("All projects (UI_UX_SPEC §7.2, P1: no grouping)", () => {
 			screen.getByRole("checkbox", { name: "Show archived projects" }),
 		);
 
+		const name = await screen.findByRole("rowheader", {
+			name: /Shelter kits, Pemba/,
+		});
+		expect(name.closest("tr")).toHaveTextContent("Archived");
+	});
+
+	it("shows each project's status as the API derives it (§11.1)", async () => {
+		const api = signedIn();
+		api.addProject("Cash vs vouchers, Gao").status = "brief_ready";
+		api.addProject("Market assessment, Mopti").status = "failed";
+		renderApp("/projects");
+
+		const table = await screen.findByRole("table", { name: "Your projects" });
+
 		expect(
-			await screen.findByRole("rowheader", { name: /Shelter kits, Pemba/ }),
-		).toHaveTextContent("Archived");
+			within(table).getByRole("columnheader", { name: "Status" }),
+		).toBeInTheDocument();
+		const gao = within(table).getByRole("rowheader", {
+			name: /Cash vs vouchers, Gao/,
+		});
+		const mopti = within(table).getByRole("rowheader", {
+			name: /Market assessment, Mopti/,
+		});
+		expect(gao.closest("tr")).toHaveTextContent("Brief ready");
+		expect(mopti.closest("tr")).toHaveTextContent("Failed");
 	});
 
 	it("has no accessibility violations", async () => {

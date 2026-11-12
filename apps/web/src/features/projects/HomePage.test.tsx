@@ -39,6 +39,22 @@ describe("Home (UI_UX_SPEC §7.1)", () => {
 		expect(links[1]).toHaveTextContent("Reviewer");
 	});
 
+	it("shows each recent project's status (§11.1)", async () => {
+		const api = signedIn();
+		api.addProject("Cash vs vouchers, Gao").status = "running";
+		renderApp("/");
+
+		const recent = await screen.findByRole("region", {
+			name: "Recent projects",
+		});
+
+		expect(
+			await within(recent).findByRole("link", {
+				name: /Cash vs vouchers, Gao/,
+			}),
+		).toHaveTextContent("Running");
+	});
+
 	it("explains how to start when there are no projects yet", async () => {
 		signedIn();
 		renderApp("/");

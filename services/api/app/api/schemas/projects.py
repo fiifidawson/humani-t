@@ -13,7 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.application.projects import MemberView, ProjectView
-from app.domain.projects import MAX_PROJECT_NAME_LENGTH, Role
+from app.domain.projects import MAX_PROJECT_NAME_LENGTH, ProjectStatus, Role
 
 # The domain trims and checks the name properly; this only bounds the size.
 _Name = Field(min_length=1, max_length=MAX_PROJECT_NAME_LENGTH)
@@ -46,6 +46,9 @@ class ProjectOut(BaseModel):
     role: Role = Field(description="The caller's own role in this project.")
     created_at: datetime
     archived_at: datetime | None
+    status: ProjectStatus = Field(
+        description="UI_UX_SPEC §11.1: derived from the newest review and its latest run."
+    )
 
     @classmethod
     def from_view(cls, view: ProjectView) -> ProjectOut:
@@ -55,6 +58,7 @@ class ProjectOut(BaseModel):
             role=view.role,
             created_at=view.created_at,
             archived_at=view.archived_at,
+            status=view.status,
         )
 
 

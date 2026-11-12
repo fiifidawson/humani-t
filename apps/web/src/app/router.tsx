@@ -117,6 +117,25 @@ const enrolRoute = createRoute({
 	),
 });
 
+// Opened from emailed links, signed in or not; the token travels in the fragment.
+const acceptInvitationRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "accept-invitation",
+	component: lazyRouteComponent(
+		() => import("../features/auth/AcceptInvitationPage"),
+		"AcceptInvitationPage",
+	),
+});
+
+const resetPasswordRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "reset-password",
+	component: lazyRouteComponent(
+		() => import("../features/auth/ResetPasswordPage"),
+		"ResetPasswordPage",
+	),
+});
+
 const signedInRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	id: "signed-in",
@@ -339,6 +358,8 @@ const documentsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
+	acceptInvitationRoute,
+	resetPasswordRoute,
 	signedInRoute.addChildren([
 		homeRoute,
 		projectsRoute,

@@ -7091,6 +7091,10 @@
               }
             ],
             "title": "Archived At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus",
+            "description": "UI_UX_SPEC §11.1: derived from the newest review and its latest run."
           }
         },
         "type": "object",
@@ -7099,7 +7103,8 @@
           "name",
           "role",
           "created_at",
-          "archived_at"
+          "archived_at",
+          "status"
         ],
         "title": "ProjectOut"
       },
@@ -7118,6 +7123,21 @@
           "name"
         ],
         "title": "ProjectRenameIn"
+      },
+      "ProjectStatus": {
+        "type": "string",
+        "enum": [
+          "planning",
+          "running",
+          "needs_you",
+          "brief_ready",
+          "done_without_brief",
+          "failed",
+          "cancelled",
+          "archived"
+        ],
+        "title": "ProjectStatus",
+        "description": "What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand."
       },
       "ProvenanceOut": {
         "properties": {
