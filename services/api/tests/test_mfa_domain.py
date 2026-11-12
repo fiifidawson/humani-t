@@ -1,14 +1,8 @@
 """Requirements for the rules of multi-factor authentication, without I/O.
 
-Source: RFC 6238 (TOTP) and RFC 4226 (HOTP, which TOTP builds on); W3C WebAuthn
-Level 3 (sign counters, challenges); NIST SP 800-63B rev 4 (authenticator
-assurance levels, replay resistance, look-up secrets of at least 64 bits);
-OWASP ASVS 5.0 V6.
-
-Everything here is pure: `app.domain.mfa` may import the standard library and
-other domain modules only (`hmac`, `hashlib` and `secrets` are enough for TOTP
-and recovery codes). The WebAuthn ceremony itself is verified by a provider and
-specified in `test_mfa_api.py`.
+Covers TOTP (RFC 6238), recovery codes, and WebAuthn sign counters and challenges.
+`app.domain.mfa` uses the standard library only; the WebAuthn ceremony itself is verified
+by a provider and specified in `test_mfa_api.py`.
 """
 
 from __future__ import annotations
@@ -23,6 +17,9 @@ import pytest
 
 from app.domain.mfa import (
     RECOVERY_CODE_COUNT,
+    TOTP_ALLOWED_DRIFT_STEPS,
+    TOTP_DIGITS,
+    TOTP_STEP,
     WEBAUTHN_CHALLENGE_LIFETIME,
     ChallengePurpose,
     MfaEnrolment,
@@ -30,7 +27,6 @@ from app.domain.mfa import (
     Passkey,
     RecoveryCode,
     TotpCredential,
-    TotpPolicy,
     WebAuthnChallenge,
     generate_recovery_codes,
     matching_totp_step,
@@ -47,7 +43,6 @@ from app.domain.sessions import Session, SessionPolicy, hash_token, new_token
 START = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 # The shared secret of RFC 6238 Appendix B for HMAC-SHA1.
 RFC_SECRET = b"12345678901234567890"
-POLICY = TotpPolicy()
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _FULLWIDTH_123456 = "".join(chr(0xFF10 + digit) for digit in range(1, 7))
 
@@ -96,15 +91,14 @@ def _challenge(**overrides: object) -> WebAuthnChallenge:
     return WebAuthnChallenge(**values)  # type: ignore[arg-type]
 
 
-class TestTotpPolicy:
-    def test_defaults_are_what_every_authenticator_app_assumes(self):
+class TestTotpParameters:
+    def test_they_are_what_every_authenticator_app_assumes(self):
         """RFC 6238 defaults: anything else silently breaks Google Authenticator & co."""
-        assert POLICY.algorithm == "SHA1"
-        assert POLICY.digits == 6
-        assert POLICY.step == timedelta(seconds=30)
+        assert TOTP_DIGITS == 6
+        assert timedelta(seconds=30) == TOTP_STEP
 
     def test_clock_drift_of_one_step_either_way_is_tolerated_and_no_more(self):
-        assert POLICY.allowed_drift_steps == 1
+        assert TOTP_ALLOWED_DRIFT_STEPS == 1
 
 
 class TestTotpCodes:
@@ -121,14 +115,14 @@ class TestTotpCodes:
         ],
     )
     def test_codes_match_the_rfc_6238_test_vectors(self, unix_seconds, expected):
-        assert totp_code(RFC_SECRET, _at(unix_seconds), POLICY) == expected
+        assert totp_code(RFC_SECRET, _at(unix_seconds)) == expected
 
     def test_codes_keep_their_leading_zeros(self):
-        assert totp_code(RFC_SECRET, _at(1234567890), POLICY) == "005924"
+        assert totp_code(RFC_SECRET, _at(1234567890)) == "005924"
 
     def test_the_time_step_counts_30_second_intervals_from_the_unix_epoch(self):
-        assert totp_step(_at(59), POLICY) == 1
-        assert totp_step(_at(60), POLICY) == 2
+        assert totp_step(_at(59)) == 1
+        assert totp_step(_at(60)) == 2
 
     def test_secrets_are_160_bits_from_the_csprng_and_never_repeat(self):
         """RFC 4226 section 4 recommends 160 bits, the length of the SHA-1 output."""
@@ -140,60 +134,51 @@ class TestTotpCodes:
 
 class TestTotpVerification:
     def _step(self, at: datetime) -> int:
-        return totp_step(at, POLICY)
+        return totp_step(at)
 
     def test_the_current_code_is_accepted_and_reports_its_step(self):
-        code = totp_code(RFC_SECRET, START, POLICY)
+        code = totp_code(RFC_SECRET, START)
 
-        step = matching_totp_step(RFC_SECRET, code, START, last_used_step=None, policy=POLICY)
+        step = matching_totp_step(RFC_SECRET, code, START, last_used_step=None)
 
         assert step == self._step(START)
 
     @pytest.mark.parametrize("drift", [-1, 1])
     def test_a_code_one_step_early_or_late_is_accepted(self, drift):
-        code = totp_code(RFC_SECRET, START + drift * POLICY.step, POLICY)
+        code = totp_code(RFC_SECRET, START + drift * TOTP_STEP)
 
-        step = matching_totp_step(RFC_SECRET, code, START, last_used_step=None, policy=POLICY)
+        step = matching_totp_step(RFC_SECRET, code, START, last_used_step=None)
 
         assert step == self._step(START) + drift
 
     @pytest.mark.parametrize("drift", [-2, 2])
     def test_a_code_two_steps_away_is_refused(self, drift):
-        code = totp_code(RFC_SECRET, START + drift * POLICY.step, POLICY)
+        code = totp_code(RFC_SECRET, START + drift * TOTP_STEP)
 
-        assert (
-            matching_totp_step(RFC_SECRET, code, START, last_used_step=None, policy=POLICY)
-            is None
-        )
+        assert matching_totp_step(RFC_SECRET, code, START, last_used_step=None) is None
 
     def test_a_code_whose_step_was_already_used_is_refused(self):
         """Replay: NIST 800-63B requires an OTP to be accepted only once."""
-        code = totp_code(RFC_SECRET, START, POLICY)
+        code = totp_code(RFC_SECRET, START)
 
         assert (
-            matching_totp_step(
-                RFC_SECRET, code, START, last_used_step=self._step(START), policy=POLICY
-            )
+            matching_totp_step(RFC_SECRET, code, START, last_used_step=self._step(START))
             is None
         )
 
     def test_an_older_code_is_refused_once_a_newer_one_was_used(self):
         """Steps only move forward, so a code captured earlier can never be replayed."""
-        older = totp_code(RFC_SECRET, START - POLICY.step, POLICY)
+        older = totp_code(RFC_SECRET, START - TOTP_STEP)
 
         assert (
-            matching_totp_step(
-                RFC_SECRET, older, START, last_used_step=self._step(START), policy=POLICY
-            )
+            matching_totp_step(RFC_SECRET, older, START, last_used_step=self._step(START))
             is None
         )
 
     def test_a_newer_code_is_accepted_after_an_older_one_was_used(self):
-        newer = totp_code(RFC_SECRET, START + POLICY.step, POLICY)
+        newer = totp_code(RFC_SECRET, START + TOTP_STEP)
 
-        step = matching_totp_step(
-            RFC_SECRET, newer, START, last_used_step=self._step(START), policy=POLICY
-        )
+        step = matching_totp_step(RFC_SECRET, newer, START, last_used_step=self._step(START))
 
         assert step == self._step(START) + 1
 
@@ -203,26 +188,20 @@ class TestTotpVerification:
         ["", "12345", "1234567", "12345a", " 123456", _FULLWIDTH_123456],
     )
     def test_anything_but_exactly_six_ascii_digits_is_refused(self, code):
-        assert (
-            matching_totp_step(RFC_SECRET, code, START, last_used_step=None, policy=POLICY)
-            is None
-        )
+        assert matching_totp_step(RFC_SECRET, code, START, last_used_step=None) is None
 
     def test_a_code_for_another_secret_is_refused(self):
-        code = totp_code(new_totp_secret(), START, POLICY)
+        code = totp_code(new_totp_secret(), START)
 
         # 1 in 10^6 per candidate step: with three candidate steps this could
         # collide once in ~333,000 runs. Accepted for a spec this direct.
-        assert (
-            matching_totp_step(RFC_SECRET, code, START, last_used_step=None, policy=POLICY)
-            is None
-        )
+        assert matching_totp_step(RFC_SECRET, code, START, last_used_step=None) is None
 
 
 class TestProvisioningUri:
     def _uri(self) -> str:
         return totp_provisioning_uri(
-            RFC_SECRET, account_name="amara@example.org", issuer="humani-t", policy=POLICY
+            RFC_SECRET, account_name="amara@example.org", issuer="humani-t"
         )
 
     def test_the_uri_is_the_key_uri_format_authenticator_apps_scan(self):

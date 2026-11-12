@@ -1,10 +1,7 @@
 """The decision brief's rules, as plain domain types with no I/O.
 
-Sources: architecture §4.2 (options, trade-offs, conflicts, considerations,
-gaps; evidence and hypothesis claims; code checks the citations; no winner),
-§4.4 (an `AgentStep`'s fields) and UI_UX_SPEC §6.9, §8.1 to §8.3 and §8.7.
-
-Each test builds a valid brief and perturbs one thing.
+A brief weighs options without naming a winner, and code checks its citations. Each test
+builds a valid brief and perturbs one thing.
 """
 
 from __future__ import annotations

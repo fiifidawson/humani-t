@@ -1,13 +1,8 @@
-"""Okapi BM25 over a review's passages, in process: the P1 retriever (ADR-0007).
+"""Okapi BM25 over a review's passages, in process (ADR-0007).
 
-A review's corpus is a few hundred masked abstracts, so the index is built per
-search in milliseconds and nothing is kept between searches: no new service,
-no stored vectors to keep in step with masking, and the same inputs always
-give the same ranking.
-
-Known and accepted: matching is lexical. "cash" does not find "money", and no
-stemming means "price" does not find "prices". The planner and the critic ask
-several phrasings, which recovers some of that.
+The index is rebuilt per search and nothing is stored, so the same inputs always
+give the same ranking. Matching is lexical, with no stemming: "price" does not find
+"prices".
 """
 
 from __future__ import annotations

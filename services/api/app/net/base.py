@@ -1,11 +1,7 @@
 """The HttpFetcher seam: requests, responses, the outbound policy and its errors.
 
-What belongs here is the contract every fetcher keeps, real or fake. How a
-connection is opened, and which library opens it, belongs in the implementation.
-
-The policy is fixed when a fetcher is built, not passed with each request: a
-provider receives a fetcher already scoped to its own destinations, and cannot
-widen that scope by asking.
+The policy is fixed when a fetcher is built, not passed per request, so a provider
+cannot widen its own destinations by asking.
 """
 
 from __future__ import annotations

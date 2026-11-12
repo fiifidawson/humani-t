@@ -92,7 +92,7 @@ describe("the run strip in the chat (UI_UX_SPEC §5.3.5, §11.2)", () => {
 		expect(rows[0]).toHaveTextContent("Queries · Done · 2 s");
 		expect(rows[1]).toHaveTextContent("Discover · Running");
 		expect(rows[2]).toHaveTextContent("Ingest · Not started");
-		expect(rows).toHaveLength(8);
+		expect(rows).toHaveLength(7);
 		expect(rows[1]).toHaveAttribute("aria-current", "step");
 		expect(rows[0]).not.toHaveAttribute("aria-current");
 		expect(rows[2]).not.toHaveAttribute("aria-current");
@@ -158,8 +158,53 @@ describe("the run strip in the chat (UI_UX_SPEC §5.3.5, §11.2)", () => {
 			expect(
 				api.requestsTo("POST", `/reviews/${review.id}/runs`)[0]?.body,
 			).toEqual({
-				stages: ["screen", "export", "index", "answer"],
+				stages: ["screen", "export", "answer"],
 			}),
+		);
+	});
+
+	it("still shows a run stored with the retired index stage, and retries without it", async () => {
+		const { api, path, review, run } = runningReview();
+		run.stages = [
+			"queries",
+			"discover",
+			"ingest",
+			"mask",
+			"screen",
+			"export",
+			"index",
+			"answer",
+		];
+		const { user } = renderApp(path);
+		const source = await stream(run.id);
+		send(
+			source,
+			started("export", 6),
+			finished("export", 1),
+			started("index", 7),
+			finished("index", 2),
+			started("answer", 8),
+			["job.finished", { outcome: "failed", seconds: 60, error: "Stopped." }],
+		);
+		run.state = "failed";
+		run.outcome = "failed";
+		const card = await screen.findByRole("article", { name: "Run 1" });
+
+		await user.click(within(card).getByRole("button", { name: "Show stages" }));
+		const rows = within(
+			within(card).getByRole("list", { name: "Stages" }),
+		).getAllByRole("listitem");
+		expect(rows).toHaveLength(7);
+		expect(rows[5]).toHaveTextContent("Export · Done");
+		expect(rows[6]).toHaveTextContent("Brief · Stopped");
+		await user.click(
+			within(card).getByRole("button", { name: "Try again from this stage" }),
+		);
+
+		await waitFor(() =>
+			expect(
+				api.requestsTo("POST", `/reviews/${review.id}/runs`)[0]?.body,
+			).toEqual({ stages: ["answer"] }),
 		);
 	});
 

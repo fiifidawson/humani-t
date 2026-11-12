@@ -1,14 +1,8 @@
-"""PostgreSQL tables and repository for uploaded documents (migration 0013).
+"""PostgreSQL tables and repository for uploaded documents.
 
-The tables live here rather than in `tables.py`, on the same `metadata`, so the
-documents feature is one module. Every text column is sealed under the
-project's key; what stays in the clear is what a worker or a list needs
-without opening anything: status, type, size, counts of masked items by type.
-
-Writes that race are conditional: a claim skips rows another worker holds, a
-save checks `version`, a masking replaces only the version it read, and the
-next tag number moves only forward, so a deleted document's tag is never
-given to another (architecture §5.7).
+Every text column is sealed under the project's key; only what a worker or a list
+needs stays in the clear (status, type, size, counts). Racing writes are conditional,
+and the next tag number only moves forward, so a deleted document's tag is never reused.
 """
 
 from __future__ import annotations

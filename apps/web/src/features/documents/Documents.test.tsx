@@ -1,7 +1,12 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { DocumentStatus } from "../../app/documentQueries";
 import { expectNoAccessibilityViolations } from "../../test/axe";
-import { MASKING_CHANGED, UNSUPPORTED } from "../../test/fakeDocuments";
+import {
+	MASKING_CHANGED,
+	NOT_YOUR_ROLE,
+	UNSUPPORTED,
+} from "../../test/fakeDocuments";
 import { installNodeFiles } from "../../test/nodeFiles";
 import { currentPath, renderApp } from "../../test/render";
 import { fakeApi } from "../../test/server";
@@ -419,5 +424,172 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		await screen.findByRole("button", { name: "Approve" });
 
 		await expectNoAccessibilityViolations(container);
+	});
+});
+
+describe("deleting a document (UI_UX_SPEC §6.13, §3.3)", () => {
+	function withDocument(role: Role = "owner") {
+		const { api, project } = signedInWith(role);
+		const report = api.documents.add(project.id, "report.txt", {
+			status: "approved",
+		});
+		return { api, project, report };
+	}
+
+	async function openDeleteDialog(projectId: string) {
+		const view = await openDocuments(projectId);
+		await view.user.click(
+			await screen.findByRole("button", { name: "Delete D1 report.txt" }),
+		);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Delete D1 report.txt?",
+		});
+		return { ...view, dialog };
+	}
+
+	it("asks the owner to confirm, and says a brief may already cite it", async () => {
+		const { project } = withDocument();
+		const { dialog } = await openDeleteDialog(project.id);
+
+		expect(dialog).toHaveTextContent(
+			"This deletes the file and its text. A brief that already cites D1 keeps the passages it quoted. This can't be undone.",
+		);
+	});
+
+	it("deletes the document once confirmed, and takes it off the list", async () => {
+		const { api, project, report } = withDocument();
+		const { user, dialog } = await openDeleteDialog(project.id);
+
+		await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+		expect(
+			await screen.findByText("D1 report.txt is deleted."),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("cell", { name: "report.txt" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		const [deleted] = api.requestsTo(
+			"DELETE",
+			`/projects/${project.id}/documents/${report.id}`,
+		);
+		expect(deleted?.csrfToken).toBe(api.csrfToken);
+		expect(api.documents.all).toEqual([]);
+	});
+
+	it("keeps the document when the owner cancels", async () => {
+		const { api, project, report } = withDocument();
+		const { user, dialog } = await openDeleteDialog(project.id);
+
+		await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+		);
+		expect(
+			screen.getByRole("cell", { name: "report.txt" }),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"DELETE",
+				`/projects/${project.id}/documents/${report.id}`,
+			),
+		).toEqual([]);
+	});
+
+	it.each<DocumentStatus>([
+		"uploaded",
+		"awaiting_review",
+		"rejected",
+		"failed",
+	])("lets the owner delete a document that is %s", async (status) => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "report.txt", {
+			status,
+			...(status === "failed" ? { failure: "interrupted" as const } : {}),
+		});
+		await openDocuments(project.id);
+
+		expect(
+			await screen.findByRole("button", { name: "Delete D1 report.txt" }),
+		).toBeInTheDocument();
+	});
+
+	it("closes the masked text of the document it deletes", async () => {
+		const { project } = withDocument();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", {
+				name: "See masked text D1 report.txt",
+			}),
+		);
+		await screen.findByRole("region", {
+			name: "What the model will see: D1 report.txt",
+		});
+
+		await user.click(
+			screen.getByRole("button", { name: "Delete D1 report.txt" }),
+		);
+		await user.click(
+			within(
+				await screen.findByRole("dialog", { name: "Delete D1 report.txt?" }),
+			).getByRole("button", { name: "Delete" }),
+		);
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("region", { name: /What the model will see/ }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("says so when another owner already deleted it", async () => {
+		const { api, project, report } = withDocument();
+		const { user, dialog } = await openDeleteDialog(project.id);
+
+		api.documents.remove(report.id);
+		await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+		expect(
+			await screen.findByText("D1 report.txt was already deleted."),
+		).toBeInTheDocument();
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("cell", { name: "report.txt" }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("shows the API's refusal and keeps the dialog open when the owner is no longer one", async () => {
+		const { api, project } = withDocument();
+		const { user, dialog } = await openDeleteDialog(project.id);
+
+		project.role = "reviewer";
+		await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+			NOT_YOUR_ROLE,
+		);
+		expect(api.documents.all).toHaveLength(1);
+	});
+
+	it.each<Role>(["reviewer", "viewer"])(
+		"offers a %s no way to delete a document",
+		async (role) => {
+			const { project } = withDocument(role);
+			await openDocuments(project.id);
+			await rowFor("report.txt");
+
+			expect(
+				screen.queryByRole("button", { name: /^Delete/ }),
+			).not.toBeInTheDocument();
+		},
+	);
+
+	it("has no accessibility violations with the delete dialog open", async () => {
+		const { project } = withDocument();
+		await openDeleteDialog(project.id);
+
+		await expectNoAccessibilityViolations();
 	});
 });

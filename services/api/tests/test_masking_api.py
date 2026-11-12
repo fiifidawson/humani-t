@@ -1,13 +1,7 @@
 """Project masking rules over HTTP: "always mask this term in this project".
 
-Sources: architecture §3.9.1 (`MaskingRule` applies to every current and future
-document), UI_UX_SPEC §6.6 ("Always mask in this project"), §3.3 and
-architecture §4.1 (only owners see raw text and manage documents), §5.4
-(sealed under the project's key, shredded with it) and §5.5 (audited, ids only).
-
-A rule's term is itself sensitive — typically a staff member's or a patient's
-name — so it is treated like raw text: owners only, sealed at rest, never in
-the audit log.
+A rule's term is itself sensitive, usually a person's name, so it is treated like raw
+text: owners only, sealed under the project's key, never in the audit log.
 """
 
 from __future__ import annotations
@@ -156,7 +150,7 @@ class TestValidation:
 class TestOnlyOwners:
     @pytest.mark.parametrize("role", ["reviewer", "viewer"])
     def test_other_members_can_neither_read_add_nor_remove_rules(self, team, role):
-        """A rule's term is raw text: only owners see it (architecture §3.9.1)."""
+        """A rule's term is raw text: only owners see it."""
         rule_id = add(team).json()["id"]
         browser = team.browser_for(role)
 

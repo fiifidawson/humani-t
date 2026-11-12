@@ -1,10 +1,7 @@
 """The check every use case inside a project makes, inside its own transaction.
 
-Reviews, runs and gates belong to exactly one project. Whatever id a request
-names, the use case finds the project it belongs to and asks this module
-whether the caller may act there: 404 first, with the caller's own message for
-a missing object, so "not yours" and "not there" are indistinguishable
-(architecture §5.5); then 403 for a role that may not.
+A non-member gets the same 404 as for a missing object, so "not yours" and "not there"
+look alike; a member whose role may not act gets 403.
 """
 
 from __future__ import annotations
@@ -13,7 +10,10 @@ from uuid import UUID
 
 from app.domain.accounts import ForbiddenError, NotFoundError
 from app.domain.projects import Action, Membership, can
+from app.domain.reviews import Review
 from app.storage.base import UnitOfWork
+
+REVIEW_NOT_FOUND = "No such review."
 
 
 async def require_member(
@@ -31,3 +31,14 @@ async def require_member(
     if not can(membership.role, action):
         raise ForbiddenError("Your role in this project does not allow this.")
     return membership
+
+
+async def require_review_member(
+    uow: UnitOfWork, user_id: UUID, review_id: UUID, action: Action
+) -> Review:
+    """The review, if the caller's membership of its project allows `action`."""
+    review = await uow.reviews.get(review_id)
+    if review is None:
+        raise NotFoundError(REVIEW_NOT_FOUND)
+    await require_member(uow, user_id, review.project_id, action, not_found=REVIEW_NOT_FOUND)
+    return review

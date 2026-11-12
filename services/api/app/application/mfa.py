@@ -1,21 +1,9 @@
 """Second factors: enrolling and removing them, and completing a sign-in with one.
 
-Each public method is one use case, shaped like those in `accounts.py`: a
-short read, slow or risky work with no transaction open (decrypting,
-verifying a WebAuthn signature), a short write whose race-deciding step is a
-conditional update, the audit event last, then email after the commit.
-
-Three rules hold throughout:
-
-- **Single use is decided by storage.** A TOTP step, a recovery code and a
-  WebAuthn challenge are each spent by one conditional write; of two racing
-  requests, exactly one wins.
-- **Completing a factor rotates the session.** The pending (or aal 1) session
-  is revoked and a new aal 2 session issued, so a token seen before the second
-  factor never gains what the second factor grants.
-- **Changes to authenticators serialise on the user row.** Each one saves the
-  user with its version check first, so two concurrent removals cannot both
-  see "two left" and leave none.
+Use cases are shaped like those in `accounts.py`. A TOTP step, recovery code or WebAuthn
+challenge is spent by one conditional write, so of two racing requests one wins.
+Completing a factor issues a new session, so a token seen before it gains nothing.
+Authenticator changes save the user row first, so two removals cannot both leave none.
 """
 
 from __future__ import annotations
@@ -243,7 +231,7 @@ class MfaService:
             existing = await uow.passkeys.list_for_user(current.user.id)
         return self._passkeys.registration_options(
             # The user handle is the account id: stable, and no personal data
-            # (WebAuthn §14.6.1), unlike the email address.
+            # (WebAuthn spec 14.6.1), unlike the email address.
             user_handle=current.user.id.bytes,
             user_name=current.user.email,
             display_name=current.user.display_name,
@@ -526,9 +514,8 @@ class MfaService:
     async def _lock_enrolment(self, uow: UnitOfWork, user_id: UUID) -> MfaEnrolment:
         """Save the user (version-checked) first, then read what is enrolled.
 
-        The save takes the user's row lock and fails with `ConcurrentUpdateError`
-        if another authenticator change committed since; the reads after it
-        therefore see the latest state.
+        The save takes the row lock or raises `ConcurrentUpdateError`, so the reads see
+        the latest state.
         """
         user = await uow.users.get(user_id)
         if user is None:

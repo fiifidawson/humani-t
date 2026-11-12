@@ -1,20 +1,8 @@
 """A review's search plan: the vocabulary and criteria its runs search and screen with.
 
-What belongs here: the plan's versions and their rules, the planning
-conversation (clarifying questions, change requests), how one version differs
-from the one before and who wrote each term, the documented parser for a
-user-supplied (strict) vocabulary, and `PlanSource`, the read other stages use.
-
-The rules (architecture §4.3):
-
-- an accepted version never changes; editing makes the next version;
-- accepting freezes the vocabulary at that version;
-- a user-supplied vocabulary is used exactly as given, and no version that
-  holds one may be written by the model.
-
-What does not: encryption, storage and model calls (`application/planning.py`).
-Everything here is plaintext and does no I/O; the stored forms at the end hold
-only ciphertext and the ids and dates needed to find them.
+An accepted version never changes; editing makes the next one. A user-supplied (strict)
+vocabulary is used exactly as given, and no version holding one may be written by the
+model. Encryption, storage and model calls belong in `application/planning.py`.
 """
 
 from __future__ import annotations
@@ -31,6 +19,7 @@ from uuid import UUID
 
 from app.domain.reviews import InvalidTransitionError
 from app.domain.runs import JsonValue
+from app.domain.timestamps import require_aware
 from app.domain.vocabulary import DEFAULT_THEME, Concept, Vocabulary, VocabularyOrigin
 
 MAX_CRITERION_LENGTH = 500
@@ -46,12 +35,6 @@ _TEXT_CONTROLS_ALLOWED = frozenset("\n\t")
 
 class PlanConflictError(InvalidTransitionError):
     """The plan changed, or is not in a state that allows this. Shown to the user as a 409."""
-
-
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
 
 
 def _has_hidden_characters(text: str, allowed: frozenset[str]) -> bool:
@@ -106,7 +89,7 @@ def number_criteria(entries: Iterable[tuple[CriterionKind, str]]) -> tuple[Crite
 
 
 class PlanMode(StrEnum):
-    """How thorough a review is; the interface says Quick and Deep (UI_UX_SPEC §6.3)."""
+    """How thorough a review is; the interface says Quick and Deep."""
 
     SHALLOW = "shallow"
     DEEP = "deep"
@@ -156,7 +139,7 @@ class ClarifyingQuestion:
             raise ValueError("ClarifyingQuestion.text must not be blank")
         if self.answer is not None and self.is_skipped:
             raise ValueError("ClarifyingQuestion is answered or skipped, not both")
-        _require_aware("ClarifyingQuestion", answered_at=self.answered_at)
+        require_aware("ClarifyingQuestion", answered_at=self.answered_at)
 
     @property
     def is_settled(self) -> bool:
@@ -186,7 +169,7 @@ class ChangeRequest:
             "text",
             _clean_text("ChangeRequest.text", self.text, MAX_CHANGE_REQUEST_LENGTH),
         )
-        _require_aware("ChangeRequest", requested_at=self.requested_at)
+        require_aware("ChangeRequest", requested_at=self.requested_at)
         if self.based_on_version < 1:
             raise ValueError("ChangeRequest.based_on_version starts at 1")
 
@@ -195,9 +178,8 @@ class ChangeRequest:
 class PlanConversation:
     """The planning conversation of one review, between its versions.
 
-    Holds the clarifying questions while they are being answered, and a change
-    request while the model drafts from it. Each version then keeps a copy of
-    what informed it, so the conversation can move on without losing provenance.
+    Each version keeps a copy of what informed it, so the conversation can move on without
+    losing provenance.
     """
 
     review_id: UUID
@@ -211,7 +193,7 @@ class PlanConversation:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware("PlanConversation", created_at=self.created_at)
+        require_aware("PlanConversation", created_at=self.created_at)
         ids = [q.id for q in self.questions]
         if len(set(ids)) != len(ids):
             raise ValueError("PlanConversation.questions must have distinct ids")
@@ -273,7 +255,7 @@ class ReviewPlan:
     accepted_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("ReviewPlan", created_at=self.created_at, accepted_at=self.accepted_at)
+        require_aware("ReviewPlan", created_at=self.created_at, accepted_at=self.accepted_at)
         if self.version < 1:
             raise ValueError("ReviewPlan.version starts at 1")
         if self.vocabulary.version != self.version:
@@ -508,11 +490,9 @@ type RedoStage = Literal["queries", "screen"]
 
 
 def first_stage_to_redo(before: ReviewPlan, after: ReviewPlan) -> RedoStage | None:
-    """The earliest pipeline stage a change from `before` to `after` affects.
+    """The earliest pipeline stage a change from `before` to `after` affects, or `None`.
 
-    A changed search finds different papers, so it starts again from `queries`.
-    Changed criteria alone re-judge the papers already found, from `screen`.
-    `None` when the search and the criteria are the same: there is nothing to redo.
+    A changed search starts again from `queries`; changed criteria alone redo `screen`.
     """
     diff = diff_plans(before, after)
     if diff.concepts or diff.terms:
@@ -551,18 +531,10 @@ _CSV_HEADER = ("theme", "term", "synonyms")
 
 
 def parse_strict_vocabulary(content: str, format: VocabularyFormat) -> tuple[Concept, ...]:
-    """Parse a user's own vocabulary by code. No model, and nothing added or respelled.
+    """Parse a user's own vocabulary by code: no model, nothing added or respelled.
 
-    Text: one concept per line, `term; synonym; synonym`. A line `[theme]`
-    starts a theme; lines before any belong to "general". Blank lines and lines
-    starting with `#` are ignored.
-
-    CSV: a header `theme,term,synonyms`, then one concept per row, synonyms
-    separated by `;`. A blank theme means "general".
-
-    Both: each term is trimmed of surrounding spaces and otherwise kept exactly.
-    An empty term, a term repeated within its concept and a concept repeated
-    within its theme are refused with the line number, never silently dropped.
+    The text and CSV formats are documented in `docs/api.md`. A bad line is refused with
+    its number, never silently dropped.
     """
     rows = _text_rows(content) if format is VocabularyFormat.TEXT else _csv_rows(content)
     concepts: list[Concept] = []
@@ -728,13 +700,8 @@ class SentText:
 class PrivacyReceipt:
     """What one model call received of the people's text, for the "Sent as" receipt.
 
-    Written whether or not the call succeeded, once the text may have left: a
-    failed call can still have been read. A call the prompt guard refused sent
-    nothing and has no receipt.
-
-    `plan_version` is the version the call was drafting (`None` for clarifying
-    questions), named even when the call failed, so a retry's receipt names it
-    too. `change_request_id` is the change request a revision was drafted from.
+    Written once the text may have left, whether or not the call succeeded: a failed call
+    can still have been read. A call the prompt guard refused sent nothing and has none.
     """
 
     id: UUID
@@ -751,7 +718,7 @@ class PrivacyReceipt:
     change_request_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("PrivacyReceipt", created_at=self.created_at)
+        require_aware("PrivacyReceipt", created_at=self.created_at)
         _require_receipt_links("PrivacyReceipt", self.plan_version)
 
     @property
@@ -772,7 +739,7 @@ class StoredConversation:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware("StoredConversation", created_at=self.created_at)
+        require_aware("StoredConversation", created_at=self.created_at)
         if not self.body_sealed:
             raise ValueError("StoredConversation.body_sealed must not be empty")
 
@@ -792,7 +759,7 @@ class StoredPlanVersion:
     accepted_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "StoredPlanVersion", created_at=self.created_at, accepted_at=self.accepted_at
         )
         if self.version < 1:
@@ -825,7 +792,7 @@ class StoredReceipt:
     change_request_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("StoredReceipt", created_at=self.created_at)
+        require_aware("StoredReceipt", created_at=self.created_at)
         if not self.body_sealed:
             raise ValueError("StoredReceipt.body_sealed must not be empty")
         _require_receipt_links("StoredReceipt", self.plan_version)

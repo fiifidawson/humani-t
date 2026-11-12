@@ -71,10 +71,9 @@ class AuditRepository(Protocol):
         ...
 
 
-# Writes that a concurrent request could race with are never blind overwrites.
-# They are either conditional (`claim`, `revoke`: "only if still unused") and
-# report whether they won, or version-checked (`UserRepository.save`). Records
-# are passed positional-only (`/`) so implementations may name them freely.
+# Writes that can race are never blind overwrites: they are conditional and report
+# whether they won, or version-checked (`UserRepository.save`). Records are
+# positional-only (`/`) so implementations may name them freely.
 class UserRepository(Protocol):
     async def get(self, user_id: UUID) -> User | None: ...
 
@@ -93,9 +92,7 @@ class UserRepository(Protocol):
     async def lock_enabled_admins(self) -> list[User]:
         """Lock and return every enabled administrator, until the transaction ends.
 
-        Disabling an account serialises through this lock; without it two
-        administrators disabling each other at once could both succeed and leave
-        none (architecture §5.7).
+        Without this lock, two administrators disabling each other could leave none.
         """
         ...
 
@@ -345,10 +342,8 @@ class RunEventRepository(Protocol):
     async def next_id(self, run_id: UUID, *, lease_owner: str | None = None) -> int | None:
         """Lock the run and return the id its next event must have.
 
-        `None` if the run is missing or finished, so nothing can follow
-        `job.finished`; with `lease_owner`, also `None` unless the run is
-        running under that worker's lease, so a worker that lost its lease
-        stays silent.
+        `None` if the run is missing or finished, or, with `lease_owner`, if that worker
+        no longer holds the lease.
         """
         ...
 
@@ -581,7 +576,7 @@ class DocumentRepository(Protocol):
     """A project's uploaded documents, their raw text, their current masking and reviews.
 
     A document row is also its processing job: an `uploaded` document waits for
-    a worker, which claims it under a lease like a run (architecture §5.7).
+    a worker, which claims it under a lease like a run.
     """
 
     async def get(self, document_id: UUID) -> Document | None: ...

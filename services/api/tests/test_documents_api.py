@@ -1,15 +1,8 @@
 """A team's own documents end to end: processed, masked, reviewed, approved, used, deleted.
 
-Sources: the brief's rules 2, 3, 4, 12, 13 and 17; architecture §3.9.1 (masking
-reviewed before use; raw text only to the owner, audited; "not personal" never
-for structured identifiers), §4.4 (the privacy_review gate), §5.4 (sealed and
-shredded with the project), §5.5 (ids-only audit) and §5.7 (no connection held
-across slow work); UI_UX_SPEC §3.3, §6.6, §6.13 and §8.4.
-
-Requests go through the real middleware, routes, storage, encryption and audit
-log; the worker is the real `DocumentProcessor`. The seams are the fake
-scanner (it finds EICAR for real), the in-thread local extractor and an
-in-memory file store that records how many transactions were open.
+Requests go through the real middleware, routes, storage, encryption and audit log, and the
+worker is the real `DocumentProcessor`. The seams are the fake scanner (it finds EICAR), the
+in-thread extractor and an in-memory file store that records open transactions.
 """
 
 from __future__ import annotations

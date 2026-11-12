@@ -1,16 +1,8 @@
 """The extraction seam: an uploaded file's bytes in, its text and page layout out.
 
-Extraction parses files a stranger may have crafted, so every implementation
-must hold to `ExtractionLimits` (pages, characters, archive members and their
-sizes, a timeout), refuse external references, and make no network call.
-Failures are `ExtractionFailedError` with a fixed reason, never the parser's
-own message, which can quote the file.
-
-Implementations (architecture §3.9, ADR-0009): `local.py` reads text, Markdown,
-PDF (pypdf) and DOCX (standard library); `isolated.py` runs it in a separate
-process with a stripped environment and kills it at the timeout. mmore's
-extraction, which also reads images and audio, can be added later as another
-implementation of the same Protocol.
+The files may be hostile, so every implementation keeps to `ExtractionLimits`, refuses
+external references and makes no network call. A failure carries a fixed reason,
+never the parser's own message, which can quote the file.
 """
 
 from __future__ import annotations

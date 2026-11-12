@@ -1,10 +1,8 @@
 /**
  * A software stand-in for `navigator.credentials`, which jsdom does not have.
  *
- * It answers `create()` and `get()` with objects shaped like the browser's
- * PublicKeyCredential (ArrayBuffers, not strings), so the code that turns them
- * into JSON for the API is exercised exactly as in a browser. The fake API
- * checks that the JSON it receives has every field the server verifies.
+ * It returns ArrayBuffers like a real PublicKeyCredential, so the conversion to
+ * JSON runs as in a browser, and the fake API checks every field the server does.
  */
 
 const bytes = (text: string): ArrayBuffer =>

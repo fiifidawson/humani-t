@@ -1,19 +1,18 @@
-"""Runs, their live event stream, and gates (architecture §4.4).
+"""Runs, their live event stream, and gates.
 
-These paths name a review, run or gate rather than a project. Each resolves
-the project from the id it names and answers a non-member with the same 404 as
-a missing id. Routes with a body check access in a dependency, so the refusal
-comes before the body is read; the use case checks again as it writes.
+A non-member gets the same 404 as a missing id, before any body is read; the use
+case checks again as it writes.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.api.access import require_review
 from app.api.dependencies import API_PREFIX, RunsDep
 from app.api.schemas.run_events import RunStreamEvent
 from app.api.schemas.runs import GateDecisionIn, GateResolvedOut, RunIn, RunOut, RunStartedOut
@@ -25,20 +24,12 @@ from app.domain.projects import Action
 router = APIRouter(tags=["runs"])
 
 
-def _review_access(action: Action) -> Any:
-    async def gate(review_id: UUID, current: CurrentDep, runs: RunsDep) -> Current:
-        await runs.authorize_review(current, review_id, action)
-        return current
-
-    return Depends(gate)
-
-
 async def _gate_access(gate_id: UUID, current: CurrentDep, runs: RunsDep) -> Current:
     await runs.authorize_gate(current, gate_id)
     return current
 
 
-_RunStarter = Annotated[Current, _review_access(Action.MANAGE_RUNS)]
+_RunStarter = Annotated[Current, require_review(Action.MANAGE_RUNS)]
 _GateResolver = Annotated[Current, Depends(_gate_access)]
 
 
@@ -100,11 +91,8 @@ async def follow_run(
 ) -> StreamingResponse:
     """Replay the run's stored events after the last id seen, then follow it live.
 
-    The id comes from the `Last-Event-ID` header, which the browser sends when
-    it reconnects, or else from `?last_event_id=`; the header wins. The stream
-    ends after `job.finished`, so a finished run replays and closes. It also
-    ends when the session or the membership does; the browser's reconnect then
-    gets 401 or 404.
+    The `Last-Event-ID` header wins over the query. The stream ends after
+    `job.finished`, or when the session or membership does.
     """
     resume_after = last_event_id_header if last_event_id_header is not None else last_event_id
     stream = await runs.open_stream(current, run_id, resume_after)

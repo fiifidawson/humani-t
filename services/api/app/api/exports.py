@@ -1,14 +1,9 @@
-"""Turning an export's content into the bytes of a file.
+"""Turn an export's content into the bytes of a file.
 
-Each file is built from the same response models the screens read
-(`PaperOut`, `PrismaOut`, `ManifestOut`, `BriefOut`), so a download says
-exactly what the screen says, masked where the screen is masked. Text from
-papers and the model is data: CSV cells are neutralised against formulas,
-HTML is escaped, and Markdown table cells cannot break their table.
-
-The brief's "PDF" is print-ready HTML the browser saves as PDF: no PDF engine
-runs on the server, and the caveat sits in a fixed footer that repeats on
-every printed page (UI_UX_SPEC §8.7).
+Files are built from the same response models the screens read, so a download says
+what the screen says, masked where the screen is masked. Text from papers and the
+model is data: CSV cells are neutralised against formulas and HTML is escaped. The
+brief's "PDF" is print-ready HTML; no PDF engine runs on the server.
 """
 
 from __future__ import annotations

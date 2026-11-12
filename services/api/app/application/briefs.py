@@ -1,16 +1,9 @@
 """The decision brief: the `answer` stage that writes it, and reading it back.
 
-`AnswerStage` reads the run's screened-in passages and the review's question,
-masks the question with the project's rules, runs the agent loop
-(`brief_loop.py`) and stores one brief for the run, sealed under the project's
-key. A stage run again after a crash finds the stored brief and returns it
-instead of writing another (`runs/base.py`: a stage may run more than once).
-
-`BriefService` reads a brief for a member: the brief, one cited source with
-its passages and the claims citing it, and the trace. `ScreenedSources` says
-what the pipeline knew of each cited paper when the brief was written.
-
-No transaction is open while the model is called (architecture §5.7).
+`AnswerStage` masks the question, runs `brief_loop.py` on screened-in passages and stores
+one sealed brief per run; a rerun after a crash returns the stored brief instead of
+writing another. `BriefService` reads it back for a member. No transaction is open while
+the model is called.
 """
 
 from __future__ import annotations
@@ -30,7 +23,7 @@ from app.application.brief_loop import BriefLoop, LoopFailedError, LoopResult
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.papers import PaperStore
 from app.application.reviews import question_context
 from app.briefs.base import Retriever, SourceCatalogue
@@ -63,7 +56,6 @@ _CONTENT_PURPOSE = "decision_briefs.content"
 _EVIDENCE_PURPOSE = "decision_briefs.evidence"
 _TRACE_PURPOSE = "decision_briefs.trace"
 
-_REVIEW_NOT_FOUND = "No such review."
 _BRIEF_NOT_FOUND = "No such brief."
 _NO_BRIEF_YET = "This review has no decision brief yet."
 _NO_PASSAGE = "This citation has no passage in the brief's evidence."
@@ -374,16 +366,12 @@ class BriefService:
         self._storage = storage
         self._seal = BriefSeal(encryption)
 
-    async def authorize_review(self, current: Current, review_id: UUID) -> None:
-        async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
-
     async def for_review(
         self, current: Current, review_id: UUID, run_id: UUID | None = None
     ) -> OpenedBrief:
         """The review's latest brief, or the one `run_id` wrote."""
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             if run_id is None:
                 record = await uow.briefs.latest_for_review(review_id)
             else:
@@ -424,16 +412,4 @@ class BriefService:
                 for place, claim in opened.brief.body.claims()
                 if any(c.tag == tag for c in claim.citations)
             ),
-        )
-
-    async def _review_project(self, uow: UnitOfWork, current: Current, review_id: UUID) -> None:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow,
-            current.user.id,
-            review.project_id,
-            Action.READ_PROJECT,
-            not_found=_REVIEW_NOT_FOUND,
         )

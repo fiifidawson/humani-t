@@ -1,10 +1,7 @@
 """Projects, membership and the role policy: who may do what inside a project.
 
-A project is the unit of access, encryption and deletion (architecture §4.1).
-This module holds the rules that decide access and keep a project owned. It
-holds no plaintext project data: a project's name lives here only as the
-ciphertext sealed under the project's own key, which the application layer
-seals and opens.
+A project is the unit of access, encryption and deletion. Its name is held here only
+sealed under the project's own key.
 """
 
 from __future__ import annotations
@@ -15,6 +12,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
+
+from app.domain.timestamps import require_aware
 
 MAX_PROJECT_NAME_LENGTH = 200
 
@@ -32,7 +31,7 @@ class Role(StrEnum):
 
 
 class Action(StrEnum):
-    """Everything a member might do inside a project (UI_UX_SPEC §3.3)."""
+    """Everything a member might do inside a project."""
 
     READ_PROJECT = "project.read"
     ASK_QUESTIONS = "question.ask"
@@ -93,12 +92,6 @@ def normalize_project_name(name: str) -> str:
     return trimmed
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Project:
     """A project's record. A deleted project stays as a tombstone row.
@@ -117,7 +110,7 @@ class Project:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "Project",
             created_at=self.created_at,
             archived_at=self.archived_at,
@@ -158,7 +151,7 @@ class Membership:
     added_by: UUID | None
 
     def __post_init__(self) -> None:
-        _require_aware("Membership", added_at=self.added_at)
+        require_aware("Membership", added_at=self.added_at)
 
     def with_role(self, role: Role) -> Membership:
         return replace(self, role=role)

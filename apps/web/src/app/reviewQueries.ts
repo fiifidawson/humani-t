@@ -141,6 +141,18 @@ export const threadsQuery = (api: ApiClient, reviewId: string) =>
 			),
 	});
 
+/** One thread; its page reads this for the thread's review, then the review's threads. */
+export const threadQuery = (api: ApiClient, threadId: string) =>
+	queryOptions({
+		queryKey: keys.thread(threadId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/threads/{thread_id}", {
+					params: { path: { thread_id: threadId } },
+				}),
+			),
+	});
+
 const QUESTION_POLL_MS = 2000;
 
 /** One question, polled until it is answered or failed (docs/api.md "Follow-up questions"). */

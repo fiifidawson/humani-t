@@ -1,18 +1,18 @@
-"""Follow-up questions in threads (UI_UX_SPEC §6.12, §15 P2).
+"""Follow-up questions in threads.
 
-Asking returns at once with the question masked and queued; the worker
-answers it, and the browser polls `GET /questions/{id}` until it is answered
-or failed. These paths name a review, thread or question; a non-member gets
-the same 404 as a missing id, before the body is read.
+Asking returns at once with the question masked and queued; the worker answers it
+while the browser polls. A non-member gets the same 404 as a missing id, before the
+body is read.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.api.access import require_review
 from app.api.dependencies import API_PREFIX, QuestionsDep
 from app.api.schemas.questions import QuestionIn, QuestionOut, ThreadOut
 from app.api.session import CurrentDep, request_id
@@ -22,16 +22,8 @@ from app.domain.projects import Action
 router = APIRouter(tags=["questions"])
 
 
-def _review_access(action: Action) -> Any:
-    async def gate(review_id: UUID, current: CurrentDep, questions: QuestionsDep) -> Current:
-        await questions.authorize_review(current, review_id, action)
-        return current
-
-    return Depends(gate)
-
-
-_Asker = Annotated[Current, _review_access(Action.ASK_QUESTIONS)]
-_Reader = Annotated[Current, _review_access(Action.READ_PROJECT)]
+_Asker = Annotated[Current, require_review(Action.ASK_QUESTIONS)]
+_Reader = Annotated[Current, require_review(Action.READ_PROJECT)]
 
 
 @router.post(

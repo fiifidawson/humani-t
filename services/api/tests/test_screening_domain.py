@@ -1,22 +1,21 @@
 """Requirements for screening, discovery and the run manifest, as rules with no I/O.
 
-Sources: architecture §3.8 (a decision records its score, priority, rationale
-and provenance: model id, prompt version, criteria version) and §4.2
-(`RunManifest` records what makes a run reproducible); UI_UX_SPEC §5.3.7 and
-§6.8 (the labels people see: Highly relevant, Relevant, Possibly relevant,
-Excluded); the provenance test in `CLAUDE.md`: "could a reviewer reconstruct
-why this paper was included or excluded, six months from now, from what we
-stored?"
+A decision records its score, rationale and provenance (model id, prompt version, criteria
+version), so a reviewer can reconstruct it later, and `RunManifest` records what makes a
+run reproducible.
 """
 
 from __future__ import annotations
 
 import math
+import string
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
+from hypothesis import assume, given
+from hypothesis import strategies as st
 
 from app.domain.discovery import (
     IngestedText,
@@ -30,7 +29,10 @@ from app.domain.manifest import StageSummary, assemble_manifest
 from app.domain.paper import PaperRecord
 from app.domain.runs import Run, RunState
 from app.domain.screening import (
+    MAX_QUOTE_LENGTH,
     UNREADABLE_RATIONALE,
+    CriterionAnswer,
+    CriterionVerdict,
     Passage,
     PassageSourceKind,
     Priority,
@@ -143,7 +145,7 @@ class TestScreeningDecision:
 
 
 class TestTiers:
-    """The names people see (UI_UX_SPEC §6.8) follow from label and priority alone."""
+    """The names people see follow from label and priority alone."""
 
     @pytest.mark.parametrize(
         ("priority", "tier"),
@@ -206,6 +208,97 @@ class TestLabelRules:
 
     def test_an_uncertain_decision_has_no_exclusion_reasons(self):
         assert exclusion_reasons(ScreeningLabel.UNCERTAIN, (), INCLUSION, EXCLUSION) == ()
+
+
+TEXT = (
+    "Unconditional cash for displaced households in [LOCATION_1] cut acute malnutrition.\n"
+    "Food security improved within six months, and school attendance rose."
+)
+
+
+def _located(quote: str | None, text: str = TEXT) -> str | None:
+    return CriterionAnswer.located("I1", CriterionVerdict.YES, quote, text).quote
+
+
+class TestQuotes:
+    """The stored quote is the paper's own characters, whatever the model's wording."""
+
+    def test_a_quote_copied_exactly_is_kept(self):
+        assert _located("cash for displaced households") == "cash for displaced households"
+
+    def test_a_quote_that_rejoins_a_line_break_keeps_the_papers_line_break(self):
+        assert _located("acute malnutrition. Food security") == (
+            "acute malnutrition.\nFood security"
+        )
+
+    def test_a_quote_in_another_case_is_kept_in_the_papers_case(self):
+        assert _located("CASH FOR Displaced HOUSEHOLDS") == "cash for displaced households"
+
+    @pytest.mark.parametrize("ellipsis", ["…", "...", " … ", " ... "])
+    def test_pieces_joined_by_an_ellipsis_are_kept_as_the_papers_own_pieces(self, ellipsis):
+        quote = f"unconditional cash for displaced{ellipsis}food security improved"
+
+        assert _located(quote) == "Unconditional cash for displaced … Food security improved"
+
+    def test_a_quote_past_the_limit_is_kept_shortened_at_a_word(self):
+        text = " ".join(f"word{n}" for n in range(200))
+
+        quote = _located(text.upper(), text)
+
+        assert quote is not None
+        assert len(quote) <= MAX_QUOTE_LENGTH
+        assert quote.endswith("…")
+        assert text.startswith(quote.removesuffix("…"))
+        assert text[len(quote) - 1] == " "
+
+    def test_no_quote_is_none(self):
+        assert _located(None) is None
+
+    def test_a_paraphrase_is_refused(self):
+        with pytest.raises(ValueError, match="I1"):
+            _located("cash transfers reduced malnutrition")
+
+    def test_pieces_out_of_order_are_refused(self):
+        with pytest.raises(ValueError, match="I1"):
+            _located("food security improved … unconditional cash for displaced")
+
+    def test_a_piece_shorter_than_three_words_is_refused(self):
+        with pytest.raises(ValueError, match="three words"):
+            _located("unconditional cash for displaced … food security")
+
+    def test_short_common_words_cannot_match_by_accident(self):
+        with pytest.raises(ValueError, match="three words"):
+            _located("for … in … and")
+
+    @pytest.mark.parametrize("quote", ["", "   ", "…", "..."])
+    def test_an_empty_quote_is_refused(self, quote):
+        with pytest.raises(ValueError, match="I1"):
+            _located(quote)
+
+
+_WORDS = st.lists(
+    st.text(alphabet=string.ascii_letters + string.digits + ",;:()-'", min_size=1, max_size=9),
+    min_size=3,
+    max_size=90,
+)
+
+
+class TestQuoteProperties:
+    @given(_WORDS, st.sampled_from([" ", "\n", "  "]), st.data())
+    def test_every_stored_piece_is_an_exact_piece_of_the_text(self, words, gap, data):
+        text = gap.join(words)
+        bounds = sorted(data.draw(st.lists(st.integers(0, len(words)), min_size=4, max_size=4)))
+        pieces = [p for p in (words[bounds[0] : bounds[1]], words[bounds[2] : bounds[3]]) if p]
+        assume(pieces)
+        assume(len(pieces) == 1 or all(len(p) >= 3 for p in pieces))
+        ellipsis = data.draw(st.sampled_from(["…", " … ", "..."]))
+        quote = ellipsis.join(" ".join(p) for p in pieces).swapcase()
+
+        stored = _located(quote, text)
+
+        assert stored is not None
+        for piece in stored.removesuffix("…").split(" … "):
+            assert piece in text
 
 
 class TestPassages:

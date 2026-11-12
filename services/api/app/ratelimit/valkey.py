@@ -1,11 +1,7 @@
 """Sliding-window limiter shared by every API worker, stored in Valkey.
 
-Each key is a sorted set of event timestamps. The check-and-add runs as one Lua
-script, so two workers cannot both admit the last allowed event.
-
-An outage is reported as `RateLimiterUnavailableError`, quickly: short socket
-timeouts and no client-side retries, because a sign-in waiting on a dead Valkey
-is worse than one refused with 503 and a `Retry-After`.
+The check-and-add is one Lua script, so two workers cannot both admit the last event.
+An outage fails fast as `RateLimiterUnavailableError` (a 503), with no retries.
 """
 
 from __future__ import annotations

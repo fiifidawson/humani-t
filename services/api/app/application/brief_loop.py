@@ -1,16 +1,8 @@
 """The agent loop that writes a decision brief, as a small state machine in plain Python.
 
-Planner (round 0) → Retriever → then per round: Writer → checks → Critic, and
-the Retriever again for what the Critic asked for. It stops when the Critic
-accepts a draft the checks pass, at `max_rounds`, or when a role answers
-invalidly twice in a row (dependencies.md §3: the CHITCHAT loop, not AMMORE's
-framework). Planner, Writer and Critic are one `GuardedInference` call each,
-with a versioned prompt and a JSON schema; the Retriever and the checks are code.
-
-Only masked text goes in: the caller passes the masked question, and passages
-are masked before they are stored. Every step is reported as it finishes and
-kept as the brief's trace. Storage, encryption and the run belong to the stage
-(`application/briefs.py`); this module holds no state between runs.
+Planner, then per round Writer, checks and Critic, retrieving what the Critic asks for.
+The model roles are one `GuardedInference` call each; retrieval and checks are code. Only
+masked text goes in. Storage and the run belong to `application/briefs.py`.
 """
 
 from __future__ import annotations
@@ -309,10 +301,8 @@ async def revise_until_done[T](
 ) -> Rounds[T]:
     """Writer, checks and Critic each round, retrieving what the Critic asks for, until done.
 
-    Done is: the Critic accepts a draft the checks pass; `max_rounds`; a role
-    answering invalidly twice in a row; or a round that did no better than the
-    kept draft with no new evidence to do better with. The kept draft is the
-    accepted one, else the best by `Draft.rank_key`.
+    It also stops after two invalid answers in a row, or a round that did no better with
+    no new evidence. The kept draft is the accepted one, else the best by `Draft.rank_key`.
     """
     kept: Draft[T] | None = None
     feedback: tuple[str, ...] = ()
@@ -399,9 +389,7 @@ class BriefLoop:
 class LoopRunner:
     """The machinery every agent loop shares: model steps, retrieval, checks, the trace.
 
-    One per run of a loop, discarded when it ends. The brief loop below and the
-    follow-up answer loop (`application/questions.py`) differ only in their
-    prompts and in what they do between steps.
+    One per run of a loop, discarded when it ends.
     """
 
     inference: GuardedInference
@@ -698,7 +686,7 @@ def parse_claim(answer: Mapping[str, Any], kinds: Mapping[str, SourceKind]) -> C
 
 def _kind_from_tag(tag: str) -> SourceKind:
     # Only for a tag nothing was retrieved under, which the checks report anyway:
-    # team documents are cited as D…, papers as P… (UI_UX_SPEC §8.4).
+    # team documents are cited as D…, papers as P….
     return SourceKind.DOCUMENT if tag.upper().startswith("D") else SourceKind.PAPER
 
 

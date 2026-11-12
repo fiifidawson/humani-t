@@ -1,14 +1,8 @@
 """The last check before any model call: the exact outgoing text, scanned again.
 
-`GuardedInference` asks this guard about every request (architecture §3.9.1).
-Anything a detector finds outside a placeholder means the text was not masked,
-or not masked enough, and the call is refused rather than repaired: a prompt
-fixed up here would be a prompt nobody reviewed. The refusal names entity types
-and counts, never a value, because refusals are logged and shown.
-
-The guard runs the same pattern detector the sanitiser does, so text the
-sanitiser masked always passes. Project rules are added per call by
-`GuardedInference.with_rules`, because this guard is shared by every project.
+Anything found outside a placeholder refuses the call rather than repairing it: a
+prompt fixed up here is one nobody reviewed. A refusal names entity types and counts,
+never a value, because refusals are logged and shown.
 """
 
 from __future__ import annotations

@@ -1,7 +1,6 @@
-"""Response models for reading a decision brief (UI_UX_SPEC §6.9 to §6.11).
+"""Response models for reading a decision brief.
 
-Read-only: there is no request body. Every field mirrors a domain value; none
-ranks the options or totals a score, because the brief never does.
+No field ranks the options or totals a score, because the brief never does.
 """
 
 from __future__ import annotations

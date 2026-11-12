@@ -437,7 +437,7 @@ The test database must be migrated to `0007` first ([S0.6](00-setup.md#s06-migra
 
 | Id | Gap | Effect | Plan |
 | --- | --- | --- | --- |
-| G8.1 | Every stage is a fake | Runs produce no real results in any environment | The discover, mask, screen and brief phases (09–12) replace them in `_stages()` |
+| G8.1 | Every stage is a fake | Runs produce no real results in any environment | Closed: phases 09–12 replaced every stage but `index`, which was removed because BM25 indexes per search (ADR-0007) |
 | G8.2 | Cancellation is cooperative | A stage that never calls `raise_if_cancelled` stops only when it finishes | Real stages check between items |
 | G8.3 | Watching a stream is not activity | A member who only watches a long run is signed out after an hour idle | Revisit with the web app (phase 13) |
 | G8.4 | Deleting a project does not cancel its runs at once | A running stage continues until its next write, then ends without output | Acceptable: nothing it writes is readable; revisit if stages grow long silent stretches |
@@ -451,7 +451,7 @@ The test database must be migrated to `0007` first ([S0.6](00-setup.md#s06-migra
 | --- | --- |
 | **Review** | A question inside a project, with its status (§11.1). |
 | **Run** | One background execution of some of a review's stages; its row is also its job in the queue. |
-| **Stage** | One step of the pipeline (`queries`, `discover`, `ingest`, `mask`, `screen`, `export`, `index`, `answer`), plugged in through `app/runs/base.py`. |
+| **Stage** | One step of the pipeline (`queries`, `discover`, `ingest`, `mask`, `screen`, `export`, `answer`; `index` was removed, and runs stored with it still load), plugged in through `app/runs/base.py`. |
 | **Worker** | The process (`python -m app.worker`) that claims queued runs and executes their stages. |
 | **Lease** | A claim on a run that expires unless renewed; a dead worker's lease runs out and another worker takes over. |
 | **`SKIP LOCKED`** | A Postgres option that makes a query pass over rows another transaction has locked, so workers never wait for each other. |

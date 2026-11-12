@@ -1,15 +1,14 @@
 /**
- * Project settings (UI_UX_SPEC §6.14): the name, the members and the danger
- * zone. Archiving, tags and leaving the project are not here yet.
+ * Project settings: name, archiving, members, and the danger zone where anyone may
+ * leave and owners may delete.
  *
- * Deleting destroys the project's key (crypto-shredding), so it asks for the
- * project's name typed out. The API decides who may rename, change members or
- * delete, and whether the sign-in is recent enough; this page only reflects it.
+ * Deleting destroys the project's key (crypto-shredding), so it asks for the name
+ * typed out. The API decides who may do what; this page only reflects it.
  */
 
 import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { unwrap, unwrapEmpty } from "../../api/client";
@@ -21,8 +20,11 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
+import { LeaveControl } from "./LeaveProject";
+import { ArchiveControl, ArchiveStatus } from "./ProjectArchive";
 import { MembersSection } from "./ProjectMembers";
 import { SettingsSection } from "./SettingsSection";
+import { useLeaveForHome } from "./useLeaveForHome";
 
 export function ProjectSettingsPage() {
 	const api = useApi();
@@ -42,11 +44,15 @@ export function ProjectSettingsPage() {
 			<Stack gap="6" maxW="2xl">
 				<SettingsSection title="General">
 					{role === "owner" ? (
-						<RenameForm projectId={projectId} name={name} />
+						<Stack gap="5">
+							<RenameForm projectId={projectId} name={name} />
+							<ArchiveControl project={project.data} />
+						</Stack>
 					) : (
 						<Stack gap="1" fontSize="sm">
 							<Text fontWeight="medium">{name}</Text>
 							<Text>Only owners can rename the project.</Text>
+							<ArchiveStatus project={project.data} />
 						</Stack>
 					)}
 				</SettingsSection>
@@ -54,24 +60,28 @@ export function ProjectSettingsPage() {
 					<MembersSection projectId={projectId} isOwner={role === "owner"} />
 				</SettingsSection>
 				<SettingsSection title="Danger zone" isDanger>
-					{role === "owner" ? (
-						<Flex gap="4" align="center" justify="space-between" wrap="wrap">
-							<Text fontSize="sm" maxW="md">
-								Delete this project and everything in it. This can't be undone.
-							</Text>
-							<Button
-								size="sm"
-								variant="outline"
-								colorPalette="danger"
-								onClick={() => setDeleting(true)}
-							>
-								<Trash2 />
-								Delete project…
-							</Button>
-						</Flex>
-					) : (
-						<Text fontSize="sm">Only owners can delete a project.</Text>
-					)}
+					<Stack gap="4">
+						<LeaveControl project={project.data} />
+						{role === "owner" ? (
+							<Flex gap="4" align="center" justify="space-between" wrap="wrap">
+								<Text fontSize="sm" maxW="md">
+									Delete this project and everything in it. This can't be
+									undone.
+								</Text>
+								<Button
+									size="sm"
+									variant="outline"
+									colorPalette="danger"
+									onClick={() => setDeleting(true)}
+								>
+									<Trash2 />
+									Delete project…
+								</Button>
+							</Flex>
+						) : (
+							<Text fontSize="sm">Only owners can delete a project.</Text>
+						)}
+					</Stack>
 				</SettingsSection>
 			</Stack>
 			{isDeleting ? (
@@ -153,8 +163,7 @@ function DeleteDialog({
 	onClose: () => void;
 }) {
 	const api = useApi();
-	const queryClient = useQueryClient();
-	const navigate = useNavigate();
+	const leaveForHome = useLeaveForHome(projectId);
 	const withReauth = useReauth();
 	const [typed, setTyped] = useState("");
 	const remove = useMutation({
@@ -166,11 +175,7 @@ function DeleteDialog({
 					}),
 				),
 			),
-		onSuccess: async () => {
-			queryClient.removeQueries({ queryKey: keys.project(projectId) });
-			await queryClient.invalidateQueries({ queryKey: keys.projects });
-			await navigate({ to: "/" });
-		},
+		onSuccess: leaveForHome,
 	});
 	// The exact name, as on GitHub: deleting is irreversible, and typing it is a pause.
 	const isTyped = typed === name;

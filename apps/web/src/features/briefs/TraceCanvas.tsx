@@ -1,11 +1,9 @@
 /**
- * How the brief was made (UI_UX_SPEC §6.11): the agent loop as a short story,
- * one row per step, grouped by round, each opening to its detail. While the
- * Brief stage is still running there is no trace yet, so the steps come from
- * the run's stream as they finish.
+ * How the brief was made: the agent loop as one row per step, grouped by round.
  *
- * Step outputs are the API's JSON (docs/api.md, the trace): every field read
- * here is checked first, and anything unexpected is simply not shown.
+ * While the Brief stage runs there is no trace yet, so steps come from the run's
+ * stream. Step outputs are the API's JSON: every field is checked first, and
+ * anything unexpected is simply not shown.
  */
 
 import { Box, chakra, Flex, Heading, Stack, Text } from "@chakra-ui/react";

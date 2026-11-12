@@ -1,12 +1,9 @@
 /**
- * Follow-up questions for the fake API: threads, questions and their answers,
- * served through MSW beside the reviews in fakeReviews.ts.
+ * Follow-up questions for the fake API, served beside fakeReviews.ts.
  *
- * It applies the API's rules the screens depend on (docs/api.md "Follow-up
- * questions"): asking returns 202 with the question masked and pending; a
- * viewer gets 403; a thread answers one question at a time (409); a thread of
- * another review is 404. The "worker" answers on the next poll, the way the
- * test says, so a test sees what shows while a question waits.
+ * It applies the rules the screens depend on: 202 with the question masked and
+ * pending, 403 for viewers, 409 while a question waits, 404 for another review's
+ * thread. The "worker" answers on the next poll, when the test says so.
  */
 
 import { HttpResponse, http } from "msw";
@@ -66,6 +63,20 @@ export const EXAMPLE_ANSWER: FakeOutcome = {
 	],
 };
 
+/** The example answer, citing the paper `paperId` as P1. */
+export function answerCiting(paperId: string): FakeOutcome {
+	if (EXAMPLE_ANSWER.kind !== "answer") {
+		throw new Error("EXAMPLE_ANSWER must be an answer");
+	}
+	return {
+		...EXAMPLE_ANSWER,
+		sources: EXAMPLE_ANSWER.sources.map((source) => ({
+			...source,
+			paper_id: paperId,
+		})),
+	};
+}
+
 export const MODEL_DOWN_ANSWER: FakeOutcome = {
 	kind: "failed",
 	error: "The model server isn't answering. Ask again in a minute.",
@@ -94,14 +105,23 @@ export class FakeQuestions {
 
 	constructor(private readonly access: Access) {}
 
-	/** A thread already asked and answered, as if from an earlier visit. */
+	/**
+	 * A question already asked and answered, as if from an earlier visit: in a
+	 * new thread, or continuing `threadId`.
+	 */
 	addAnswered(
 		review: Review,
 		question: string,
 		outcome: FakeOutcome = EXAMPLE_ANSWER,
 		askedAt = "2026-11-03T11:30:00Z",
+		threadId: string | null = null,
 	): Question {
-		const asked = this.ask(review, question, null, askedAt);
+		const thread =
+			threadId === null ? null : this.threads.find((t) => t.id === threadId);
+		if (thread === undefined) {
+			throw new Error(`No thread ${threadId}`);
+		}
+		const asked = this.ask(review, question, thread, askedAt);
 		this.finish(asked, outcome);
 		return asked;
 	}
@@ -239,7 +259,13 @@ export class FakeQuestions {
 				return reached instanceof Response
 					? reached
 					: HttpResponse.json(
-							this.threads.filter((t) => t.review_id === reached.review.id),
+							this.threads
+								.filter((t) => t.review_id === reached.review.id)
+								.sort(
+									(a, b) =>
+										b.created_at.localeCompare(a.created_at) ||
+										b.id.localeCompare(a.id),
+								),
 						);
 			}),
 

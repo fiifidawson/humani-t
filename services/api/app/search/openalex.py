@@ -1,15 +1,9 @@
 """OpenAlex: the works index, searched over title and abstract.
 
-API facts this relies on (help.openalex.org, checked 2026-11-03):
-
-- `search.title_and_abstract` accepts upper-case AND/OR/NOT, quoted phrases
-  and parentheses. Phrases are stemmed; that is OpenAlex's matching, not ours.
-- `per_page` is at most 100. Basic paging stops at 10,000 results.
-- An API key (sent as a bearer token by the fetcher, never in the URL) raises the
-  daily budget and the rate limit. `mailto` no longer buys a "polite pool"; it is
-  still sent when configured, as a contact address OpenAlex can use.
-- Requests over about 4 KB of URL are refused, so a very large vocabulary fails
-  here as `PaperSourceUnavailableError` rather than being silently truncated.
+API facts (help.openalex.org, checked 2026-11-03): phrases are stemmed by OpenAlex, and
+`per_page` is at most 100. An API key, sent as a bearer token and never in the URL, raises
+the rate limit; `mailto` no longer does. URLs over about 4 KB are refused, so a very large
+vocabulary fails loudly rather than being truncated.
 """
 
 from __future__ import annotations
@@ -73,10 +67,6 @@ class OpenAlexProvider:
                 break
             page += 1
         return tuple(records[:limit])
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        # Full text arrives with PDF retrieval and extraction (build order step 10).
-        return None
 
     async def _page(self, compiled: str, per_page: int, page: int) -> list[Mapping[str, Any]]:
         params = [

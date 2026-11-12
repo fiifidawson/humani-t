@@ -1,12 +1,7 @@
 """Write the API's OpenAPI document to a file, without starting a server.
 
-The web app's types are generated from this file (`pnpm gen:api`), and CI checks
-that the committed copy matches the code (`pnpm check:api`). It belongs here, not
-in `app.cli`: it is a build step for developers, not an operator command.
-
-Run it from the repository root:
-
-    uv run --directory services/api python ../../scripts/export_openapi.py
+The web app's types are generated from it, and CI checks the committed copy is current.
+A developer build step, not an operator command, so it is not in `app.cli`.
 """
 
 from __future__ import annotations
@@ -22,9 +17,8 @@ _DEFAULT_OUTPUT = _API_DIR / "openapi.json"
 
 
 def _forget_local_configuration() -> None:
-    # The document must depend on the code alone. A developer's HUMANI_T_*
-    # variables (a database URL without its KEK, say) would otherwise change
-    # what is exported, or stop the export with a validation error.
+    # The document must depend on the code alone, not on a developer's HUMANI_T_*
+    # variables, which could change it or fail validation.
     for name in [key for key in os.environ if key.upper().startswith("HUMANI_T_")]:
         del os.environ[name]
 
@@ -37,11 +31,9 @@ def export(output: Path) -> None:
     from app.main import create_app
     from app.settings import Environment, Settings
 
-    # The document is the production route surface: development-only routes
-    # (`/info`) must not reach the web app's types. Production settings would
-    # demand real secrets, so the providers come from a validated test
-    # configuration and only the environment that decides which routes exist is
-    # switched, unvalidated, on a copy. Nothing connects: the app is never served.
+    # Production routes only, so `/info` stays out of the web app's types. Production
+    # settings would demand real secrets, so test settings are copied with only the
+    # environment switched. Nothing connects: the app is never served.
     test_settings = Settings(environment=Environment.TEST, public_origin="https://localhost")
     production_routes = test_settings.model_copy(update={"environment": Environment.PRODUCTION})
     app = create_app(production_routes, providers=build_providers(test_settings))

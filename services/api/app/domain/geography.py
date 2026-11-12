@@ -1,13 +1,8 @@
 """Countries and large regions: place names too coarse to identify a person.
 
-An operator may keep these unmasked in questions and plans, so a review's
-geography reaches the search and the screening criteria (ADR 0011). Only names
-on these lists qualify; a town, district, camp, facility or anything else the
-name model reports stays masked. Built in, never looked up: no network, and the
-same answer on every machine.
-
-What does not belong here: deciding whether names are kept (Settings) or how a
-span is masked (`domain/masking.py`).
+An operator may keep these unmasked so a review's geography reaches search and screening
+(ADR 0011). Only a whole name on these lists qualifies; anything else stays masked. The
+lists are built in, never looked up, so every machine gives the same answer.
 """
 
 from __future__ import annotations

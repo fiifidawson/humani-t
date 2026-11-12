@@ -38,9 +38,7 @@ from app.api.routes import (
     questions,
     reviews,
     runs,
-    search,
     system,
-    vocabulary,
 )
 from app.api.routes.system import API_NAME, API_VERSION
 from app.domain.accounts import EmailTakenError
@@ -70,21 +68,6 @@ TAGS_METADATA = [
         "description": (
             "Projects and their members. A project is the unit of access, encryption "
             "and deletion: non-members get 404 for everything about it."
-        ),
-    },
-    {
-        "name": "vocabulary",
-        "description": (
-            "Turning curated terms into a Boolean query. Concepts sharing a theme "
-            "are OR'd; themes are AND'd. A user-supplied vocabulary is used "
-            "exactly as given."
-        ),
-    },
-    {
-        "name": "search",
-        "description": (
-            "Running a compiled query against a source. Results always travel "
-            "with the query and provenance that produced them."
         ),
     },
     {"name": "reviews", "description": "Questions inside a project, encrypted with its key."},
@@ -217,11 +200,9 @@ async def _start_development_conveniences(
 def _install(app: FastAPI, settings: Settings) -> None:
     install_error_handlers(app)
 
-    # Starlette runs the last-added middleware first: the client address is
-    # settled before anything reads it, the request id is bound before anything
-    # can log, and security headers wrap even the cross-site refusals, which
-    # answer without reaching a route. Unhandled errors become a 500 inside the
-    # headers and the request id, so that 500 carries both.
+    # Order matters: Starlette runs the last-added middleware first, so the client
+    # address and request id are settled before anything logs, and security headers
+    # wrap even the cross-site refusals and the 500 for unhandled errors.
     app.add_middleware(
         CrossSiteRequestMiddleware,
         public_origin=settings.public_origin,
@@ -261,8 +242,6 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(plans.router)
     v1.include_router(masking.router)
     v1.include_router(documents.router)
-    v1.include_router(vocabulary.router)
-    v1.include_router(search.router)
     app.include_router(v1)
 
 

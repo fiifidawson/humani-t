@@ -1,11 +1,9 @@
 /**
- * The app must run under a CSP with no 'unsafe-inline', styles only under a
- * per-response nonce, and Trusted Types enforced (csp.config.ts; Caddy sends it
- * in production). These checks keep the source from drifting into something
- * that policy would block or weaken, and Caddy's copy from drifting from ours.
+ * Keep the source runnable under our CSP: no 'unsafe-inline', styles only under a
+ * per-response nonce, Trusted Types enforced. Also keeps Caddy's copy in step.
  *
- * Chakra UI's styling passes: its style props become class names, and Emotion
- * writes the rules into <style nonce> elements, not into `style` attributes.
+ * Chakra passes because Emotion writes rules into <style nonce> elements, not into
+ * `style` attributes.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

@@ -1,14 +1,8 @@
 """Runs, their event log and their gates, as rules with no I/O.
 
-A run executes some of a review's pipeline stages as a background job
-(architecture §4.4). This module decides what may follow what — the run's
-state table, where a crashed run goes, which stages a run may ask for — and
-what each event says. Storage, encryption, the worker and the stream live
-elsewhere and obey these rules.
-
-Event payloads carry counts, labels and masked text only. They are encrypted
-under the project's key before they are stored; this module builds them in
-the clear and never sees them again.
+This module decides what may follow what: the run's states, where a crashed run goes and
+which stages a run may ask for. Event payloads carry counts, labels and masked text only,
+and are encrypted under the project's key before they are stored.
 """
 
 from __future__ import annotations
@@ -22,11 +16,11 @@ from uuid import UUID
 
 from app.domain.projects import Action
 from app.domain.reviews import InvalidTransitionError
+from app.domain.timestamps import require_aware
 
 type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
-# The prototype's pipeline, in run order (UI_UX_SPEC §6.7). A run covers some
-# of these, always in this order.
+# The pipeline, in run order. A run covers some of these, always in this order.
 STAGES: tuple[str, ...] = (
     "queries",
     "discover",
@@ -34,11 +28,14 @@ STAGES: tuple[str, ...] = (
     "mask",
     "screen",
     "export",
-    "index",
     "answer",
 )
 
-# Words a non-technical user knows (UI_UX_SPEC §5.3.5). Used in error messages.
+# `index` never did any work: BM25 builds its index per search (ADR 0007). Runs stored
+# with it must still load, so stored stages are checked against this order instead.
+_STORED_ORDER = ("queries", "discover", "ingest", "mask", "screen", "export", "index", "answer")
+
+# Words a non-technical user knows, for error messages.
 STAGE_LABELS: Mapping[str, str] = {
     "queries": "Queries",
     "discover": "Discover",
@@ -46,7 +43,6 @@ STAGE_LABELS: Mapping[str, str] = {
     "mask": "Mask",
     "screen": "Screen",
     "export": "Export",
-    "index": "Index",
     "answer": "Brief",
 }
 
@@ -74,9 +70,8 @@ class RunConflictError(Exception):
 def plan_stages(requested: Sequence[str], available: Collection[str]) -> tuple[str, ...]:
     """The stages a run will execute, in pipeline order. None asked for means all of them.
 
-    Refuses an unknown or repeated stage, and a stage this deployment has no
-    implementation for, so a run never starts that is bound to fail at a stage
-    nobody can run.
+    Refuses an unknown or repeated stage, or one this deployment cannot run, so no run
+    starts that is bound to fail.
     """
     requested = requested or STAGES
     unknown = [s for s in requested if s not in STAGES]
@@ -90,6 +85,13 @@ def plan_stages(requested: Sequence[str], available: Collection[str]) -> tuple[s
             f"Run.stages contains stages this deployment cannot run: {', '.join(unavailable)}"
         )
     return tuple(s for s in STAGES if s in requested)
+
+
+def _is_stored_plan(stages: Sequence[str]) -> bool:
+    if any(s not in _STORED_ORDER for s in stages):
+        return False
+    positions = [_STORED_ORDER.index(s) for s in stages]
+    return positions == sorted(set(positions))
 
 
 class RunState(StrEnum):
@@ -137,20 +139,12 @@ def next_run_state(state: RunState, trigger: RunTrigger) -> RunState:
     return following
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Run:
     """One execution of some of a review's stages. Its row is also its job in the queue.
 
-    `stages_finished` counts the stages done; the stage at that index is the
-    current one. A stage interrupted by a gate or a crash runs again from its
-    start, so stages must be safe to repeat. `stage_started_at` stays set
-    across those interruptions, so `stage.started` is sent once per stage.
+    A stage interrupted by a gate or a crash runs again from its start, so stages must be
+    safe to repeat. `stage_started_at` survives that, so `stage.started` is sent once.
     """
 
     id: UUID
@@ -173,7 +167,7 @@ class Run:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "Run",
             created_at=self.created_at,
             queued_at=self.queued_at,
@@ -185,8 +179,8 @@ class Run:
         )
         if not self.stages:
             raise ValueError("Run.stages must name at least one stage")
-        if plan_stages(self.stages, STAGES) != self.stages:
-            raise ValueError("Run.stages must be in pipeline order")
+        if not _is_stored_plan(self.stages):
+            raise ValueError("Run.stages must be known stages, each once, in pipeline order")
         if not 0 <= self.stages_finished <= len(self.stages):
             raise ValueError("Run.stages_finished must be between 0 and the number of stages")
         if (self.lease_owner is None) != (self.lease_expires_at is None):
@@ -340,15 +334,14 @@ class RunEvent:
             raise ValueError("RunEvent.id must be 1 or more")
         if not self.payload_sealed:
             raise ValueError("RunEvent.payload_sealed must not be empty")
-        _require_aware("RunEvent", occurred_at=self.occurred_at)
+        require_aware("RunEvent", occurred_at=self.occurred_at)
 
 
 def resume_point(last_event_id: str | None, last_id: int) -> int:
     """The id after which a reconnecting stream resumes; 0 replays from the start.
 
-    An id this run does not have — malformed, out of range, or beyond the run's
-    latest event as an id from another run usually is — replays everything.
-    The browser may then see an event twice, never miss one.
+    An id this run does not have replays everything: the browser may see an event twice,
+    but never miss one.
     """
     if last_event_id is None or not _EVENT_ID.fullmatch(last_event_id.strip()):
         return 0
@@ -436,8 +429,8 @@ class GateDecision(StrEnum):
     REJECT = "reject"
 
 
-# Approving masking means reading the documents' raw text, which only owners
-# may (UI_UX_SPEC §3.3, §5.3.6); confirming a vocabulary is any contributor's.
+# Approving masking means reading the documents' raw text, which only owners may;
+# confirming a vocabulary is any contributor's.
 _GATE_ACTIONS: Mapping[GateKind, Action] = {
     GateKind.VOCABULARY: Action.CONFIRM_GATE,
     GateKind.PRIVACY_REVIEW: Action.MANAGE_DOCUMENTS,
@@ -465,7 +458,7 @@ class Gate:
     revisions_sealed: bytes | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("Gate", created_at=self.created_at, resolved_at=self.resolved_at)
+        require_aware("Gate", created_at=self.created_at, resolved_at=self.resolved_at)
         if self.stage not in STAGES:
             raise ValueError("Gate.stage must be a known stage")
         if not self.payload_sealed:

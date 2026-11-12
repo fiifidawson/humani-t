@@ -1,11 +1,7 @@
 """Which concrete implementations the routes get.
 
-This is the seam made operational. Every provider choice in the system is made
-here and nowhere else, so swapping the fake for OpenAlex — or one LLM provider
-for another — is an edit to this file alone.
-
-If you ever find yourself importing a concrete provider inside a route, the
-architecture has sprung a leak. Import it here instead.
+Every provider choice is made here and nowhere else. Importing a concrete provider
+anywhere else is the architecture leaking: import it here instead.
 """
 
 from __future__ import annotations
@@ -47,7 +43,6 @@ from app.application.questions import QuestionService, QuestionWorker
 from app.application.reviews import ReviewService
 from app.application.runs import RunService
 from app.application.screening import ScreenStage
-from app.application.search_service import SearchService
 from app.auth.argon2 import Argon2PasswordHasher
 from app.auth.base import PasskeyVerifier, PasswordHasher
 from app.auth.webauthn import WebAuthnPasskeyVerifier
@@ -62,7 +57,6 @@ from app.domain.masking import (
 )
 from app.domain.mfa import MfaPolicy
 from app.domain.plans import PlanSource
-from app.domain.runs import STAGES
 from app.domain.screening import MaskedTextSource
 from app.email.base import EmailProvider
 from app.email.recording import RecordingEmailProvider
@@ -91,10 +85,8 @@ from app.ratelimit.base import RateLimiter
 from app.ratelimit.memory import MemoryRateLimiter
 from app.ratelimit.valkey import ValkeyRateLimiter
 from app.runs.base import Stage
-from app.runs.fake import FakeStage
 from app.search import arxiv, demo, europepmc, openalex
 from app.search.base import PaperSearchProvider
-from app.search.fake import FakePaperSearchProvider
 from app.settings import Settings
 from app.signals.base import Signals
 from app.signals.memory import MemorySignals
@@ -115,7 +107,6 @@ class Providers:
     """Everything built once per process. Providers hold pools and caches."""
 
     storage: StorageProvider
-    search: PaperSearchProvider
     encryption: ScopeEncryption
     audit: AuditLog
     accounts: AccountService
@@ -267,7 +258,7 @@ def inference_provider(settings: Settings, fetcher: HttpFetcher) -> InferencePro
 
 
 def prompt_guard() -> PromptGuard:
-    """The last check before every model call (architecture §3.9.1): it fails closed.
+    """The last check before every model call: it fails closed.
 
     Patterns only: a name model on every prompt would refuse the published
     author and place names that papers legitimately contain.
@@ -297,12 +288,6 @@ def _signals(settings: Settings) -> Signals:
     if settings.valkey_url is None:
         return MemorySignals()
     return ValkeySignals.from_url(settings.valkey_url.get_secret_value())
-
-
-# Stand-ins for every pipeline stage until the real ones are built. Each counts
-# through a few items slowly enough to watch, so the whole run contract can be used.
-_DEMO_ITEMS = 5
-_DEMO_DELAY_SECONDS = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,14 +328,6 @@ def _pipeline_stages(settings: Settings, pipeline: _Pipeline) -> dict[str, Stage
         ),
         "export": ExportStage(storage=p.storage, store=p.store),
     }
-
-
-def _stages() -> Mapping[str, Stage]:
-    stages: dict[str, Stage] = {
-        stage_id: FakeStage(items=_DEMO_ITEMS, delay_seconds=_DEMO_DELAY_SECONDS)
-        for stage_id in STAGES
-    }
-    return stages
 
 
 _QUERY_COMPILERS: Mapping[str, QueryCompiler] = {
@@ -444,12 +421,10 @@ def build_providers(
     malware_scanner: MalwareScanner | None = None,
     document_extractor: DocumentExtractor | None = None,
 ) -> Providers:
-    """THE switch: the one function that turns configuration into implementations.
+    """Turn configuration into implementations: the one place that does.
 
-    The keyword arguments exist for tests: a clock they can move, a hasher that
-    does not spend 64 MiB per sign-in, instrumented storage, email and rate
-    limiter, and an MFA policy for specs of the password factor alone. MFA is
-    required unless `mfa_policy` says otherwise; it is not an operator setting.
+    The keyword arguments are for tests. MFA is required unless `mfa_policy` says
+    otherwise, and that is not an operator setting.
     """
     storage = storage or _storage(settings)
     email = email or _email(settings)
@@ -488,7 +463,6 @@ def build_providers(
     )
     compilers = {s: _QUERY_COMPILERS[s] for s in settings.paper_source_ids}
     stages = {
-        **_stages(),
         "queries": QueriesStage(plans, compilers),
         "mask": _mask_stage(
             storage, pipeline.store, masks, masking_rules, ner, DocumentReviewQueue(storage)
@@ -519,7 +493,6 @@ def build_providers(
     document_sanitizer = _document_sanitizer(ner)
     return Providers(
         storage=storage,
-        search=FakePaperSearchProvider(),
         encryption=encryption,
         audit=audit,
         accounts=AccountService(
@@ -669,20 +642,6 @@ def get_papers(providers: ProvidersDep) -> PaperService:
 
 
 PapersDep = Annotated[PaperService, Depends(get_papers)]
-
-
-def get_search_provider(providers: ProvidersDep) -> PaperSearchProvider:
-    return providers.search
-
-
-SearchProviderDep = Annotated[PaperSearchProvider, Depends(get_search_provider)]
-
-
-def get_search_service(provider: SearchProviderDep) -> SearchService:
-    return SearchService(provider)
-
-
-SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 
 
 def get_plans(providers: ProvidersDep) -> PlanService:

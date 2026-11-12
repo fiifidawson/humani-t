@@ -1,11 +1,9 @@
 /**
- * The source panel (UI_UX_SPEC §6.10): where a citation comes from, without
- * leaving the brief. The passages are the exact masked text the Writer saw;
- * "Cited for" lists every claim citing the tag, so each can be checked
- * against them. A tag with no passage is the checks' "source missing".
+ * The source panel: where a citation comes from, without leaving the brief.
  *
- * It slides over the canvas's right edge (the whole width on a phone). It
- * takes focus when it opens, and Esc closes it before the canvas.
+ * The passages are the exact masked text the Writer saw, and "Cited for" lists every
+ * claim citing the tag. A tag with no passage is the checks' "source missing". The
+ * panel takes focus when it opens, and Esc closes it before the canvas.
  */
 
 import {

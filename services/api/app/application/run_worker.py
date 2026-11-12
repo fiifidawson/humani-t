@@ -1,17 +1,9 @@
 """The worker: claims queued runs and executes their stages, one run at a time.
 
-A run is claimed under a lease (architecture §5.7: no lock is held while work
-happens). The worker renews the lease while a stage runs; if the worker dies,
-the lease expires and any worker resumes the run, or fails it after
-`MAX_RECOVERIES`, so no run is ever stuck as "running".
-
-Every change follows one shape: a short transaction that locks the run, checks
-the lease is still this worker's, appends the event and saves the run; then a
-signal, after the commit. A worker that lost its lease finds every write
-refused and stops without a sound, so two workers never drive one run.
-
-A stage runs with no transaction open. It reaches the run only through its
-`StageContext`, each call of which is one of those short transactions.
+A run is claimed under a lease, not a lock. If the worker dies the lease expires and
+another resumes the run, or fails it after `MAX_RECOVERIES`. Every write checks the lease,
+so a worker that lost it stops quietly and two workers never drive one run. Stages run
+with no transaction open.
 """
 
 from __future__ import annotations
@@ -142,9 +134,8 @@ class RunWorker:
     ) -> None:
         """Take runs until `stop` is set. A run in progress is handed back, not abandoned.
 
-        `on_alive` is called at least once per poll interval while the worker is
-        healthy: on every turn of the loop, and on every lease renewal while a
-        stage runs. The process turns it into a heartbeat file for Compose.
+        `on_alive` is called at least once per poll interval while the worker is healthy;
+        the process turns it into a heartbeat file for Compose.
         """
         self._on_alive = on_alive
         while not stop.is_set():

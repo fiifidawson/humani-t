@@ -4,8 +4,7 @@
  *   node scripts/api-types.ts generate   write services/api/openapi.json and src/api/schema.gen.ts
  *   node scripts/api-types.ts check      fail if either committed file is stale
  *
- * Both steps need `uv` and the API's Python environment, because the OpenAPI
- * document is exported from `create_app()` rather than fetched from a server.
+ * Needs `uv`: the document is exported from `create_app()`, not fetched from a server.
  */
 
 import { spawnSync } from "node:child_process";

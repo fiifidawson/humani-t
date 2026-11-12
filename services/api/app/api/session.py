@@ -1,14 +1,8 @@
 """Session cookies and the dependency that turns one into the current caller.
 
-Two cookies, with different jobs:
-
-- `__Host-session` carries the session token. HttpOnly, so no script — ours or
-  an injected one — can read it.
-- `__Host-csrf` carries the per-session CSRF token. Readable by our scripts,
-  which echo it in `X-CSRF-Token`; a page on another site cannot read it.
-
-The `__Host-` prefix makes the browser refuse the cookie unless it is Secure,
-has `Path=/` and has no `Domain`, so no subdomain can set or overwrite it.
+`__Host-session` holds the session token and is HttpOnly, so no script can read it.
+`__Host-csrf` holds the CSRF token our scripts echo in `X-CSRF-Token`. The `__Host-`
+prefix stops any subdomain setting or overwriting either cookie.
 """
 
 from __future__ import annotations
@@ -62,9 +56,8 @@ def request_id(request: Request) -> str | None:
 async def get_any_session(request: Request, accounts: AccountsDep) -> Current:
     """Any live session, pending ones included; 401 if none, 403 if a write lacks CSRF.
 
-    Only for signing out. Authentication runs in its own short transaction, so
-    the idle-timeout extension is saved even if the route itself later fails,
-    and no connection is held while the route does its own work.
+    Only for signing out. Authentication commits in its own short transaction, so no
+    connection is held while the route runs.
     """
     token = request.cookies.get(SESSION_COOKIE)
     if not token:

@@ -35,8 +35,8 @@ def normalise_title(title: str) -> str:
 class PaperRecord:
     """One paper, as reported by one source.
 
-    `source_id` plus `external_id` says where it came from and is never used for
-    equality — two sources describing the same paper are the same paper.
+    `source_id` and `external_id` say where it came from but never decide equality: two
+    sources describing the same paper are the same paper.
     """
 
     source_id: str
@@ -58,13 +58,10 @@ class PaperRecord:
 
     @property
     def identity(self) -> str:
-        """The key two records must share to be considered the same paper.
+        """The key two records must share: the DOI, else the normalised title and year.
 
-        DOI when there is one — it is the only globally unique identifier here.
-        Otherwise normalised title plus year, which is imperfect: preprint and
-        published versions differ in year and will not merge. That is a known
-        limitation, and deliberately not hidden behind fuzzy matching, because a
-        wrong merge is far harder to notice than a missed one.
+        Preprint and published versions differ in year and will not merge. Fuzzy matching
+        was rejected: a wrong merge is far harder to notice than a missed one.
         """
         if self.doi:
             return f"doi:{normalise_doi(self.doi)}"
@@ -74,8 +71,7 @@ class PaperRecord:
     def link(self) -> str | None:
         """Its own link, else one to the DOI resolver; `None` with neither.
 
-        A DOI is public bibliographic metadata, so linking to it reveals nothing
-        the record does not already say.
+        A DOI is public metadata, so linking to it reveals nothing new.
         """
         if self.url:
             return self.url
@@ -92,10 +88,7 @@ class PaperRecord:
 def deduplicate(records: Iterable[PaperRecord]) -> tuple[PaperRecord, ...]:
     """Collapse records sharing an identity, keeping the first seen.
 
-    Stable: input order decides which record wins, so callers control source
-    precedence by the order they merge in. Field-level merging — taking the
-    abstract from one source and the open-access flag from another — is a real
-    improvement and a separate concern; it is not done here.
+    Input order decides which record wins, so callers set source precedence by merge order.
     """
     seen: dict[str, PaperRecord] = {}
     for record in records:

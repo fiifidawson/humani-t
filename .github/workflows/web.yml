@@ -60,3 +60,6 @@ jobs:
         run: pnpm run "$TASK"
         env:
           TASK: ${{ matrix.task }}
+          # check:api's one `uv run` installs the API's environment, which fetches the
+          # spaCy model from GitHub. uv retries only transient failures, with backoff.
+          UV_HTTP_RETRIES: "8"

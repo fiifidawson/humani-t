@@ -1,21 +1,9 @@
 """Requirements for projects, membership and roles, over HTTP.
 
-Sources: WEB_APP_BRIEF rules 7, 8, 15 and 16; UI_UX_SPEC §3.3 (roles), §6.14
-(project settings), §7.7 (archive, delete) and §11.4 (errors by status);
-architecture §4.1 and §5.2 to §5.5; OWASP ASVS 5.0 V8 (authorization) and V16
-(security logging).
-
-The rules, in the order the API applies them:
-
-1. not signed in: 401;
-2. not a member, or no such project: 404, with the same body either way, so a
-   project's existence is never confirmed to someone outside it;
-3. a member whose role does not allow the action: 403;
-4. a sensitive action (delete, member changes) with a sign-in older than 15
-   minutes: 401 with `reauthentication_required`;
-5. then the request itself: 422 for bad input, 409 for a conflict.
-
-MFA is specified separately (M9); here a password sign-in is a full sign-in.
+Rules apply in order: 401 when not signed in; 404 for a non-member or a missing project,
+with the same body, so a project's existence is never confirmed; 403 for a role that may
+not; 401 `reauthentication_required` for a sensitive action after 15 minutes; then 422 or
+409. A password sign-in is a full sign-in here; MFA is specified separately.
 """
 
 from __future__ import annotations
@@ -43,20 +31,11 @@ from tests.project_support import (
     make_team,
     project_events,
     send,
-    signed_in,
     stored_memberships,
     stored_name_ciphertext,
     verify_audit,
 )
 from tests.support import AuthHarness, csrf_headers
-
-VOCABULARY = {
-    "origin": "llm_assisted",
-    "concepts": [
-        {"term": "chatbot", "synonyms": ["conversational agent"], "theme": "technology"},
-        {"term": "humanitarian", "synonyms": ["crisis response"], "theme": "setting"},
-    ],
-}
 
 PROJECT_FIELDS = {"id", "name", "role", "created_at", "archived_at"}
 MEMBER_FIELDS = {"user_id", "display_name", "role", "added_at"}
@@ -447,7 +426,6 @@ class TestMembers:
     def test_member_changes_need_a_sign_in_within_15_minutes(
         self, team, method, suffix, body, expected
     ):
-        """UI_UX_SPEC §6.14 and architecture §5.2."""
         path = team.path(fill_path(suffix, viewer_id=team.user_id(VIEWER_EMAIL)))
         _stale_sign_in(team)
 
@@ -461,7 +439,7 @@ class TestMembers:
 
 
 class TestLastOwner:
-    """UI_UX_SPEC §6.14: the last owner can't leave or be demoted (the UI explains why)."""
+    """The last owner can't leave or be demoted (the UI explains why)."""
 
     def test_the_last_owner_cannot_be_demoted(self, team):
         owner_id = team.user_id(OWNER_EMAIL)
@@ -619,7 +597,7 @@ class TestDeleteProject:
 
 
 class TestAuditTrail:
-    """Brief rule 16: every project action is on record, by id only (architecture §5.5)."""
+    """Brief rule 16: every project action is on record, by id only."""
 
     def test_every_project_action_is_recorded_in_order(self, team):
         viewer_id, reviewer_id = team.user_id(VIEWER_EMAIL), team.user_id(REVIEWER_EMAIL)
@@ -697,47 +675,3 @@ class TestAuditTrail:
         assert "project.deleted" not in actions
         assert "project.renamed" not in actions
         assert team.owner.get(team.path()).json()["name"] == PROJECT_NAME
-
-
-class TestVocabularyAndSearch:
-    """The pre-project endpoints now sit behind sign-in; search runs inside a project."""
-
-    def test_compiling_a_vocabulary_needs_a_signed_in_user_but_no_project(self, harness):
-        anonymous = harness.browser().post("/api/v1/vocabulary/compile", json=VOCABULARY)
-        member_of_nothing = signed_in(harness, OUTSIDER_EMAIL)
-
-        response = send(member_of_nothing, "POST", "/api/v1/vocabulary/compile", VOCABULARY)
-
-        assert anonymous.status_code == 401
-        assert response.status_code == 200
-        assert response.json()["term_count"] == 4
-
-    def test_listing_sources_needs_a_signed_in_user(self, harness):
-        assert harness.browser().get("/api/v1/sources").status_code == 401
-        assert signed_in(harness, OUTSIDER_EMAIL).get("/api/v1/sources").status_code == 200
-
-    @pytest.mark.parametrize("role", ["owner", "reviewer"])
-    def test_owners_and_reviewers_search_within_their_project(self, team, role):
-        response = send(
-            team.browser_for(role), "POST", team.path("/search"), {**VOCABULARY, "limit": 10}
-        )
-
-        assert response.status_code == 200
-        assert response.json()["source_id"] == "fake"
-        assert response.json()["query"]["term_count"] == 4
-        assert response.json()["total"] == len(response.json()["results"])
-
-    def test_a_viewer_may_not_start_a_search(self, team):
-        response = send(team.viewer, "POST", team.path("/search"), VOCABULARY)
-
-        assert response.status_code == 403
-
-    def test_a_non_member_cannot_search_in_the_project(self, team):
-        assert send(team.outsider, "POST", team.path("/search"), VOCABULARY).status_code == 404
-
-    def test_the_unscoped_search_route_no_longer_exists(self, harness):
-        response = send(
-            signed_in(harness, OUTSIDER_EMAIL), "POST", "/api/v1/search", VOCABULARY
-        )
-
-        assert response.status_code == 404

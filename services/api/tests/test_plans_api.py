@@ -1,14 +1,8 @@
 """Requirements for the search-planning conversation, through the HTTP API.
 
-Sources: architecture §4.3 (routes A and B; frozen, versioned; origin recorded;
-route B never touches the model), §3.9 (the question, answers and change
-requests are masked before any model call), §5.4 (sealed under the project's
-key), §5.7 (the first accept wins); UI_UX_SPEC §5.3.2 (privacy receipt),
-§5.3.3 (clarifying questions), §5.3.4 (draft and accept), §6.5 (compare with
-the previous draft, who added each term), §11.2 (a second accept gets 409).
-
-Every model call goes through `GuardedInference` to a `FakeInferenceProvider`;
-nothing in this file can reach a network.
+Plans are frozen and versioned, and the first accept wins. The question, answers and change
+requests are masked before any model call, and every call goes through `GuardedInference`
+to a `FakeInferenceProvider`, so nothing in this file can reach a network.
 """
 
 from __future__ import annotations
@@ -22,7 +16,11 @@ import structlog
 
 from app.application import planning
 from app.domain.encryption import KeyDestroyedError
-from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
+from app.domain.inference import (
+    ChatRole,
+    InferenceRateLimitedError,
+    InferenceUnavailableError,
+)
 from tests.plan_support import (
     DRAFT,
     REVISED,
@@ -350,6 +348,55 @@ class TestChanges:
         assert "[LOCATION_1]" not in _terms(current)
         assert "displacement" in _terms(current)
         assert any("masked" in note for note in current["notes"])
+
+    def test_model_terms_that_hold_a_rewritten_placeholder_are_dropped_too(self):
+        leaky = {
+            **DRAFT,
+            "themes": [
+                *DRAFT["themes"],
+                {
+                    "name": "setting",
+                    "concepts": [
+                        {
+                            "term": "displacement",
+                            "synonyms": ["<LOCATION_1>", "location_1 camps"],
+                        }
+                    ],
+                },
+            ],
+        }
+        team = make_plan_team(drafts=[leaky])
+
+        terms = _terms(team.drafted()["current"])
+
+        assert "<LOCATION_1>" not in terms
+        assert "location_1 camps" not in terms
+        assert "displacement" in terms
+
+
+class TestMaskedPlaces:
+    """A masked place reaches the planner as a placeholder; it must not become a guess."""
+
+    def test_every_planning_call_tells_the_model_never_to_guess_what_a_placeholder_hides(
+        self, team
+    ):
+        _deep_and_answered(team)
+        team.change("add mobile money", based_on_version=1)
+
+        instructions = [request.messages[0] for request in team.model.requests]
+
+        assert [m.role for m in instructions] == [ChatRole.SYSTEM] * 3
+        for message in instructions:
+            text = message.content.casefold()
+            assert "never guess what a placeholder stands for" in text
+            assert "keep that part of the plan general" in text
+
+    def test_clarifying_questions_may_ask_the_team_to_name_a_masked_place(self, team):
+        team.start("deep")
+
+        (clarify,) = team.model.requests
+
+        assert "ask the team to name" in clarify.messages[0].content.casefold()
 
 
 class TestAccept:

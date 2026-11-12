@@ -1,4 +1,4 @@
-"""Follow-up questions and their threads, as rules with no I/O (UI_UX_SPEC §6.12, §5.3.9).
+"""Follow-up questions and their threads, as rules with no I/O.
 
 A question is asked in a thread, answered in the background, and its record
 moves pending → answering → answered or failed. An answer is claims citing

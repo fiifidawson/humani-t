@@ -97,20 +97,17 @@ class TestProblemResponses:
         }
 
     def test_validation_errors_never_echo_the_submitted_input(self):
-        # Compiling needs a signed-in user since M10; the rule under test is unchanged.
         harness = make_project_harness()
         harness.create_user(OWNER_EMAIL, PASSWORD)
         browser = signed_in(harness, OWNER_EMAIL)
         personal_data = "Jane Doe, +44 7700 900123"
         response = browser.post(
-            "/api/v1/vocabulary/compile",
-            json={"origin": "llm_assisted", "concepts": personal_data},
-            headers=csrf_headers(browser),
+            "/api/v1/projects", json={"name": [personal_data]}, headers=csrf_headers(browser)
         )
 
         assert response.status_code == 422
         assert personal_data not in response.text
-        assert response.json()["errors"][0]["loc"] == ["body", "concepts"]
+        assert response.json()["errors"][0]["loc"] == ["body", "name"]
 
     def test_unexpected_errors_reveal_nothing(self, settings):
         app = create_app(settings)

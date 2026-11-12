@@ -1,15 +1,9 @@
 """The file storage seam: where uploaded files' bytes are kept.
 
-Only ciphertext ever reaches a `FileStore`: the application seals a file under
-its project's data key, bound to the document's id, before `put`, and opens it
-after `get` (architecture §3.3, ADR-0008). A store therefore never needs to be
-trusted with content, and deleting the project makes every file in it
-unreadable wherever copies remain.
-
-There is no pre-signed URL and no listing: files are reached only through the
-API, which checks membership and audits, and only by the key the database
-names. Keys are `<project id>/<document id>`, both UUIDs; an implementation
-refuses any other shape, so a key can never become a path outside the store.
+Only ciphertext reaches a `FileStore`: files are sealed under the project's key
+before `put` (ADR-0008), so a store never needs to be trusted with content. There is
+no listing and no pre-signed URL. Keys are `<project id>/<document id>`, and any other
+shape is refused, so a key can never become a path outside the store.
 """
 
 from __future__ import annotations

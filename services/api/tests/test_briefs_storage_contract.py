@@ -1,11 +1,8 @@
 """One behaviour contract for decision brief storage, run against every backend.
 
-The Postgres run is skipped unless TEST_DATABASE_URL points at a database
-migrated to revision 0011, connected as the runtime role.
-
-What matters (architecture §4.2, §5.7): a run has at most one brief, however
-many times its stage runs or however many workers race to store it; the first
-stored wins and the others learn they lost.
+A run has at most one brief however many workers race to store it: the first wins and the
+others learn they lost. The Postgres run is skipped unless TEST_DATABASE_URL points at a
+database migrated to revision 0011, connected as the runtime role.
 """
 
 from __future__ import annotations

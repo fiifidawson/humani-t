@@ -1,11 +1,7 @@
 """Requirements for projects, membership and the role policy, as pure domain rules.
 
-Sources: WEB_APP_BRIEF rules 7 and 8; UI_UX_SPEC §3.3 (roles) and §6.14 (the
-last owner); architecture §4.1 (`can(role, action)`, tested as a table) and
-§5.5 (deny by default).
-
-The table below *is* the permission model. Changing who may do what means
-changing this table, so the change is a visible diff that someone reviews.
+The table below is the permission model, so changing who may do what is a visible,
+reviewed diff to it. Anything not in it is denied.
 """
 
 from __future__ import annotations
@@ -34,8 +30,8 @@ NOW = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
 
 OWNER, REVIEWER, VIEWER = Role.OWNER, Role.REVIEWER, Role.VIEWER
 
-# UI_UX_SPEC §3.3, one row per action. Rename and archive are owner-only: the
-# spec groups them with "manage tags, collection" under project settings.
+# One row per action. Rename and archive are owner-only: the UI spec groups them
+# with "manage tags, collection" under project settings.
 PERMISSIONS: dict[Action, frozenset[Role]] = {
     Action.READ_PROJECT: frozenset({OWNER, REVIEWER, VIEWER}),
     Action.ASK_QUESTIONS: frozenset({OWNER, REVIEWER}),
@@ -211,7 +207,7 @@ class TestMembership:
 
 
 class TestLastOwnerRule:
-    """UI_UX_SPEC §6.14: the last owner can't leave or be demoted."""
+    """The last owner can't leave or be demoted."""
 
     def test_demoting_the_only_owner_is_refused(self):
         owner = _member(OWNER)

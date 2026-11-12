@@ -1,12 +1,9 @@
 /**
- * A project's documents (UI_UX_SPEC §6.13) and the owner's privacy review
- * (§6.6): upload, the list with each file's status, and approving or
- * rejecting the masked text.
+ * A project's documents and the owner's privacy review: upload, status, approving
+ * or rejecting the masked text, and deleting.
  *
- * Everything shown comes from the API: the limits, who may upload, and the
- * masked text. The original text is never requested here, and a file's
- * content is never rendered, only the masked text the API returns. Which
- * actions a role sees follows §3.3; the API refuses them anyway.
+ * Only the masked text the API returns is ever shown; the original is never
+ * requested. Actions are hidden by role here, and the API refuses them anyway.
  */
 
 import {
@@ -29,12 +26,13 @@ import {
 	Eye,
 	LoaderCircle,
 	Pause,
+	Trash2,
 	TriangleAlert,
 	Upload,
 	X,
 } from "lucide-react";
 import { type DragEvent, useEffect, useId, useRef, useState } from "react";
-import { unwrap } from "../../api/client";
+import { unwrap, unwrapEmpty } from "../../api/client";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
@@ -53,6 +51,7 @@ import {
 	projectQuery,
 	sessionQuery,
 } from "../../app/queries";
+import { Dialog } from "../../ui/Dialog";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { FormError } from "../../ui/FormError";
 import { Loading } from "../../ui/Loading";
@@ -244,11 +243,13 @@ function DocumentRows({
 	isOwner,
 	uploaderName,
 	onOpen,
+	onDelete,
 }: {
 	documents: readonly ProjectDocument[];
 	isOwner: boolean;
 	uploaderName: (userId: string) => string;
 	onOpen: (documentId: string) => void;
+	onDelete: (document: ProjectDocument) => void;
 }) {
 	return (
 		<Box overflowX="auto">
@@ -299,28 +300,42 @@ function DocumentRows({
 										) : null}
 									</Stack>
 								</Table.Cell>
-								<Table.Cell textAlign="end">
-									{!HAS_MASKED_TEXT.includes(
-										document.status,
-									) ? null : canDecide ? (
-										<Button
-											size="sm"
-											aria-label={`Review ${label}`}
-											onClick={() => onOpen(document.id)}
-										>
-											Review
-										</Button>
-									) : (
-										<Button
-											size="sm"
-											variant="outline"
-											aria-label={`See masked text ${label}`}
-											onClick={() => onOpen(document.id)}
-										>
-											<Eye />
-											See masked text
-										</Button>
-									)}
+								<Table.Cell>
+									<HStack gap="2" justify="flex-end" wrap="wrap">
+										{!HAS_MASKED_TEXT.includes(
+											document.status,
+										) ? null : canDecide ? (
+											<Button
+												size="sm"
+												aria-label={`Review ${label}`}
+												onClick={() => onOpen(document.id)}
+											>
+												Review
+											</Button>
+										) : (
+											<Button
+												size="sm"
+												variant="outline"
+												aria-label={`See masked text ${label}`}
+												onClick={() => onOpen(document.id)}
+											>
+												<Eye />
+												See masked text
+											</Button>
+										)}
+										{isOwner ? (
+											<Button
+												size="sm"
+												variant="outline"
+												colorPalette="danger"
+												aria-label={`Delete ${label}`}
+												onClick={() => onDelete(document)}
+											>
+												<Trash2 />
+												Delete
+											</Button>
+										) : null}
+									</HStack>
 								</Table.Cell>
 							</Table.Row>
 						);
@@ -328,6 +343,74 @@ function DocumentRows({
 				</Table.Body>
 			</Table.Root>
 		</Box>
+	);
+}
+
+function DeleteDialog({
+	projectId,
+	document,
+	onClose,
+	onDeleted,
+}: {
+	projectId: string;
+	document: ProjectDocument;
+	onClose: () => void;
+	onDeleted: (message: string) => void;
+}) {
+	const api = useApi();
+	const queryClient = useQueryClient();
+	const label = `${document.tag} ${document.name}`;
+
+	const finish = async (message: string) => {
+		onDeleted(message);
+		await queryClient.invalidateQueries({
+			queryKey: keys.documents(projectId),
+		});
+	};
+
+	const remove = useMutation({
+		mutationFn: () =>
+			unwrapEmpty(
+				api.DELETE("/api/v1/projects/{project_id}/documents/{document_id}", {
+					params: {
+						path: { project_id: projectId, document_id: document.id },
+					},
+				}),
+			),
+		onSuccess: () => finish(`${label} is deleted.`),
+		// Another owner got there first: what the person asked for is done.
+		onError: async (error) => {
+			if (isApiError(error, "not-found")) {
+				await finish(`${label} was already deleted.`);
+			}
+		},
+	});
+
+	return (
+		<Dialog isOpen title={`Delete ${label}?`} onClose={onClose}>
+			<Stack gap="4" fontSize="sm">
+				<Text>
+					{`This deletes the file and its text. A brief that already cites ${document.tag} keeps the passages it quoted. This can't be undone.`}
+				</Text>
+				{remove.isError && !isApiError(remove.error, "not-found") ? (
+					<ErrorNotice error={remove.error} />
+				) : null}
+				<Flex gap="2" justify="flex-end" wrap="wrap">
+					<Button size="sm" variant="outline" onClick={onClose}>
+						Cancel
+					</Button>
+					<Button
+						size="sm"
+						colorPalette="danger"
+						disabled={remove.isPending}
+						onClick={() => remove.mutate()}
+					>
+						<Trash2 />
+						Delete
+					</Button>
+				</Flex>
+			</Stack>
+		</Dialog>
 	);
 }
 
@@ -536,6 +619,8 @@ export function DocumentsPage() {
 	const members = useQuery(membersQuery(api, projectId));
 	const listing = useQuery(documentsQuery(api, projectId, POLL_INTERVAL_MS));
 	const isOwner = project.data?.role === "owner";
+	const [deleting, setDeleting] = useState<ProjectDocument | null>(null);
+	const [deleted, setDeleted] = useState<string | null>(null);
 
 	const open = (documentId: string | undefined) =>
 		void navigate({
@@ -589,6 +674,9 @@ export function DocumentsPage() {
 										"Uploads are switched off on this server."}
 								</Text>
 							)}
+							<Box aria-live="polite">
+								{deleted === null ? null : <Text>{deleted}</Text>}
+							</Box>
 							{listing.data.documents.length === 0 ? (
 								<Text>No documents yet.</Text>
 							) : (
@@ -597,6 +685,10 @@ export function DocumentsPage() {
 									isOwner={isOwner}
 									uploaderName={uploaderName}
 									onOpen={open}
+									onDelete={(document) => {
+										setDeleted(null);
+										setDeleting(document);
+									}}
 								/>
 							)}
 							{isProcessing ? (
@@ -614,6 +706,20 @@ export function DocumentsPage() {
 						document={opened}
 						isOwner={isOwner}
 						onClose={() => open(undefined)}
+					/>
+				)}
+				{deleting === null ? null : (
+					<DeleteDialog
+						projectId={projectId}
+						document={deleting}
+						onClose={() => setDeleting(null)}
+						onDeleted={(message) => {
+							setDeleting(null);
+							setDeleted(message);
+							if (openId === deleting.id) {
+								open(undefined);
+							}
+						}}
 					/>
 				)}
 			</Page>

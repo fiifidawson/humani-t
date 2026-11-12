@@ -1,10 +1,8 @@
 /**
  * Chakra UI with the brand system, writing its styles under the page's CSP nonce.
  *
- * Emotion inserts Chakra's styles as <style> elements at run time. The CSP
- * allows them only with the nonce the server put on this page (csp.config.ts);
- * Vite copies that nonce into <meta property="csp-nonce">, and the cache below
- * stamps it on every element Emotion creates.
+ * Vite copies the server's nonce into <meta property="csp-nonce">, and the cache
+ * below stamps it on every <style> Emotion inserts; the CSP blocks any without it.
  */
 
 import { ChakraProvider } from "@chakra-ui/react";

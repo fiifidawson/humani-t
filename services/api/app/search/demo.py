@@ -1,14 +1,8 @@
 """Made-up papers for development: a paper source that needs no internet.
 
-Chosen only by naming `demo` in the operator setting `paper_sources`, which
-production refuses. It writes papers about whatever the query asks for, so any
-review finds something, and labels every one as a demo paper so none can pass
-for a real record. Some have no abstract, so screening shows skipped papers;
-some carry a made-up email address and phone number, so masking has something
-to find; some have a DOI and no link, as many real records do.
-
-Not for tests of the search seam: `FakePaperSearchProvider` evaluates queries
-against a fixed corpus instead.
+Production refuses `demo` in `paper_sources`, and every paper is labelled as a demo, so
+none can pass for a real record. Some lack an abstract or carry made-up contact details,
+so skipping and masking have something to show. Tests use `FakePaperSearchProvider`.
 """
 
 from __future__ import annotations
@@ -36,9 +30,6 @@ class DemoPaperSearchProvider:
     ) -> Sequence[PaperRecord]:
         terms = [theme.terms[0] for theme in query.themes] or ["humanitarian response"]
         return tuple(_paper(n, terms) for n in range(1, min(limit, _PAPERS) + 1))
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
 
 
 def compile_demo_query(query: BooleanQuery) -> str:

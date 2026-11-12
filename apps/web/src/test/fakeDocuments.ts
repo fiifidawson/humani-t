@@ -1,19 +1,10 @@
 /**
- * The documents half of the fake API: upload, the listing, masked text and
- * the owner's approve or reject, served through MSW like the rest of
- * fakeApi.ts.
+ * The documents half of the fake API, served through MSW like fakeApi.ts.
  *
- * It applies the API's rules the screens depend on: a non-member gets 404, only
- * owners upload and decide, the upload is multipart with exactly one `file`
- * part, its type is read from the bytes and never from the name, size and
- * quota are checked before anything is kept, masked text is there only once a
- * document is masked, and a decision names the masked version it was about.
- * Processing is driven by the test (`finishProcessing`, `fail`), as the API's
- * worker would drive it, so a screen has to look again to see it.
- *
- * Shapes and messages follow docs/api.md "Documents" and
- * services/api/app/domain/documents.py. Raw text is never held here: the
- * screens never ask for it.
+ * It applies the rules the screens depend on: 404 for non-members, owner-only
+ * writes, the type read from the bytes, size and quota checked first, and tags
+ * never reused. Tests drive processing (`finishProcessing`, `fail`). Raw text is
+ * never held here.
  */
 
 import { HttpResponse, http } from "msw";
@@ -223,6 +214,11 @@ export class FakeDocuments {
 		document.status = "awaiting_review";
 	}
 
+	/** Another owner deleted it. Its tag stays used, as the API keeps it. */
+	remove(documentId: string): void {
+		this.all.splice(this.all.indexOf(this.find(documentId)), 1);
+	}
+
 	private find(documentId: string): Stored {
 		const stored = this.all.find((s) => s.document.id === documentId);
 		if (stored === undefined) {
@@ -303,6 +299,23 @@ export class FakeDocuments {
 				location: `/api/v1/projects/${projectId}/documents/${document.id}`,
 			},
 		});
+	}
+
+	/** No recent sign-in needed: the API asks only for the owner's role. */
+	private delete(projectId: string, documentId: string) {
+		const role = this.gate(projectId);
+		if (role instanceof Response) {
+			return role;
+		}
+		if (role !== "owner") {
+			return problem(403, NOT_YOUR_ROLE);
+		}
+		const stored = this.storedIn(projectId, documentId);
+		if (stored === undefined) {
+			return problem(404, "Not Found");
+		}
+		this.remove(documentId);
+		return new HttpResponse(null, { status: 204 });
 	}
 
 	private async decide(
@@ -390,6 +403,10 @@ export class FakeDocuments {
 					? problem(404, "Not Found")
 					: HttpResponse.json(stored.document);
 			}),
+
+			http.delete(one, ({ params }) =>
+				this.delete(String(params["projectId"]), String(params["documentId"])),
+			),
 
 			http.get(`${one}/masked`, ({ params }) => {
 				const projectId = String(params["projectId"]);

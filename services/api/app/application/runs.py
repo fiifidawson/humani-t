@@ -1,16 +1,8 @@
 """Runs from the API's side: start one, cancel one, decide a gate, follow the stream.
 
-The worker that executes runs is in `run_worker.py`; both obey the same rules
-and write through the same log (`run_log.py`). Each use case here is one short
-transaction that checks membership first, then signals after it commits.
-
-A run, gate or event route does not name its project. Each use case resolves
-the project from the run or gate it names, so a non-member gets the same 404
-for an id that exists as for one that does not.
-
-The stream (`open_stream`) never holds a database connection while it waits:
-it reads the log in a short transaction, sends what it found, then waits for a
-signal or its poll interval with no transaction open (architecture §5.7).
+The worker side is `run_worker.py`. Each use case resolves the project from the run or
+gate it names, so a non-member gets the same 404 as for a missing id. The stream holds no
+database connection while it waits.
 """
 
 from __future__ import annotations
@@ -24,7 +16,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.run_log import (
     QUEUE_CHANNEL,
     RunLog,
@@ -36,7 +28,7 @@ from app.application.run_log import (
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import KeyDestroyedError
 from app.domain.projects import Action, can
-from app.domain.reviews import Review, ReviewStatus, ReviewTrigger
+from app.domain.reviews import ReviewStatus, ReviewTrigger
 from app.domain.runs import (
     EventName,
     Gate,
@@ -57,8 +49,8 @@ from app.storage.base import StorageProvider, UnitOfWork
 
 __all__ = ["KeepAlive", "RunService", "StreamEvent", "StreamItem"]
 
-# Architecture §4.4: a comment every 15 seconds keeps proxies from closing a
-# quiet connection, and the session is re-checked at least once a minute.
+# A comment every 15 seconds keeps proxies from closing a quiet connection, and the
+# session is re-checked at least once a minute.
 KEEP_ALIVE_INTERVAL = timedelta(seconds=15)
 SESSION_RECHECK_INTERVAL = timedelta(minutes=1)
 # How long a stream waits for a signal before it reads the log anyway. Signals
@@ -68,7 +60,6 @@ _READ_BATCH = 500
 
 _RUN_NOT_FOUND = "No such run."
 _GATE_NOT_FOUND = "No such gate."
-_REVIEW_NOT_FOUND = "No such review."
 
 
 def _utc_now() -> datetime:
@@ -106,11 +97,6 @@ class RunService:
         self._poll_interval = poll_interval
         self._log = RunLog(encryption, clock)
 
-    async def authorize_review(self, current: Current, review_id: UUID, action: Action) -> None:
-        """Check access without acting, so the HTTP layer refuses before reading a body."""
-        async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, action)
-
     async def authorize_run(self, current: Current, run_id: UUID, action: Action) -> None:
         async with self._storage.unit_of_work() as uow:
             await self._run(uow, current, run_id, action)
@@ -132,7 +118,9 @@ class RunService:
         """
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.MANAGE_RUNS)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.MANAGE_RUNS
+            )
             plan = plan_stages(stages, self._available)
             if review.status in (ReviewStatus.RUNNING, ReviewStatus.WAITING):
                 raise RunConflictError(
@@ -158,7 +146,7 @@ class RunService:
     async def list_for_review(self, current: Current, review_id: UUID) -> list[Run]:
         """The review's runs, newest first."""
         async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, Action.READ_PROJECT)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             return await uow.runs.list_for_review(review_id)
 
     async def cancel(
@@ -231,9 +219,8 @@ class RunService:
     ) -> AsyncGenerator[StreamItem]:
         """Check access now, then return the run's events from after `last_event_id`.
 
-        The stream replays what is stored, then follows the run live, with a
-        keep-alive while it is quiet. It ends after `job.finished`, or when the
-        caller's session or membership ends.
+        It replays what is stored, then follows live, and ends after `job.finished` or
+        when the caller's session or membership ends.
         """
         async with self._storage.unit_of_work() as uow:
             run = await self._run(uow, current, run_id, Action.READ_PROJECT)
@@ -292,17 +279,6 @@ class RunService:
             and membership is not None
             and can(membership.role, Action.READ_PROJECT)
         )
-
-    async def _review(
-        self, uow: UnitOfWork, current: Current, review_id: UUID, action: Action
-    ) -> Review:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow, current.user.id, review.project_id, action, not_found=_REVIEW_NOT_FOUND
-        )
-        return review
 
     async def _run(
         self,

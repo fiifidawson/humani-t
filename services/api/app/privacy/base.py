@@ -1,12 +1,8 @@
 """The masking seams: a `Detector` finds spans, a `Sanitizer` masks text with them.
 
-Every implementation runs inside the deployment. A detector that sends text
-anywhere to be analysed (mmore's `openai_filter`, a hosted NER API) inverts the
-point of masking and must never be written against these Protocols
-(CLAUDE.md, architecture §3.9).
-
-What does not belong here: applying spans and project rules (pure rules in
-`domain/masking.py`), or the prompt guard (`privacy/guard.py`).
+Every implementation runs inside the deployment. A detector that sends text away to
+be analysed (mmore's `openai_filter`, a hosted NER API) defeats masking and must never
+be written against these Protocols. Applying spans belongs in `domain/masking.py`.
 """
 
 from __future__ import annotations

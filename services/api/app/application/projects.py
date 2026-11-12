@@ -1,17 +1,9 @@
 """Projects and their members: create, read, rename, archive, share and delete.
 
-Each public method is one use case in one short transaction. Every one of them
-checks the caller's membership and `can(role, action)` inside that transaction,
-even when the HTTP layer has already checked: membership can change between
-the two, and only the check made alongside the write decides.
-
-Two rules shape the writes (architecture §5.7):
-
-- membership changes take the project's row lock first, so two owners stepping
-  down at once are decided one after the other and one owner always remains;
-- the audit event is the last write, and records ids only. The project's name
-  is sealed under the project's own key and never leaves this module in the
-  clear except in a return value.
+Each use case checks membership inside its own transaction, even after the HTTP layer
+has: only the check made alongside the write decides. Membership changes take the
+project's row lock first, so one owner always remains. The name is sealed; the audit log
+gets ids only.
 """
 
 from __future__ import annotations
@@ -45,7 +37,7 @@ from app.domain.projects import (
 from app.domain.sessions import SessionPolicy
 from app.storage.base import StorageProvider, UnitOfWork
 
-# Table "projects", column "name"; the row is the project itself (architecture §5.4).
+# Table "projects", column "name"; the row is the project itself.
 _NAME_PURPOSE = "projects.name"
 
 
@@ -184,9 +176,7 @@ class ProjectService:
     ) -> None:
         """Crypto-shred the project. Irreversible once committed.
 
-        Destroying the data key makes every ciphertext of the project unreadable,
-        including copies in backups once their retention passes. The row stays
-        as a tombstone; the memberships go, because who worked on what is
+        The row stays as a tombstone; memberships go, because who worked on what is
         sensitive too.
         """
         async with self._storage.unit_of_work() as uow:
@@ -323,7 +313,7 @@ class ProjectService:
         lock: bool = False,
     ) -> tuple[Project, Membership]:
         # One message for "no such project" and "not yours": a project's
-        # existence is not an outsider's business (architecture §5.5).
+        # existence is not an outsider's business.
         project = await (uow.projects.lock if lock else uow.projects.get)(project_id)
         membership = await uow.memberships.get(project_id, current.user.id)
         if project is None or project.is_deleted or membership is None:

@@ -1,12 +1,7 @@
-"""Spacing requests to one source so this process keeps to its published rate limit.
+"""Space requests to one source so this process keeps to its published rate limit.
 
-A pacer serialises requests as well as spacing them: arXiv asks for a single
-connection at a time, and one at a time is the simplest rule that never
-exceeds any source's per-second limit.
-
-The limit is per process. Several API or worker processes each keep their own
-pace, so a deployment with N of them can reach N times the rate; a shared
-limiter (Valkey) is the fix when that matters.
+Requests are also serialised, because arXiv asks for one connection at a time. The
+limit is per process, so N processes can reach N times the rate.
 """
 
 from __future__ import annotations

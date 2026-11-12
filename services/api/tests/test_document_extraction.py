@@ -1,12 +1,8 @@
 """Reading uploaded files: text out, within limits, and safe against files built to attack.
 
-Sources: the brief's rules 12 and 13 (check uploads; process documents in an
-isolated worker with no network), OWASP's XXE and file-upload cheat sheets
-(no external entities; bounded decompression), architecture §3.9.
-
-Each hostile file is built the way an attacker would build it, and each spec
-names the bound it proves. The isolated extractor is run for real: a child
-process, killed at its timeout.
+Each hostile file is built as an attacker would build it (OWASP XXE and file-upload cheat
+sheets), and each spec names the bound it proves. The isolated extractor runs for real: a
+child process, killed at its timeout.
 """
 
 from __future__ import annotations

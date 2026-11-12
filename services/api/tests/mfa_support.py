@@ -1,13 +1,8 @@
 """Test helpers for the multi-factor specs, built on `tests/support.py`.
 
-Two kinds of helper live here:
-
-- an independent RFC 6238 implementation (`totp_code`), so the API tests compute
-  codes the way an authenticator app does, never by calling the code under test;
-- browser flows (enrol, sign in with each factor) that the specs repeat.
-
-The harness itself is `support.make_harness`, whose `mfa_policy`, `rate_limiter`
-and `clock` keywords exist for these specs.
+`totp_code` is an independent RFC 6238 implementation, so tests compute codes the way an
+authenticator app does rather than by calling the code under test. The rest are browser
+flows (enrol, sign in with each factor) that the specs repeat.
 """
 
 from __future__ import annotations

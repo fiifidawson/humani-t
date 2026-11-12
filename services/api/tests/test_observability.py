@@ -1,7 +1,6 @@
 """Logs redact secrets and personal data by field name, before anything is written.
 
-Source: architecture §5.3 ("logs … redact tokens, cookies, passwords and email
-addresses"); OWASP ASVS 5.0 V16.
+Tokens, cookies, passwords and email addresses never reach a log (OWASP ASVS 5.0 V16).
 """
 
 from __future__ import annotations

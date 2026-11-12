@@ -1,15 +1,9 @@
-"""Reading an upload: one `multipart/form-data` body holding exactly one file.
+"""Read an upload: one `multipart/form-data` body holding exactly one file.
 
-The upload route is the API's only non-JSON body. It is parsed here, strictly
-and in memory, rather than by Starlette's form parser, which spools any part
-over 1 MiB to a temporary file: that would put an unencrypted copy of a team's
-document on the server's disk before anything had checked or sealed it. The
-body is already capped (`upload_max_bytes`), so holding it in memory is bounded.
-
-Strict means: a valid boundary, at most a few parts with small headers, and
-exactly one part named `file` that carries a filename. Anything else is
-refused rather than guessed at. The browser's `Content-Type` for the part is
-ignored: the type is read from the bytes (`domain/documents.py`).
+Parsed here, in memory, rather than by Starlette's form parser, which spools large
+parts to a temporary file and would leave an unencrypted copy on disk. The body is
+already size-capped. Anything but one `file` part is refused, and the browser's
+`Content-Type` is ignored: the type is read from the bytes.
 """
 
 from __future__ import annotations
