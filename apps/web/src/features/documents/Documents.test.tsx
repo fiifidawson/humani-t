@@ -5,6 +5,7 @@ import { expectNoAccessibilityViolations } from "../../test/axe";
 import {
 	MASKING_CHANGED,
 	NOT_YOUR_ROLE,
+	REVIEW_NOTICE,
 	UNSUPPORTED,
 } from "../../test/fakeDocuments";
 import { installNodeFiles } from "../../test/nodeFiles";
@@ -29,6 +30,24 @@ async function openDocuments(projectId: string) {
 	const view = renderApp(`/p/${projectId}/documents`);
 	await screen.findByRole("heading", { level: 2, name: "Documents" });
 	return view;
+}
+
+/** Select `wanted` inside `container`, as a person dragging over it would. */
+function selectText(container: HTMLElement, wanted: string) {
+	const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+	for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+		const at = node.textContent?.indexOf(wanted) ?? -1;
+		if (at >= 0) {
+			const range = document.createRange();
+			range.setStart(node, at);
+			range.setEnd(node, at + wanted.length);
+			window.getSelection()?.removeAllRanges();
+			window.getSelection()?.addRange(range);
+			fireEvent.mouseUp(node.parentElement ?? container);
+			return;
+		}
+	}
+	throw new Error(`No text "${wanted}" to select`);
 }
 
 /** The table row of the document with this exact name. */
@@ -379,21 +398,246 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		);
 	});
 
-	it("never asks for or shows the original text", async () => {
-		const { api, project } = withDocumentWaiting();
+	it("shows the owner the original beside the masked text, and says the view is recorded", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
 		await user.click(
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
-		await screen.findByRole("button", { name: "Approve" });
 
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		expect(original).toHaveTextContent("Kofi Mensah leads the team.");
+		const masked = screen.getByRole("region", {
+			name: "What the model will see",
+		});
+		expect(within(masked).getByText("masked person 1")).toBeInTheDocument();
+		expect(masked).not.toHaveTextContent("Kofi Mensah");
+		expect(screen.getByText(REVIEW_NOTICE)).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"GET",
+				`/projects/${project.id}/documents/${waiting.id}/review`,
+			),
+		).toHaveLength(1);
+	});
+
+	it("lists every mask with what it hides, and offers Not personal only where the API allows it", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		const masks = await screen.findByRole("list", { name: "Masks" });
+		const items = within(masks).getAllByRole("listitem");
+		expect(items.map((item) => item.textContent)).toEqual([
+			expect.stringContaining("“12 March” · Date · Found automatically"),
+			expect.stringContaining("“amina@example.org” · Email address"),
+			expect.stringContaining("“Kofi Mensah” · Person"),
+			expect.stringContaining("“448-1207” · Medical record number"),
+		]);
+		expect(
+			within(masks).getByRole("button", { name: "Not personal: 12 March" }),
+		).toBeInTheDocument();
+		expect(
+			within(masks).queryByRole("button", {
+				name: "Not personal: amina@example.org",
+			}),
+		).not.toBeInTheDocument();
+	});
+
+	it("removes a mask that is not personal, with the reason the owner gives", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		const remove = screen.getByRole("button", { name: "Remove mask" });
+		expect(remove).toBeDisabled();
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"Date of a public meeting",
+		);
+		await user.click(remove);
+
+		expect(
+			await screen.findByText("“12 March” is no longer masked."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/unmask`,
+			)[0]?.body,
+		).toEqual({
+			version: 1,
+			start: 13,
+			end: 21,
+			reason: "Date of a public meeting",
+		});
+		expect(
+			screen.getByRole("region", { name: "What the model will see" }),
+		).toHaveTextContent("Interview on 12 March with");
+	});
+
+	it("masks text the detectors missed, from a selection in the original", async () => {
+		const { api, project } = signedInWith("owner");
+		const waiting = api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: {
+				text: "Dr Traoré met the team at the clinic.",
+				found: [],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		selectText(
+			await screen.findByRole("region", { name: "Original text" }),
+			"Dr Traoré",
+		);
+		expect(
+			await screen.findByText("Selected: “Dr Traoré”"),
+		).toBeInTheDocument();
+		await user.selectOptions(
+			screen.getByRole("combobox", { name: "Mask as" }),
+			"Person",
+		);
+		await user.click(screen.getByRole("button", { name: "Mask it" }));
+
+		expect(
+			await screen.findByText("“Dr Traoré” is masked."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/masks`,
+			)[0]?.body,
+		).toEqual({ version: 1, start: 0, end: 9, entity_type: "PERSON" });
+		expect(
+			within(
+				screen.getByRole("region", { name: "What the model will see" }),
+			).getByText("masked person 1"),
+		).toBeInTheDocument();
+	});
+
+	it("makes a masked name a project rule, and masks it everywhere in the document now", async () => {
+		const { api, project } = signedInWith("owner");
+		const waiting = api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: {
+				text: "Kofi Mensah met the team. Later, kofi mensah left.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "Always mask in this project: Kofi Mensah",
+			}),
+		);
+
+		expect(
+			await screen.findByText(
+				"“Kofi Mensah” is now masked everywhere in this project.",
+			),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo("POST", `/projects/${project.id}/masking-rules`)[0]?.body,
+		).toEqual({ term: "Kofi Mensah", entity_type: "PERSON" });
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/masks`,
+			),
+		).toHaveLength(1);
+		expect(
+			screen.getByRole("region", { name: "What the model will see" }),
+		).not.toHaveTextContent(/kofi mensah/i);
+	});
+
+	it("approves the masked version on screen after a correction", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"A public meeting",
+		);
+		await user.click(screen.getByRole("button", { name: "Remove mask" }));
+		await screen.findByText("“12 March” is no longer masked.");
+
+		await user.click(screen.getByRole("button", { name: "Approve" }));
+
+		expect(
+			await screen.findByText("Approved. The brief can now cite it as D1."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/approve`,
+			)[0]?.body,
+		).toEqual({ version: 2 });
+	});
+
+	it("shows the API's answer when a correction meets a newer masking", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"A public meeting",
+		);
+
+		api.documents.correct(waiting.id);
+		await user.click(screen.getByRole("button", { name: "Remove mask" }));
+
+		expect(await screen.findByText(MASKING_CHANGED)).toBeInTheDocument();
+	});
+
+	it("never asks for the original when an owner reads an approved document", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "report.txt", { status: "approved" });
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "See masked text D1 report.txt",
+			}),
+		);
+
+		await screen.findByRole("region", {
+			name: "What the model will see: D1 report.txt",
+		});
+		expect(await screen.findByText("masked person 1")).toBeInTheDocument();
 		expect(api.requests.filter((r) => r.path.endsWith("/review"))).toEqual([]);
 	});
 
 	it.each<Role>(["reviewer", "viewer"])(
-		"lets a %s see what the model will see, without approving",
+		"lets a %s see what the model will see, never the original, without approving",
 		async (role) => {
-			const { project } = withDocumentWaiting(role);
+			const { api, project } = withDocumentWaiting(role);
 			const { user } = await openDocuments(project.id);
 
 			await user.click(
@@ -412,6 +656,10 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			expect(
 				within(view).getByText("Only owners can approve or reject documents."),
 			).toBeInTheDocument();
+			expect(view).not.toHaveTextContent("Kofi Mensah");
+			expect(api.requests.filter((r) => r.path.endsWith("/review"))).toEqual(
+				[],
+			);
 		},
 	);
 

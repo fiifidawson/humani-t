@@ -1,6 +1,6 @@
 # 16 — Documents
 
-> **Milestones:** UI_UX_SPEC §15 P2 (documents, privacy review) · **Status:** in progress (API done; on the web, upload, the list, the masked text, approve or reject, and delete are built; correcting masks on screen is next) · **Previous:** [15 — Exports and follow-up questions](15-exports-and-questions.md) · **Next:** none yet
+> **Milestones:** UI_UX_SPEC §15 P2 (documents, privacy review) · **Status:** in progress (API done; on the web, upload, the list, the masked text, the owner's masking review with corrections, approve or reject, delete, the chat's gate card and the project's masking rules are built) · **Previous:** [15 — Exports and follow-up questions](15-exports-and-questions.md) · **Next:** none yet
 
 Before this phase a team could only bring papers from the paper sources. Now an owner uploads the team's own files to a project (PDF, Word, plain text, Markdown). Each one is scanned for malware, read in a separate process that can do nothing but read, and masked with the broad list: names and places (with the name model installed), dates, contacts and identifiers, plus the project's rules. An owner then reviews the masked result: sees the original and every mask with what made it, masks what was missed, removes what is not personal with a reason, and approves or rejects the exact masked version they saw. Only an approved document becomes evidence, for the decision brief and follow-up questions, cited as `D1`, `D2`, … with a page or character range. A run that reaches the mask stage while documents wait pauses at the `privacy_review` gate, and deciding the last one resumes it. Everything is sealed under the project's key, and deleting the project shreds it. This serves the brief's rules 2, 3, 12, 13 and 17, [`architecture.md` §3.3 and §3.9.1](../architecture.md#391-masking-is-derived-reviewable-and-re-runnable) and UI_UX_SPEC [§6.6](../UI_UX_SPEC.md#66-gates-vocabulary-and-privacy-review) and [§6.13](../UI_UX_SPEC.md#613-documents). **Masking is not anonymity:** text that is only in an image is not read, and so not masked.
 
@@ -17,7 +17,7 @@ Before this phase a team could only bring papers from the paper sources. Now an 
 - **Endpoints:** ten, listed in [`api.md`](../api.md#documents).
 - **Settings:** `HUMANI_T_DOCUMENT_STORAGE_DIR`, `HUMANI_T_UPLOAD_MAX_BYTES`, `HUMANI_T_DOCUMENTS_PER_PROJECT`, `HUMANI_T_DOCUMENT_BYTES_PER_PROJECT`, `HUMANI_T_UPLOADS_PER_HOUR`, `HUMANI_T_MALWARE_SCANNER`, `HUMANI_T_CLAMD_ADDRESS`, `HUMANI_T_EXTRACTION_TIMEOUT_SECONDS`, `HUMANI_T_EXTRACTION_MAX_PAGES`, `HUMANI_T_EXTRACTION_MAX_CHARACTERS`.
 - **Migration** `0013`, after `0012`.
-- **The web screens** at `/p/:project/documents` ([`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx)), opened from the Documents link in the project's header: upload by choosing or dropping a file (owners); the list with tag, name, size, who uploaded it and the status in words, fetched again every 3 seconds while a file is being processed; the masked text for any member; approve or reject the masked version shown (owners); delete, after a confirmation (owners). Correcting masks (`…/masks`, `…/unmask`) and the original text side by side are not on screen yet: owners use the API for those (G16.11).
+- **The web screens** at `/p/:project/documents` ([`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx)), opened from the Documents link in the project's header: upload by choosing or dropping a file (owners); the list with tag, name, size, who uploaded it and the status in words, fetched again every 3 seconds while a file is being processed; the masked text for any member; the masking review for owners, with the original beside the masked text, "Not personal" with a reason, masking a selection, "Always mask in this project", then approve or reject the version shown; delete, after a confirmation (owners). The chat's privacy review card lists the documents waiting and links owners to each review (D16.12). Project settings → Privacy lists, adds and removes the project's masking rules ([`features/projects/MaskingRules.tsx`](../../apps/web/src/features/projects/MaskingRules.tsx)).
 - **ClamAV in the compose stack:** the `clamav` and `freshclam` services, in the opt-in profile `malware-scan` ([ADR-0012](../adr/0012-clamav-in-the-stack.md)), and a `documents` volume that the API and the worker share, so uploads work in the stack.
 
 ### Data model
@@ -127,6 +127,14 @@ The file itself is `<HUMANI_T_DOCUMENT_STORAGE_DIR>/<project id>/<document id>.s
 - **Rejected:** asking for the password first, which the API does not require for this; typing the name to confirm, as for a project, since one document is far less to lose.
 - **Where:** [`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx) (`DeleteDialog`), [`test/fakeDocuments.ts`](../../apps/web/src/test/fakeDocuments.ts).
 - **Proven by:** `Documents.test.tsx` › "deleting a document".
+
+### D16.12 The masking review in the browser
+
+- **Decision:** an owner who opens a document waiting for review gets `GET …/review`: the original text with every mask in force marked, the masked text beside it, and a list of masks. Each mask says what it hides, its type and what made it ("Found automatically", "Masked by an owner", "Project rule"). **Not personal** appears only where the API's `can_remove` says so, and asks for a one-line reason before `POST …/unmask`. Missed text is masked by selecting it in the original: the page reads the selection's offsets from the runs of text it drew, offers **Mask as** a type, and sends `POST …/masks`. **Always mask in this project** adds a masking rule, then masks that range, because a new rule reaches a document only at its next correction; that correction masks every other occurrence before approval. Approve and reject send the `mask_version` on screen. Members, and owners reading a document that is not waiting, get `…/masked` only. The chat's gate card reads the gate's `payload.documents` (ids and counts), takes names from the documents listing, and links owners to `/p/:project/documents?document=<id>`.
+- **Why:** UI_UX_SPEC §6.6 and §5.3.6. The API audits every fetch of raw text and every listing of rules, so both queries are fetched once per opening, never on focus or reconnect, kept outside the project's query keys (renaming the project or refreshing the list must not fetch them again), and dropped from memory as soon as nothing shows them (`gcTime: 0`). A correction's response replaces the review in the cache rather than fetching it again.
+- **Rejected:** typing the missed text into a field and searching for it in the browser, which would have to guess which occurrence was meant; a pop-up menu at the selection, which is harder to reach by keyboard than a panel that stays below the text. Selecting text needs a mouse or caret browsing (F7); the list of masks works by keyboard alone.
+- **Where:** [`features/documents/MaskingReview.tsx`](../../apps/web/src/features/documents/MaskingReview.tsx), [`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx) (`MaskedReview`), [`features/reviews/PrivacyGateCard.tsx`](../../apps/web/src/features/reviews/PrivacyGateCard.tsx), [`app/documentQueries.ts`](../../apps/web/src/app/documentQueries.ts).
+- **Proven by:** `Documents.test.tsx` › "the owner's privacy review", `PrivacyGate.test.tsx`, `MaskingRules.test.tsx`.
 
 ### Deliberately not used
 
@@ -265,6 +273,23 @@ With the stack running as in [self-hosting §3.7](../deploy/self-hosting.md#37-s
 | T16.8.4 | The same command in `api` instead of `worker` | `MalwareScanUnavailableError: clamd could not be reached`, never a verdict | only the worker reaches clamd | check the `api` service's `networks` |
 | T16.8.5 | `docker compose stop clamav`, upload `report.txt`, wait a minute, then `docker compose start clamav` | The document stays at "Checking for viruses" while clamd is down (the worker logs `malware_scanner_unavailable`), then moves on once clamd is healthy | fails closed | |
 
+### T16.9 The masking review on the web
+
+Start with a fresh `report.txt` uploaded as Amara and waiting for review, a review whose run has paused at the privacy review (as in T16.5), and the web app open.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T16.9.1 | As Amara, open the review's chat | The "Needs you · Privacy review" card lists "D1 report.txt · N masked" and a **Review masking** link | D16.12 | the card says "A document": the listing failed; check the network tab |
+| T16.9.2 | Click **Review masking** | The Documents page opens at `?document=<id>` with "Privacy review: D1 report.txt", the notice "You're seeing original text. This view is recorded…", **Original text** with the masked parts highlighted, and **What the model will see** beside it | D16.12 | |
+| T16.9.3 | pgAdmin: `SELECT action FROM audit_events ORDER BY sequence DESC LIMIT 1`; then switch to another browser tab and back, and run it again | `document.raw_text_viewed`, and no new row after switching tabs | audited once per opening | a new row after switching means the query refetches on focus |
+| T16.9.4 | In the Masks list, look at the email's row and the date's row | The email has no **Not personal** button; the date has one | `can_remove` | |
+| T16.9.5 | Click **Not personal** on the date, type `Date of a public meeting`, click **Remove mask** | "“12 March 2024” is no longer masked."; the date is back in the masked text; the API logs `POST …/unmask` `200` | D16.7 | a `422` names the reason or the range |
+| T16.9.6 | Select `the team` in the original with the mouse, choose **Mask as** Person, click **Mask it** | "“the team” is masked."; a new placeholder in the masked text; `POST …/masks` `200` | D16.7 | |
+| T16.9.7 | On a person's row click **Always mask in this project** | "“…” is now masked everywhere in this project."; `POST …/masking-rules` `201` then `POST …/masks` `200`; the row says "Project rule" | D16.12 | `409` means the rule already exists |
+| T16.9.8 | Click **Approve** | "Approved. The brief can now cite it as D1."; the row says Ready; the paused run continues; `last_review.mask_version` is the version after your corrections | D16.7, D16.9 | `409`: someone corrected it meanwhile; click **Try again** on the message |
+| T16.9.9 | As Kofi (reviewer), open the run's chat and the Documents page | The card lists the document with "Only owners can do this." and no link; **See masked text** shows no original; no `…/review` request in the network tab | roles | |
+| T16.9.10 | As Amara, open Project settings → **Privacy** | The rule from T16.9.7 is listed; the rest is T10.4 | D16.12 | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -277,6 +302,7 @@ With the stack running as in [self-hosting §3.7](../deploy/self-hosting.md#37-s
 | T16.6 | ☐ | |
 | T16.7 | ☐ | |
 | T16.8 | ☐ | |
+| T16.9 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -292,7 +318,9 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | The privacy_review gate with real documents | `tests/test_documents_gate.py` |
 | Scanner and storage settings, and the production wiring | `tests/test_documents_settings.py` |
 | Storage behaves the same on memory and Postgres | `tests/test_documents_storage_contract.py` |
-| The web screens: upload, status, review, delete (owners only, confirmed), and no accessibility violations | `apps/web/src/features/documents/Documents.test.tsx` |
+| The web screens: upload, status, the masking review and its corrections, delete (owners only, confirmed), and no accessibility violations | `apps/web/src/features/documents/Documents.test.tsx` |
+| The chat's privacy review card lists the waiting documents and links owners to each review | `apps/web/src/features/reviews/PrivacyGate.test.tsx` |
+| Project settings → Privacy: list, add and remove masking rules, owners only | `apps/web/src/features/projects/MaskingRules.test.tsx` |
 | clamd in the stack is hardened, reachable from the worker only, finds EICAR, and reaches nothing | `.github/workflows/compose.yml` (compose smoke test) |
 
 ```powershell
@@ -313,7 +341,7 @@ uv run pytest tests/test_documents_domain.py tests/test_document_extraction.py t
 | G16.8 | Postgres contract tests were not run in this wave (no database) | a SQL mistake would show only at integration | run them against the lane database |
 | G16.9 | Deleting a project does not delete its files from the volume; they are unreadable (shredded) but take space | disk use | a worker sweep of deleted projects' files |
 | G16.10 | No threat model document exists yet; `scanner=none` is recorded in `controls.md` | — | add it to the threat model when it is written (M14) |
-| G16.11 | Correcting masks and the original text side by side are not on the web screens yet | owners correct masks through the API (T16.4) | the review screen of UI_UX_SPEC §6.6 |
+| G16.11 | Closed: the masking review, its corrections and the gate card are on the web screens (D16.12, T16.9) | — | — |
 | G16.12 | ClamAV in the stack is opt-in | a new production deployment refuses uploads until the operator chooses a scanner | the owner's decision, open in ADR-0012 |
 | G16.13 | `FakeMalwareScanner` finds EICAR anywhere in a file; clamd finds it only as the whole file or at its start, as the EICAR standard defines | a test that passes with the fake can need the bare string against real clamd (T16.8 uses it) | make the fake match clamd, and the tests that put text before EICAR send it bare |
 
