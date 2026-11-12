@@ -130,6 +130,18 @@ export const prismaQuery = (api: ApiClient, reviewId: string, runId: string) =>
 			),
 	});
 
+/** The review's label rules: the version in force, and every one before it. */
+export const labelRulesQuery = (api: ApiClient, reviewId: string) =>
+	queryOptions({
+		queryKey: keys.labelRules(reviewId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/reviews/{review_id}/label-rules", {
+					params: { path: { review_id: reviewId } },
+				}),
+			),
+	});
+
 /** A review's follow-up threads, newest first, each with its questions in order. */
 export const threadsQuery = (api: ApiClient, reviewId: string) =>
 	queryOptions({

@@ -386,10 +386,13 @@ ScreeningDecision  per run and paper: label (include | exclude | uncertain),
   CriterionAnswer  one criterion's answer for one paper (yes | partly | no
                 | unclear) and a quote, checked to be words of the masked
                 text the model read; sealed with its decision
+LabelRules      how answers become a label: inclusion criteria Possibly
+                relevant needs, and what unclear counts as (met | not_met
+                | uncertain); one LabelRulesVersion per apply, never rewritten
 Passage         a masked excerpt the brief may cite, tagged by the paper's place
 ```
 
-The UI's labels (Highly relevant, Relevant, Possibly relevant, Excluded, Uncertain) are a `ScreeningTier` derived from label and priority, not stored. As §3.8 says, there is no `ScreeningProvider` seam: screening is a use case (the `screen` stage) that calls the model through `GuardedInference` with a versioned prompt, because a second seam in front of the model would be a place to skip the guard.
+The UI's labels (Highly relevant, Relevant, Possibly relevant, Excluded, Uncertain) are a `ScreeningTier` derived from label and priority, not stored. Under a review's `LabelRules`, the label and priority shown are computed on read from a decision's answers and the latest version; the decision itself never changes ([ADR 0013](adr/0013-label-rules-applied-on-read.md)). As §3.8 says, there is no `ScreeningProvider` seam: screening is a use case (the `screen` stage) that calls the model through `GuardedInference` with a versioned prompt, because a second seam in front of the model would be a place to skip the guard.
 
 Conversations may still exist: the agentic loop produces a transcript, and a user may ask follow-up questions. But they are an *artefact of* a Review, not the organising entity.
 

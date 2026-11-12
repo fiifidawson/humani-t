@@ -20,6 +20,7 @@ from app.domain.briefs import BriefRecord
 from app.domain.discovery import PaperSet, PaperText, RunPaper, RunSource, StoredPaper
 from app.domain.documents import Document, DocumentMask, DocumentReview, DocumentText
 from app.domain.encryption import WrappedDataKey
+from app.domain.label_rules import LabelRulesVersion
 from app.domain.masking import MaskingRuleRecord, PaperMask
 from app.domain.mfa import (
     ChallengePurpose,
@@ -425,6 +426,20 @@ class ScreeningRepository(Protocol):
     async def list_for_run(self, run_id: UUID) -> list[StoredDecision]: ...
 
 
+class LabelRulesRepository(Protocol):
+    """A review's label rule versions: inserted, never updated."""
+
+    async def add(self, version: LabelRulesVersion, /) -> bool:
+        """False if the review already has this version: someone applied rules first."""
+        ...
+
+    async def latest(self, review_id: UUID) -> LabelRulesVersion | None: ...
+
+    async def list_for_review(self, review_id: UUID) -> list[LabelRulesVersion]:
+        """Oldest first."""
+        ...
+
+
 class PlanRepository(Protocol):
     """A review's planning conversation, its plan versions and its privacy receipts."""
 
@@ -704,6 +719,9 @@ class UnitOfWork(Protocol):
 
     @property
     def plans(self) -> PlanRepository: ...
+
+    @property
+    def label_rules(self) -> LabelRulesRepository: ...
 
     @property
     def briefs(self) -> DecisionBriefRepository: ...

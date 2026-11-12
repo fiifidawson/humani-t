@@ -34,6 +34,8 @@ export const keys = {
 		["reviews", reviewId, "papers", "one", paperId, runId] as const,
 	prisma: (reviewId: string, runId: string) =>
 		["reviews", reviewId, "prisma", runId] as const,
+	labelRules: (reviewId: string) =>
+		["reviews", reviewId, "label-rules"] as const,
 	brief: (reviewId: string, runId: string | null) =>
 		["reviews", reviewId, "brief", runId] as const,
 	evidence: (briefId: string, tag: string) =>

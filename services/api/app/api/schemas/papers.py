@@ -26,6 +26,7 @@ from app.domain.screening import (
 
 _Status = Literal["screened", "skipped", "failed", "not_screened"]
 _SkipReason = Literal["no_abstract", "not_masked"]
+_SetBy = Literal["model", "rules"]
 
 
 class CriterionAnswerOut(BaseModel):
@@ -40,6 +41,13 @@ class DecisionOut(BaseModel):
     label: ScreeningLabel
     priority: Priority
     tier: ScreeningTier = Field(description="The name shown: Highly relevant, Relevant, …")
+    label_set_by: _SetBy = Field(
+        default="model",
+        description="Who set label, priority and tier: the model, or the review's rules.",
+    )
+    rules_version: int | None = Field(
+        default=None, description="The rules version that set the label, when rules did."
+    )
     score: float
     rationale: str = Field(description="The model's reason, written from masked text.")
     criteria_matched: list[str] = Field(description="Criterion ids (I1, E1…) the paper meets.")
@@ -61,11 +69,16 @@ class DecisionOut(BaseModel):
     )
 
     @classmethod
-    def from_domain(cls, decision: ScreeningDecision) -> DecisionOut:
+    def from_domain(
+        cls, decision: ScreeningDecision, rules_version: int | None = None
+    ) -> DecisionOut:
+        """`rules_version` is set when rules, not the model, gave the label (ADR 0013)."""
         return cls(
             label=decision.label,
             priority=decision.priority,
             tier=decision.tier,
+            label_set_by="model" if rules_version is None else "rules",
+            rules_version=rules_version,
             score=decision.score,
             rationale=decision.rationale,
             criteria_matched=list(decision.criteria_matched),
@@ -121,7 +134,9 @@ class PaperOut(BaseModel):
             source_id=record.source_id,
             found_by=list(row.found_by),
             is_open_access=record.is_open_access,
-            decision=None if row.decision is None else DecisionOut.from_domain(row.decision),
+            decision=None
+            if row.decision is None
+            else DecisionOut.from_domain(row.decision, row.rules_version),
             screening_status=cast(_Status, row.status),
             skipped_because=cast(_SkipReason | None, row.skipped_because),
             is_cited_in_brief=row.is_cited_in_brief,

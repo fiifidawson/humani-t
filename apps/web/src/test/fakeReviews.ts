@@ -19,6 +19,7 @@ import {
 } from "./fakeBriefs";
 import { jsonBody, nextId, problem, text } from "./fakeHttp";
 import { FakeQuestions } from "./fakeQuestions";
+import { FakeRules } from "./fakeRules";
 
 const API = "*/api/v1";
 
@@ -251,6 +252,8 @@ export interface PaperOptions {
 	answers?: Schemas["CriterionAnswerOut"][];
 	url?: string;
 	isCitedInBrief?: boolean;
+	/** The label rules version that set the label; the model set it if left out. */
+	rulesVersion?: number;
 }
 
 export class FakeReviews {
@@ -287,6 +290,16 @@ export class FakeReviews {
 		mask,
 		latestRunId: (reviewId) =>
 			this.runs.find((r) => r.review_id === reviewId)?.id ?? null,
+	});
+
+	/** Label rules and their versions (fakeRules.ts). */
+	readonly rules = new FakeRules({
+		reach: (reviewId, write) => this.reach(reviewId, write),
+		userId: () => this.access.userId(),
+		latestRunId: (reviewId) =>
+			this.runs.find((r) => r.review_id === reviewId)?.id ?? null,
+		papers: (reviewId) =>
+			(this.papers.get(reviewId) ?? []).map((entry) => entry.paper),
 	});
 
 	constructor(private readonly access: Access) {}
@@ -435,6 +448,9 @@ export class FakeReviews {
 							evidence_kind: "abstract",
 							decided_at: "2026-11-03T11:00:00Z",
 							criteria: options.answers ?? [],
+							label_set_by:
+								options.rulesVersion === undefined ? "model" : "rules",
+							rules_version: options.rulesVersion ?? null,
 						},
 		};
 		list.push({ paper, maskedText: options.maskedText ?? null });
@@ -1069,6 +1085,7 @@ export class FakeReviews {
 			}),
 
 			...this.questions.handlers(),
+			...this.rules.handlers(),
 		];
 	}
 }

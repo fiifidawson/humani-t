@@ -31,6 +31,8 @@ _CSV_COLUMNS = (
     "is_open_access",
     "label",
     "tier",
+    "label_set_by",
+    "rules_version",
     "priority",
     "score",
     "rationale",

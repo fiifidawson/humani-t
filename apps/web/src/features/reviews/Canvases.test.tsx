@@ -337,6 +337,33 @@ describe("the papers canvas (UI_UX_SPEC §6.8)", () => {
 		expect(details).toHaveTextContent("Cited in the brief as [P5]");
 	});
 
+	it("says when the label rules set a label, and which version", async () => {
+		const { api, path, review, run } = screenedReview();
+		api.reviews.addPaper(review, run, {
+			title: "Mobile money in displacement settings",
+			tier: "relevant",
+			rulesVersion: 2,
+		});
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", {
+				name: "Mobile money in displacement settings",
+			}),
+		);
+
+		const details = within(canvas).getByRole("region", {
+			name: "Why: Mobile money in displacement settings",
+		});
+		expect(details).toHaveTextContent(
+			"Label: Relevant, set by the label rules (version 2).",
+		);
+		expect(details).not.toHaveTextContent("as the model judged it");
+	});
+
 	it("doesn't say a paper is cited when the brief doesn't cite it", async () => {
 		const { path } = screenedReview();
 		const { user } = renderApp(`${path}/papers`);
