@@ -42,7 +42,7 @@ With `malware-scan`, the worker reaches `clamav` on `scan`, an internal network 
 | `postgres` | `postgres:18.6-alpine` | The database. |
 | `valkey` | `valkey/valkey:8.1.11-alpine` | Rate limits and the job queue. Holds nothing that needs a backup. |
 | `ollama` | `ollama/ollama` (profile `local-model`) | Optional model server inside the deployment. |
-| `mailpit` | `axllent/mailpit` (profile `local-mail`) | Optional fake mail server for trying the stack; never for production. |
+| `mailpit` | `axllent/mailpit` (profile `local-mail`) | Optional fake mail server for a trial: mail stays on the machine and the operator reads it. Replace it with a real mail server before real use. |
 | `clamav` | `clamav/clamav:1.5.4-debian` (profile `malware-scan`) | Optional. ClamAV's daemon: scans every uploaded document before anything reads it. |
 | `freshclam` | the same image (profile `malware-scan`) | Optional. Keeps ClamAV's signatures current. |
 
