@@ -6,6 +6,8 @@ This guide takes an operator from an empty server to a running humani-t, and the
 
 Commands are for a Linux server's shell (bash) unless marked otherwise. `docker compose …` commands are the same in every shell; where Windows PowerShell 5.1 needs something different, for trying the stack on a Windows machine, that is shown too.
 
+To run it on an Oracle Cloud Always Free Arm instance, follow [Deploying humani-t on Oracle Cloud](oracle-cloud.md) alongside this guide.
+
 ## 1. What runs
 
 One Compose project, `humani-t-stack`, defined in [`compose.yaml`](../../compose.yaml):
