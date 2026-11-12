@@ -11,24 +11,11 @@
 import { Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import {
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useId,
-	useMemo,
-	useState,
-} from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
 import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
-import { projectQuery, sessionQuery } from "../../app/queries";
-import {
-	planQuery,
-	reviewQuery,
-	reviewsQuery,
-	runsQuery,
-} from "../../app/reviewQueries";
+import { reviewsQuery } from "../../app/reviewQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
@@ -44,6 +31,8 @@ import {
 	useAskState,
 	useFollowUpTurns,
 	useHasBrief,
+	VIEWER_ASK_NOTE,
+	ViewerNote,
 } from "./FollowUps";
 import { LiveRunProvider } from "./liveRun";
 import { totalMasked } from "./masking";
@@ -64,14 +53,12 @@ import { LatestRunCards, PastRunLine } from "./RunCards";
 import {
 	type Plan,
 	type ReviewActions,
-	type ReviewContextValue,
 	ReviewProvider,
 	type Run,
 	useReview,
-	useReviewActions,
+	useReviewValue,
 } from "./reviewContext";
 
-const COMPOSER_ID = "composer-input";
 const CHANGE_HINT =
 	"Say what to change, for example: add 'mobile money' as a synonym for cash.";
 
@@ -466,20 +453,11 @@ function ReviewLayout({
 								above={hasBrief ? <AskControls /> : undefined}
 							/>
 						) : (
-							<Text
-								px="4"
-								py="3"
-								borderTopWidth="1px"
-								borderColor="border"
-								bg="bg"
-								fontSize="sm"
-								color="fg.muted"
-								textAlign="center"
-							>
+							<ViewerNote>
 								{hasBrief
-									? "You can read the answers. Only owners and reviewers can ask."
+									? VIEWER_ASK_NOTE
 									: "Only owners and reviewers can change or accept the search plan."}
-							</Text>
+							</ViewerNote>
 						)}
 					</FollowUpsProvider>
 				</Flex>
@@ -507,67 +485,33 @@ export function ReviewPage() {
 	const { projectId, reviewId } = useParams({
 		from: "/signed-in/p/$projectId/r/$reviewId",
 	});
-	const project = useQuery(projectQuery(api, projectId));
-	const review = useQuery(reviewQuery(api, projectId, reviewId));
-	const plan = useQuery(planQuery(api, reviewId));
-	const runs = useQuery(runsQuery(api, reviewId));
 	const reviews = useQuery(reviewsQuery(api, projectId));
-	const session = useQuery(sessionQuery(api));
-	const actions = useReviewActions(reviewId);
 	const [draft, setDraft] = useDraft(`review:${reviewId}`);
-	const focusComposer = useCallback(
-		() => document.getElementById(COMPOSER_ID)?.focus(),
-		[],
+	const { value, actions, failed } = useReviewValue(
+		projectId,
+		reviewId,
+		setDraft,
 	);
 
 	// A review created from the workspace carries its mode here; start its plan
 	// once, now that this page can show the question and any failure.
 	const startPlan = actions.startPlan.mutate;
+	const planStatus = value?.plan.status;
 	useEffect(() => {
 		const mode = memory.planModes.get(reviewId);
-		if (mode !== undefined && plan.data?.status === "new") {
+		if (mode !== undefined && planStatus === "new") {
 			memory.planModes.delete(reviewId);
 			startPlan(mode);
 		}
-	}, [memory, reviewId, plan.data?.status, startPlan]);
+	}, [memory, reviewId, planStatus, startPlan]);
 
-	const value = useMemo<ReviewContextValue | null>(
-		() =>
-			project.data === undefined ||
-			review.data === undefined ||
-			plan.data === undefined ||
-			runs.data === undefined
-				? null
-				: {
-						project: project.data,
-						review: review.data,
-						plan: plan.data,
-						runs: runs.data,
-						canManage: project.data.role !== "viewer",
-						userId: session.data?.user.id ?? null,
-						actions,
-						setComposerText: setDraft,
-						focusComposer,
-					},
-		[
-			project.data,
-			review.data,
-			plan.data,
-			runs.data,
-			session.data,
-			actions,
-			setDraft,
-			focusComposer,
-		],
-	);
-
-	const failed = [review, plan, runs, reviews].find((query) => query.isError);
-	if (failed !== undefined) {
+	const failure = failed ?? (reviews.isError ? reviews : undefined);
+	if (failure !== undefined) {
 		return (
 			<Stack p="6" gap="4" maxW="3xl" mx="auto" w="full">
 				<ErrorNotice
-					error={failed.error}
-					onRetry={() => void failed.refetch()}
+					error={failure.error}
+					onRetry={() => void failure.refetch()}
 				/>
 			</Stack>
 		);

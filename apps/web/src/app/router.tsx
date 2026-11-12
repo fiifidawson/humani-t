@@ -261,6 +261,15 @@ const papersRoute = createRoute({
 	),
 });
 
+const threadRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "ask/$threadId",
+	component: lazyRouteComponent(
+		() => import("../features/reviews/ThreadPage"),
+		"ThreadPage",
+	),
+});
+
 const accountRoute = createRoute({
 	getParentRoute: () => signedInRoute,
 	path: "settings",
@@ -346,6 +355,7 @@ const routeTree = rootRoute.addChildren([
 				traceRoute,
 			]),
 			documentsRoute,
+			threadRoute,
 		]),
 		accountRoute,
 	]),
