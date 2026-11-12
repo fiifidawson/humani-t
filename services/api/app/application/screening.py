@@ -48,14 +48,13 @@ from app.domain.screening import (
     ScreeningDecision,
     ScreeningLabel,
     ScreeningTier,
-    check_quotes,
     exclusion_reasons,
     screened_item,
 )
 from app.runs.base import StageContext, StageFailedError
 from app.storage.base import StorageProvider, UnitOfWork
 
-SCREEN_PROMPT_VERSION = "screen-2"
+SCREEN_PROMPT_VERSION = "screen-3"
 DEFAULT_CONCURRENCY = 2
 
 NO_CRITERIA = (
@@ -150,10 +149,13 @@ def screening_schema(criterion_ids: Sequence[str]) -> dict[str, Any]:
                         "answer": {"enum": [v.value for v in CriterionVerdict]},
                         "quote": {
                             "anyOf": [
+                                # No maxLength: a longer quote is shortened, not refused.
                                 {
                                     "type": "string",
                                     "minLength": 1,
-                                    "maxLength": MAX_QUOTE_LENGTH,
+                                    "description": (
+                                        f"Cut to {MAX_QUOTE_LENGTH} characters when longer."
+                                    ),
                                 },
                                 {"type": "null"},
                             ]
@@ -420,8 +422,7 @@ class ScreenStage:
         """The answer as a decision, or `ValueError` if it contradicts itself or its text."""
         label = ScreeningLabel(output["label"])
         matched = tuple(c.id for c in plan.criteria if c.id in output["criteria_matched"])
-        answers = _criterion_answers(plan, output.get("answers"))
-        check_quotes(answers, masked_text)
+        answers = _criterion_answers(plan, output.get("answers"), masked_text)
         return ScreeningDecision(
             run_id=run.id,
             paper_id=paper.paper_id,
@@ -457,16 +458,24 @@ def _refused(run: Run, paper: RunPaper, attempt: int, error: Exception) -> None:
     )
 
 
-def _criterion_answers(plan: ReviewPlan, given: Any) -> tuple[CriterionAnswer, ...]:
-    """The answers in the plan's order; `ValueError` unless every criterion has exactly one."""
+def _criterion_answers(
+    plan: ReviewPlan, given: Any, masked_text: str
+) -> tuple[CriterionAnswer, ...]:
+    """The answers in the plan's order, each quote located in `masked_text`.
+
+    `ValueError` unless every criterion has exactly one answer and every quote is found.
+    """
     if not given:
         return ()
     by_id = {a["id"]: a for a in given}
     if len(by_id) != len(given) or set(by_id) != {c.id for c in plan.criteria}:
         raise ValueError("the answers must answer every criterion exactly once")
     return tuple(
-        CriterionAnswer(
-            c.id, CriterionVerdict(by_id[c.id]["answer"]), by_id[c.id]["quote"] or None
+        CriterionAnswer.located(
+            c.id,
+            CriterionVerdict(by_id[c.id]["answer"]),
+            by_id[c.id]["quote"] or None,
+            masked_text,
         )
         for c in plan.criteria
     )
