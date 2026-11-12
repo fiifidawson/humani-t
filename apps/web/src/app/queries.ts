@@ -52,6 +52,8 @@ export interface PaperFilter {
 	runId: string;
 	/** include, exclude, uncertain or unscreened; `null` for every paper. */
 	label: string | null;
+	/** skipped, failed or not_screened; `null` for any. */
+	tier: string | null;
 	page: number;
 }
 

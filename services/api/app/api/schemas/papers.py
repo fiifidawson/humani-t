@@ -103,6 +103,9 @@ class PaperOut(BaseModel):
         ),
     )
     skipped_because: _SkipReason | None = Field(default=None, description="Set when skipped.")
+    is_cited_in_brief: bool = Field(
+        default=False, description="Whether the brief this run wrote cites it, by `tag`."
+    )
 
     @classmethod
     def from_row(cls, row: PaperRow) -> PaperOut:
@@ -121,6 +124,7 @@ class PaperOut(BaseModel):
             decision=None if row.decision is None else DecisionOut.from_domain(row.decision),
             screening_status=cast(_Status, row.status),
             skipped_because=cast(_SkipReason | None, row.skipped_because),
+            is_cited_in_brief=row.is_cited_in_brief,
         )
 
 

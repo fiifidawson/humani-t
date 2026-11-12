@@ -19,6 +19,7 @@ from app.application.encryption import ScopeEncryption
 from app.application.membership import require_member, require_review_member
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
+from app.domain.briefs import BriefCitations
 from app.domain.discovery import (
     IngestedText,
     PaperSet,
@@ -348,7 +349,8 @@ class PaperRow:
     """One row of the screening table: metadata, its place, and its decision if any.
 
     `status` is `skipped` when there was no masked text to send (see `skipped_because`)
-    and `failed` when the privacy check stopped it.
+    and `failed` when the privacy check stopped it. `is_cited_in_brief` is about the
+    brief this run wrote, by the paper's tag.
     """
 
     paper_id: UUID
@@ -359,6 +361,7 @@ class PaperRow:
     decision: ScreeningDecision | None
     status: str = SCREENED
     skipped_because: str | None = None
+    is_cited_in_brief: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,11 +447,13 @@ class PaperService:
         store: PaperStore,
         masked: MaskedTextSource[UnitOfWork],
         encryption: ScopeEncryption,
+        citations: BriefCitations[UnitOfWork],
     ) -> None:
         self._storage = storage
         self._store = store
         self._masked = masked
         self._log = RunLog(encryption)
+        self._citations = citations
 
     async def list_papers(
         self,
@@ -487,6 +492,7 @@ class PaperService:
                 rows = [r for r in rows if _status_or_tier(r, why) == tier]
             start = (page - 1) * PAGE_SIZE
             chosen = rows[start : start + PAGE_SIZE]
+            cited = await self._citations.cited_tags(uow, run.id)
             return PaperPage(
                 run_id=run.id,
                 page=page,
@@ -495,7 +501,7 @@ class PaperService:
                 counts=tier_counts(
                     list(decided.values()), len(papers), [s for s, _ in why.values()]
                 ),
-                rows=tuple([await self._row(uow, run, p, d, why) for p, d in chosen]),
+                rows=tuple([await self._row(uow, run, p, d, why, cited) for p, d in chosen]),
             )
 
     async def paper(
@@ -515,7 +521,8 @@ class PaperService:
                 raise NotFoundError(_PAPER_NOT_FOUND)
             decision = await uow.screening.get(run.id, paper_id)
             why = {} if decision else await self._undecided(uow, run, [seen])
-            row = await self._row(uow, run, seen, decision, why)
+            cited = await self._citations.cited_tags(uow, run.id)
+            row = await self._row(uow, run, seen, decision, why, cited)
             texts = await uow.papers.list_texts([paper_id])
             return PaperDetail(
                 row=row,
@@ -630,11 +637,13 @@ class PaperService:
         paper: RunPaper,
         decision: StoredDecision | None,
         why: dict[UUID, tuple[str, str | None]],
+        cited: frozenset[str],
     ) -> PaperRow:
         status, skipped_because = why.get(paper.paper_id, (SCREENED, None))
+        tag = passage_tag(paper.position)
         return PaperRow(
             paper_id=paper.paper_id,
-            tag=passage_tag(paper.position),
+            tag=tag,
             position=paper.position,
             found_by=paper.found_by,
             record=await self._store.open_record(uow, run.project_id, paper.paper_id),
@@ -643,6 +652,7 @@ class PaperService:
             else await self._store.open_decision(uow, decision),
             status=SCREENED if decision is not None else status,
             skipped_because=None if decision is not None else skipped_because,
+            is_cited_in_brief=tag in cited,
         )
 
 

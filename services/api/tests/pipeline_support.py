@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from app.application.briefs import StoredBriefCitations
 from app.application.inference import GuardedInference
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
@@ -378,6 +379,7 @@ class Pipeline:
             store=self.store,
             masked=self.masked,
             encryption=providers.encryption,
+            citations=StoredBriefCitations(providers.encryption),
         )
 
     def summary(self, run_id: str, stage: str) -> dict[str, Any]:

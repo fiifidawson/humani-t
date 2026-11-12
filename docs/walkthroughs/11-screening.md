@@ -138,6 +138,15 @@ The app role has no `UPDATE` on `screening_decisions`: a decision is provenance 
 - **Where:** [`domain/screening.py`](../../services/api/app/domain/screening.py) (`CriterionAnswer.located`), [`application/screening.py`](../../services/api/app/application/screening.py) (`screening_schema`, `_criterion_answers`).
 - **Proven by:** `tests/test_screening_domain.py::TestQuotes`, `::TestQuoteProperties::test_every_stored_piece_is_an_exact_piece_of_the_text`, `tests/test_pipeline_stages.py::TestScreen::test_a_quote_in_another_case_is_decided_at_once_in_the_papers_own_words`, `…::test_the_answer_format_lets_a_long_quote_through_to_be_shortened`.
 
+### D11.12 A paper says whether the brief cites it (2026-11-12)
+
+- **Decision:** each paper row carries `is_cited_in_brief`: whether the brief this run wrote cites the paper's tag. `PaperService` reads it through a `BriefCitations` protocol (in `domain/briefs.py`), which `StoredBriefCitations` implements by opening only the brief's sealed content, never its evidence.
+- **Why:** the expanded row of the screening table says "Cited in the brief as [P5]" (UI_UX_SPEC §6.8), and the browser must not work that out itself.
+- **Rejected:** a list of cited tags for the browser to join (business logic in the web app); importing the brief service into `application/papers.py` (a cycle: briefs already import papers).
+- **Limitation:** only the brief of the same run counts; a brief written by a later run over the same papers does not mark them.
+- **Where:** [`application/papers.py`](../../services/api/app/application/papers.py), [`application/briefs.py`](../../services/api/app/application/briefs.py) (`StoredBriefCitations`).
+- **Proven by:** `tests/test_papers_api.py::TestCitedInBrief`.
+
 ### Deliberately not used
 
 | Approach | Why not |
@@ -255,6 +264,13 @@ Have a project `{{project}}` with Amara (owner) and Maya (viewer), as in [07](07
 - **Proves:** D11.5 to D11.7, until the mask store is wired and screening can be watched by hand against Ollama.
 - **If it fails:** the failing test's name says which guarantee broke.
 
+### T11.10 The screening results in the browser
+
+- **Do:** after a run that screened and wrote a brief, open the review, then **Open papers** on the screening card. Open a highly relevant row. Then press **Skipped** and **Failed** in the filters. If any paper failed, go back to the chat.
+- **Expect:** the row shows each criterion in words with its answer (Yes, Partly, No, Not clear) and the quote under it as plain text; "Label: Highly relevant, as the model judged it. No rule changed it."; "Read: the abstract only, not the full text"; "Open paper" when the paper has a link; "Cited in the brief as [P<n>]" only on papers the brief cites (compare with the brief's sources). Skipped rows say why under the title ("It has no abstract…" or "Its text wasn't masked…"); failed rows say the privacy check stopped them. The filter counts add up to "All". In the chat, the screening card has an amber "N papers failed the privacy check…" line whose link opens the papers with **Failed** pressed; with no failures there is no such line.
+- **Proves:** D11.12 and UI_UX_SPEC §6.8, §5.3.7.
+- **If it fails:** compare with `GET {{base}}/reviews/{{review}}/papers?tier=failed`; a wrong `is_cited_in_brief` is an API bug, a wrong word a web one.
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -268,6 +284,7 @@ Have a project `{{project}}` with Amara (owner) and Maya (viewer), as in [07](07
 | T11.7 | ☐ | |
 | T11.8 | ☐ | |
 | T11.9 | ☐ | |
+| T11.10 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -289,6 +306,7 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Evidence for the brief: included, masked, tagged by place | `tests/test_pipeline_stages.py::TestEvidence` |
 | Deleting the project makes it all unreadable | `tests/test_pipeline_stages.py::TestDeletedProjects`, `tests/test_papers_api.py::TestDeletedProject` |
 | The routes: order, filters, masked text only, 404 for non-members | `tests/test_papers_api.py` |
+| A paper says whether the run's brief cites it | `tests/test_papers_api.py::TestCitedInBrief` |
 
 How to run only this phase's tests:
 

@@ -221,6 +221,13 @@ const TIER_ORDER: readonly Tier[] = [
 	"excluded",
 ];
 
+const TIER_FILTERS: readonly string[] = [
+	...TIER_ORDER,
+	"skipped",
+	"failed",
+	"not_screened",
+];
+
 const TIER_DECISION: Record<
 	Tier,
 	Pick<Schemas["DecisionOut"], "label" | "priority">
@@ -238,6 +245,12 @@ export interface PaperOptions {
 	year?: number;
 	rationale?: string;
 	maskedText?: string | null;
+	/** Why a paper with no decision has none; "not_screened" if left out. */
+	status?: "skipped" | "failed";
+	skippedBecause?: NonNullable<Paper["skipped_because"]>;
+	answers?: Schemas["CriterionAnswerOut"][];
+	url?: string;
+	isCitedInBrief?: boolean;
 }
 
 export class FakeReviews {
@@ -392,11 +405,17 @@ export class FakeReviews {
 			title: options.title,
 			year: options.year ?? 2023,
 			doi: `10.1000/${list.length + 1}`,
-			url: null,
+			url: options.url ?? null,
 			source_id: "openalex",
 			found_by: ["openalex"],
 			is_open_access: true,
-			screening_status: tier === null ? "not_screened" : "screened",
+			screening_status:
+				tier !== null ? "screened" : (options.status ?? "not_screened"),
+			skipped_because:
+				tier === null && options.status === "skipped"
+					? (options.skippedBecause ?? "no_abstract")
+					: null,
+			is_cited_in_brief: options.isCitedInBrief ?? false,
 			decision:
 				tier === null
 					? null
@@ -415,6 +434,7 @@ export class FakeReviews {
 							criteria_version: 1,
 							evidence_kind: "abstract",
 							decided_at: "2026-11-03T11:00:00Z",
+							criteria: options.answers ?? [],
 						},
 		};
 		list.push({ paper, maskedText: options.maskedText ?? null });
@@ -910,6 +930,7 @@ export class FakeReviews {
 				}
 				const query = new URL(request.url).searchParams;
 				const label = query.get("label");
+				const tier = query.get("tier");
 				const page = Number(query.get("page") ?? "1");
 				if (
 					label !== null &&
@@ -920,6 +941,9 @@ export class FakeReviews {
 						"label must be include, exclude, uncertain or unscreened.",
 					);
 				}
+				if (tier !== null && !TIER_FILTERS.includes(tier)) {
+					return problem(422, `tier must be one of ${TIER_FILTERS.join(", ")}`);
+				}
 				const matching = list
 					.map((entry) => entry.paper)
 					.filter((p) =>
@@ -929,11 +953,22 @@ export class FakeReviews {
 								? p.decision === null
 								: p.decision?.label === label,
 					)
+					.filter(
+						(p) =>
+							tier === null ||
+							(p.decision?.tier ?? p.screening_status) === tier,
+					)
 					.sort((a, b) => rank(a) - rank(b) || a.position - b.position);
-				const counts: Record<string, number> = { unscreened: 0 };
+				// As the API counts: every tier, all without a decision, then each kind of those.
+				const counts: Record<string, number> = Object.fromEntries(
+					[...TIER_FILTERS, "unscreened"].map((key) => [key, 0]),
+				);
 				for (const { paper } of list) {
-					const tier = paper.decision?.tier ?? "unscreened";
-					counts[tier] = (counts[tier] ?? 0) + 1;
+					const kind = paper.decision?.tier ?? paper.screening_status;
+					counts[kind] = (counts[kind] ?? 0) + 1;
+					if (paper.decision === null) {
+						counts["unscreened"] = (counts["unscreened"] ?? 0) + 1;
+					}
 				}
 				return HttpResponse.json({
 					run_id:

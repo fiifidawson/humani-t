@@ -174,6 +174,20 @@ class BriefSeal:
         )
 
 
+class StoredBriefCitations:
+    """`BriefCitations` over stored briefs: opens the content only, never the evidence."""
+
+    def __init__(self, encryption: ScopeEncryption) -> None:
+        self._seal = BriefSeal(encryption)
+
+    async def cited_tags(self, uow: UnitOfWork, run_id: UUID) -> frozenset[str]:
+        record = await uow.briefs.for_run(run_id)
+        if record is None:
+            return frozenset()
+        content = await self._seal.open(uow, record, _CONTENT_PURPOSE)
+        return frozenset(body_from_dict(content["body"]).cited_tags())
+
+
 def passage_to_dict(item: RetrievedPassage) -> dict[str, JsonValue]:
     p = item.passage
     return {

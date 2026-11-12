@@ -30,6 +30,7 @@ import {
 import { sessionQuery } from "./queries";
 
 type PaperLabel = "include" | "exclude" | "uncertain" | "unscreened";
+type PaperTier = "skipped" | "failed" | "not_screened";
 
 export interface RouterContext {
 	api: ApiClient;
@@ -227,6 +228,7 @@ export interface DraftSearch {
 export interface PapersSearch {
 	run?: string | undefined;
 	label?: PaperLabel | undefined;
+	tier?: PaperTier | undefined;
 	page?: number | undefined;
 }
 
@@ -236,6 +238,8 @@ const PAPER_LABELS: readonly PaperLabel[] = [
 	"uncertain",
 	"unscreened",
 ];
+
+const PAPER_TIERS: readonly PaperTier[] = ["skipped", "failed", "not_screened"];
 
 /** A whole number from 1, or undefined: search values are input like any other. */
 function positiveInteger(value: unknown): number | undefined {
@@ -272,6 +276,7 @@ const papersRoute = createRoute({
 	validateSearch: (search: Record<string, unknown>): PapersSearch => ({
 		run: typeof search["run"] === "string" ? search["run"] : undefined,
 		label: PAPER_LABELS.find((label) => label === search["label"]),
+		tier: PAPER_TIERS.find((tier) => tier === search["tier"]),
 		page: positiveInteger(search["page"]),
 	}),
 	component: lazyRouteComponent(

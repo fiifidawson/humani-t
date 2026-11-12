@@ -93,6 +93,7 @@ export const papersQuery = (
 							run_id: filter.runId,
 							page: filter.page,
 							...(filter.label === null ? {} : { label: filter.label }),
+							...(filter.tier === null ? {} : { tier: filter.tier }),
 						},
 					},
 				}),
