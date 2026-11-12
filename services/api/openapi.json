@@ -7807,7 +7807,8 @@
         "enum": [
           "question",
           "answer",
-          "change_request"
+          "change_request",
+          "current_plan"
         ],
         "title": "SentTextKind"
       },

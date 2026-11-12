@@ -16,6 +16,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
+from app.application.masking import MaskingRuleService
 from app.application.membership import require_member, require_review_member
 from app.application.run_log import (
     QUEUE_CHANNEL,
@@ -27,12 +28,14 @@ from app.application.run_log import (
 )
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import KeyDestroyedError
+from app.domain.plans import refuse_rule_terms, revision_text_fields
 from app.domain.projects import Action, can
 from app.domain.reviews import ReviewStatus, ReviewTrigger
 from app.domain.runs import (
     EventName,
     Gate,
     GateDecision,
+    GateKind,
     JsonValue,
     Run,
     RunConflictError,
@@ -83,6 +86,7 @@ class RunService:
         audit: AuditLog,
         signals: Signals,
         available_stages: Collection[str],
+        rules: MaskingRuleService,
         session_policy: SessionPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,
         poll_interval: timedelta = _POLL_INTERVAL,
@@ -92,6 +96,7 @@ class RunService:
         self._audit = audit
         self._signals = signals
         self._available = frozenset(available_stages)
+        self._rules = rules
         self._session_policy = session_policy or SessionPolicy()
         self._clock = clock
         self._poll_interval = poll_interval
@@ -181,7 +186,10 @@ class RunService:
         revisions: Mapping[str, JsonValue] | None,
         request_id: str | None = None,
     ) -> Gate:
-        """Decide a gate and queue the rest of the run. The first decision wins; then 409."""
+        """Decide a gate and queue the rest of the run. The first decision wins; then 409.
+
+        `ValueError` when a vocabulary edit holds a term the project always masks.
+        """
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
             gate = await self._gate(uow, current, gate_id)
@@ -190,6 +198,11 @@ class RunService:
                 raise RunConflictError("Someone already decided this. Showing their decision.")
             if run is None or run.state is not RunState.WAITING:
                 raise RunConflictError("This run is no longer waiting for a decision.")
+            if gate.kind is GateKind.VOCABULARY and revisions is not None:
+                refuse_rule_terms(
+                    revision_text_fields(dict(revisions)),
+                    await self._rules.rules_for(uow, gate.project_id),
+                )
             sealed = None
             if revisions is not None:
                 sealed = await self._encryption.encrypt(

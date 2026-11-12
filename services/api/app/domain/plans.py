@@ -10,13 +10,14 @@ from __future__ import annotations
 import csv
 import io
 import unicodedata
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal, Protocol
 from uuid import UUID
 
+from app.domain.masking import MaskingRule, rule_spans
 from app.domain.reviews import InvalidTransitionError
 from app.domain.runs import JsonValue
 from app.domain.timestamps import require_aware
@@ -670,6 +671,49 @@ def criteria_from_json(criteria: JsonValue) -> tuple[Criterion, ...]:
 _CRITERION_KINDS = frozenset(k.value for k in CriterionKind)
 
 
+def refuse_rule_terms(fields: Iterable[tuple[str, str]], rules: Sequence[MaskingRule]) -> None:
+    """Refuse plan text that holds a term the project always masks.
+
+    Plan text reaches the model and the paper sources as written, so a person learns
+    when they write it. `fields` pairs a field's name with its text; the `ValueError`
+    names the first field that holds one, never the term.
+    """
+    for name, text in fields:
+        if rule_spans(text, rules):
+            raise ValueError(
+                f"{name} holds a term this project always masks. Remove it or reword it."
+            )
+
+
+def plan_text_fields(
+    concepts: Sequence[Concept], criteria: Sequence[Criterion]
+) -> Iterator[tuple[str, str]]:
+    """Every piece of a plan's text, named as `refuse_rule_terms` reports it."""
+    for criterion in criteria:
+        yield f"Criterion {criterion.id}", criterion.text
+    for number, concept in enumerate(concepts, start=1):
+        for text in (concept.theme, *concept.terms):
+            yield f"Concept {number}", text
+
+
+def revision_text_fields(
+    value: JsonValue, path: str = "revisions"
+) -> Iterator[tuple[str, str]]:
+    """Every text in a gate's revisions, named by its path: `revisions.criteria[1].text`.
+
+    Read whole rather than by `revision_from_gate`, so text in a shape it would
+    reject is checked too.
+    """
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from revision_text_fields(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from revision_text_fields(item, f"{path}.{key}")
+
+
 class ModelCallPurpose(StrEnum):
     CLARIFY = "clarify"
     DRAFT = "draft"
@@ -680,11 +724,16 @@ class SentTextKind(StrEnum):
     QUESTION = "question"
     ANSWER = "answer"
     CHANGE_REQUEST = "change_request"
+    CURRENT_PLAN = "current_plan"
 
 
 @dataclass(frozen=True, slots=True)
 class SentText:
-    """One piece of a person's text exactly as a model received it: masked."""
+    """One piece of text exactly as a model received it.
+
+    A person's question, answers and change request are masked. The current plan is
+    sent as written, as JSON: its text was checked against the project's rules instead.
+    """
 
     kind: SentTextKind
     sent: str

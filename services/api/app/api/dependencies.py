@@ -300,6 +300,7 @@ class _Pipeline:
     masked: MaskedTextSource[UnitOfWork]
     sources: tuple[PaperSearchProvider, ...]
     inference: GuardedInference
+    rules: MaskingRuleService
     audit: AuditLog
     clock: Callable[[], datetime]
 
@@ -322,6 +323,7 @@ def _pipeline_stages(settings: Settings, pipeline: _Pipeline) -> dict[str, Stage
             plans=p.plans,
             inference=p.inference,
             masked=p.masked,
+            rules=p.rules,
             audit=p.audit,
             concurrency=settings.screening_concurrency,
             clock=p.clock,
@@ -458,6 +460,7 @@ def build_providers(
         masked=masks,
         sources=tuple(provider for provider, _ in sources),
         inference=inference,
+        rules=masking_rules,
         audit=audit,
         clock=clock,
     )
@@ -488,6 +491,7 @@ def build_providers(
         audit=audit,
         signals=signals,
         available_stages=tuple(stages),
+        rules=masking_rules,
         clock=clock,
     )
     document_sanitizer = _document_sanitizer(ner)
