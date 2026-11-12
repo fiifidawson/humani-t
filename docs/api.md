@@ -199,8 +199,6 @@ A review is a question inside a project. A run executes some of the review's pip
 
 The run, event and gate paths name a review, run or gate rather than the project. The API finds the project from that id and then answers exactly as on a project route: `401`, then `404` for a non-member with the same body as for an id that does not exist, then `403` for a role that may not, then the request itself. Routes with a body check access before reading it.
 
-The stages are fake until the real ones are built: each counts through five items, half a second apart; `mask` first asks for a `privacy_review` gate, and `answer` reports agent steps. The contract below does not change when real stages replace them.
-
 ### `ReviewOut`
 
 ```json
@@ -745,11 +743,7 @@ Every response carries security headers (CSP, HSTS, `nosniff`, `Cache-Control: n
 
 ---
 
-## Not here yet
+## Not here
 
-Deliberately absent, in build order:
-
-- **Real sources** — arXiv, OpenAlex, Europe PMC, Google Scholar
-- **Real pipeline stages** — screening, masking behind the privacy gate (the run machinery, its gates and its fake stages are in place)
-
-See [`dependencies.md`](./dependencies.md) for the sequence.
+- **Google Scholar** is not a source and will not be: it has no API, and its terms forbid automated access ([dependencies §4](dependencies.md#4-outside-services-and-the-libraries-that-reach-them)).
+- **P3 features** (collections, tags, pins, seen and saved marks, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).
