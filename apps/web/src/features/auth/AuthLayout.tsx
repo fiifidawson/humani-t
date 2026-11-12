@@ -4,12 +4,8 @@ import { ThemeButton } from "../../shell/ThemeButton";
 import { LabMark, ProjectMark } from "../../ui/Brand";
 
 /**
- * The cover beside the form. LiGHT keeps its light beam for covers and title
- * areas only, so this is the one place it appears: Light Blue (an accent) over
- * Dark Blue (a base), with Eggshell text. As on the brand guidelines' cover, the
- * beam enters as a narrow tip at the top and fans out towards the bottom right,
- * its lower edge crossing the headline. Flat colour, never a fade. At 40% it
- * keeps the Eggshell text over it at 5.1:1.
+ * The cover beside the form, the one place LiGHT's light beam appears: the brand
+ * keeps it for covers. Flat colour, never a fade; at 40% the text keeps 5.1:1.
  */
 function Cover() {
 	return (

@@ -1,10 +1,9 @@
 /**
- * A controllable EventSource, standing in for the run's SSE stream.
+ * A controllable EventSource, which jsdom lacks, standing in for a run's stream.
  *
- * jsdom has no EventSource. This fake keeps the parts of the real contract the
- * hook depends on: named events carrying `lastEventId`, `readyState` moving
- * between CONNECTING, OPEN and CLOSED, and `error` fired both when the browser
- * will retry by itself (CONNECTING) and when it has given up (CLOSED).
+ * It keeps what the hook depends on: `lastEventId` on named events, `readyState`,
+ * and `error` both when the browser will retry (CONNECTING) and when it gives up
+ * (CLOSED).
  */
 
 type Listener = (event: MessageEvent<string>) => void;

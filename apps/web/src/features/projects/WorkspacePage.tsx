@@ -1,12 +1,10 @@
 /**
- * A project's workspace (UI_UX_SPEC §4.1): the project's header over either
- * its latest review (features/reviews/ReviewPage) or, when it has none, the
- * empty chat where a review starts (§6.3, §5.4).
+ * A project's workspace: its header over its latest review, or the empty chat
+ * where a review starts.
  *
- * Starting is two requests: the review, then its plan. The plan waits on the
- * model, so this page creates the review and hands over to the review's page,
- * which shows the question while the plan is made and offers a retry if it
- * fails. The mode travels in page memory, never in the URL or storage.
+ * The plan waits on the model, so this page only creates the review and hands
+ * over to the review's page, which makes the plan and offers a retry. The mode
+ * travels in page memory, never in the URL or storage.
  */
 
 import {

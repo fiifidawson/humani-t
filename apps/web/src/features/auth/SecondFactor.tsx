@@ -1,8 +1,8 @@
 /**
  * The second factor at sign-in: passkey, authenticator code or recovery code.
  *
- * The passkey prompt starts by itself when the account has one (UI_UX_SPEC
- * §6.1). No text-message codes are offered: they can be intercepted.
+ * The passkey prompt starts by itself when the account has one. No text-message
+ * codes are offered: they can be intercepted.
  */
 
 import { Button, Stack, Text } from "@chakra-ui/react";

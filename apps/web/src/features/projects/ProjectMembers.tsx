@@ -1,10 +1,8 @@
 /**
- * Who belongs to a project, and, for owners, adding, re-roling and removing
- * them (UI_UX_SPEC §6.14). Emails appear only when the API sends them: to owners.
+ * A project's members and, for owners, adding, re-roling and removing them.
  *
- * The API decides every rule: who may change members, whether the sign-in is
- * recent enough, and that a project keeps an owner. The page only locks what
- * the list it holds already shows would be refused, and says why.
+ * The API decides every rule, and sends emails only to owners. The page only locks
+ * what the list it holds already shows would be refused, and says why.
  */
 
 import {

@@ -1,12 +1,9 @@
 /**
- * Follow-up questions for the fake API: threads, questions and their answers,
- * served through MSW beside the reviews in fakeReviews.ts.
+ * Follow-up questions for the fake API, served beside fakeReviews.ts.
  *
- * It applies the API's rules the screens depend on (docs/api.md "Follow-up
- * questions"): asking returns 202 with the question masked and pending; a
- * viewer gets 403; a thread answers one question at a time (409); a thread of
- * another review is 404. The "worker" answers on the next poll, the way the
- * test says, so a test sees what shows while a question waits.
+ * It applies the rules the screens depend on: 202 with the question masked and
+ * pending, 403 for viewers, 409 while a question waits, 404 for another review's
+ * thread. The "worker" answers on the next poll, when the test says so.
  */
 
 import { HttpResponse, http } from "msw";

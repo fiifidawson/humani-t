@@ -1,11 +1,9 @@
 /**
- * Decision briefs for the fake API: a brief, its evidence and its trace, in
- * the API's shapes (docs/api.md "Decision briefs"). The handlers that serve
- * them, and the access rules they apply, are in fakeReviews.ts.
+ * Decision briefs for the fake API: a brief, its evidence and its trace, in the
+ * API's shapes. The handlers and access rules are in fakeReviews.ts.
  *
- * The example follows UI_UX_SPEC §6.9: three options in the Writer's order,
- * a humanitarian criterion, a disagreement with a reasoning claim, a
- * consideration, gaps, and one citation the checks flagged (P9, no passage).
+ * The example has three options, a disagreement, gaps, and one citation the
+ * checks flagged (P9, no passage).
  */
 
 import type { components } from "../api/schema.gen";

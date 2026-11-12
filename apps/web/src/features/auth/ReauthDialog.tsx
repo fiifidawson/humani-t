@@ -1,10 +1,9 @@
 /**
- * Sign in again before a sensitive action (UI_UX_SPEC §6.1).
+ * Sign in again before a sensitive action.
  *
- * The API decides which actions need a recent sign-in, and says so with a 401
- * carrying `reauthentication_required`. `withReauth` catches exactly that,
- * asks for the password in a modal over the current screen, and retries the
- * action once. The browser never guesses which actions are sensitive.
+ * The API decides which actions need it and answers with a 401
+ * `reauthentication_required`; `withReauth` catches exactly that, asks for the
+ * password and retries once. The browser never guesses which actions are sensitive.
  */
 
 import { Button, HStack, Stack, Text } from "@chakra-ui/react";

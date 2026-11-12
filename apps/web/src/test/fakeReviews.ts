@@ -1,17 +1,10 @@
 /**
- * The review half of the fake API: reviews, search plans, runs, gates and
- * papers, served through MSW like the rest of fakeApi.ts.
+ * The review half of the fake API: reviews, plans, runs, gates and papers.
  *
- * It applies the API's rules the screens depend on: a non-member gets the
- * same 404 as a missing id, a viewer gets 403 on every write, a plan moves
- * new → clarifying → drafting → accepted and refuses steps out of order with
- * 409, the first accept wins, one run at a time, the first gate decision wins.
- * The "model" masks known names in what it is sent, so receipts carry real
- * placeholders and counts. Responses are typed by the generated schema, so a
- * contract change breaks this file's type check, not a test at runtime.
- *
- * Shapes follow docs/api.md "Reviews and runs", "Papers" and "Search plans".
- * Run events are not served here: tests drive them through FakeEventSource.
+ * It applies the rules the screens depend on: 404 for non-members, 403 for viewer
+ * writes, plan steps in order or 409, and the first accept or gate decision wins.
+ * The "model" masks known names, so receipts carry real placeholders. Run events
+ * are not served here; tests drive them through FakeEventSource.
  */
 
 import { HttpResponse, http } from "msw";

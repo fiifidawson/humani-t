@@ -1,9 +1,8 @@
 /**
- * Archiving a project from its settings (UI_UX_SPEC §6.14, §7.7): owners
- * archive and unarchive; everyone sees whether it is archived.
+ * Archiving a project: owners archive and unarchive; everyone sees the state.
  *
- * Archiving only hides the project from Home and the default project list.
- * Nothing is deleted and nothing becomes read-only, so it needs no dialog.
+ * Archiving only hides the project from Home and the default list. Nothing is
+ * deleted or made read-only, so it needs no dialog.
  */
 
 import { Badge, Button, Flex, Stack, Text } from "@chakra-ui/react";

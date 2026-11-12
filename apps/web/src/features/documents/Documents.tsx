@@ -1,12 +1,9 @@
 /**
- * A project's documents (UI_UX_SPEC §6.13) and the owner's privacy review
- * (§6.6): upload, the list with each file's status, approving or rejecting
- * the masked text, and deleting a document.
+ * A project's documents and the owner's privacy review: upload, status, approving
+ * or rejecting the masked text, and deleting.
  *
- * Everything shown comes from the API: the limits, who may upload, and the
- * masked text. The original text is never requested here, and a file's
- * content is never rendered, only the masked text the API returns. Which
- * actions a role sees follows §3.3; the API refuses them anyway.
+ * Only the masked text the API returns is ever shown; the original is never
+ * requested. Actions are hidden by role here, and the API refuses them anyway.
  */
 
 import {

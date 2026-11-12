@@ -1,11 +1,9 @@
 /**
- * Project settings (UI_UX_SPEC §6.14): the name and archiving, the members,
- * and the danger zone, where anyone may leave and owners may delete. Tags and
- * collections are not here yet.
+ * Project settings: name, archiving, members, and the danger zone where anyone may
+ * leave and owners may delete.
  *
- * Deleting destroys the project's key (crypto-shredding), so it asks for the
- * project's name typed out. The API decides who may rename, change members or
- * delete, and whether the sign-in is recent enough; this page only reflects it.
+ * Deleting destroys the project's key (crypto-shredding), so it asks for the name
+ * typed out. The API decides who may do what; this page only reflects it.
  */
 
 import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";

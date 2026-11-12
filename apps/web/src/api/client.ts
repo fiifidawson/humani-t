@@ -1,11 +1,9 @@
 /**
- * The one way the web app talks to the API.
+ * The one way the web app talks to the API, typed by the generated schema.
  *
- * Typed by the generated schema, so a backend contract change breaks
- * `pnpm typecheck`, not a screen at
- * runtime. It adds what every request needs: the page's own origin, JSON
- * bodies only (a document upload's file is the one exception), and the CSRF
- * token on writes. It knows nothing about screens.
+ * It adds what every request needs: the page's own origin, JSON bodies (a document
+ * upload is the one exception) and the CSRF token on writes. It knows nothing about
+ * screens.
  */
 
 import createClient, { type Client, type Middleware } from "openapi-fetch";

@@ -1,9 +1,6 @@
 /**
  * Where to go after signing in: a path on this site, or nowhere.
- *
- * The `redirect` search parameter is in the URL, so anyone can write it into a
- * link. Following `//evil.example` after a sign-in would hand a freshly
- * signed-in person to another site (an open redirect, OWASP ASVS 5.0 V3).
+ * Anyone can put `redirect` in a link, so `//evil.example` would be an open redirect.
  */
 export function safeRedirect(value: unknown): string | undefined {
 	if (
