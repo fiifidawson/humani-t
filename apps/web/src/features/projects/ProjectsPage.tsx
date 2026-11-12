@@ -1,7 +1,6 @@
 /** All projects (UI_UX_SPEC §7.2), the P1 part: one list, no grouping or filters yet. */
 
 import {
-	Badge,
 	Button,
 	Link as ChakraLink,
 	Checkbox,
@@ -28,6 +27,7 @@ import {
 	roleLabel,
 	shortDate,
 } from "./format";
+import { ProjectStatusBadge } from "./ProjectStatusBadge";
 
 function ProjectTable({ projects }: { projects: readonly Project[] }) {
 	return (
@@ -41,7 +41,7 @@ function ProjectTable({ projects }: { projects: readonly Project[] }) {
 				<Table.Caption srOnly>Your projects</Table.Caption>
 				<Table.Header>
 					<Table.Row bg="bg.subtle">
-						{["Name", "Your role", "Created"].map((column) => (
+						{["Name", "Status", "Your role", "Created"].map((column) => (
 							<Table.ColumnHeader
 								key={column}
 								scope="col"
@@ -66,11 +66,9 @@ function ProjectTable({ projects }: { projects: readonly Project[] }) {
 										{project.name}
 									</Link>
 								</ChakraLink>
-								{project.archived_at === null ? null : (
-									<Badge ms="2" variant="outline" colorPalette="gray">
-										Archived
-									</Badge>
-								)}
+							</Table.Cell>
+							<Table.Cell>
+								<ProjectStatusBadge status={project.status} />
 							</Table.Cell>
 							<Table.Cell>{roleLabel(project.role)}</Table.Cell>
 							<Table.Cell>

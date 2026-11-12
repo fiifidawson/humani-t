@@ -5,9 +5,15 @@
  * is the API's. This screen sends what was typed and follows the answer.
  */
 
-import { Button, Stack, Text, VisuallyHidden } from "@chakra-ui/react";
+import {
+	Button,
+	Link as ChakraLink,
+	Stack,
+	Text,
+	VisuallyHidden,
+} from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleX, Clock } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { unwrap } from "../../api/client";
@@ -17,6 +23,7 @@ import { useSignedOutNotice } from "../../app/memory";
 import { keys } from "../../app/queries";
 import { Field } from "../../ui/Field";
 import { FormError } from "../../ui/FormError";
+import { linkStyle } from "../../ui/LinkButton";
 import { PageHeading } from "../../ui/PageHeading";
 import { useCountdown } from "../../ui/useCountdown";
 import { AuthLayout } from "./AuthLayout";
@@ -178,6 +185,9 @@ function PasswordStep({
 				>
 					Sign in
 				</Button>
+				<ChakraLink asChild css={linkStyle} alignSelf="center" fontSize="sm">
+					<Link to="/reset-password">Forgot your password?</Link>
+				</ChakraLink>
 			</form>
 		</Stack>
 	);

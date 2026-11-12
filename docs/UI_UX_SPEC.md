@@ -1632,6 +1632,7 @@ Review:  new ──► clarifying ──► drafting ◄──► changes reques
 | Brief ready | The latest run finished with a brief |
 | Done, no brief | The latest run finished without the Brief stage |
 | Failed | The latest run failed |
+| Cancelled | The latest run was cancelled |
 | Archived | Archived by an owner |
 
 ### 11.2 Live events

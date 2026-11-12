@@ -2831,12 +2831,20 @@ export interface components {
             created_at: string;
             /** Archived At */
             archived_at: string | null;
+            /** @description UI_UX_SPEC §11.1: derived from the newest review and its latest run. */
+            status: components["schemas"]["ProjectStatus"];
         };
         /** ProjectRenameIn */
         ProjectRenameIn: {
             /** Name */
             name: string;
         };
+        /**
+         * ProjectStatus
+         * @description What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand.
+         * @enum {string}
+         */
+        ProjectStatus: "planning" | "running" | "needs_you" | "brief_ready" | "done_without_brief" | "failed" | "cancelled" | "archived";
         /**
          * ProvenanceOut
          * @description Where the terms came from. Travels with every result set.

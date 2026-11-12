@@ -28,6 +28,7 @@ import {
 	roleLabel,
 	shortDate,
 } from "./format";
+import { ProjectStatusBadge } from "./ProjectStatusBadge";
 
 const RECENT_COUNT = 8;
 
@@ -63,6 +64,7 @@ function ProjectCard({ project }: { project: Project }) {
 				>
 					{project.name}
 				</Text>
+				<ProjectStatusBadge status={project.status} />
 				<Text as="span" fontSize="sm" color="fg.muted">
 					{roleLabel(project.role)} · created{" "}
 					<time
