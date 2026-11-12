@@ -1,9 +1,10 @@
 /**
- * A project's documents and the owner's privacy review: upload, status, approving
- * or rejecting the masked text, and deleting.
+ * A project's documents and the owner's privacy review: upload, status, correcting
+ * and approving or rejecting the masked text, and deleting.
  *
- * Only the masked text the API returns is ever shown; the original is never
- * requested. Actions are hidden by role here, and the API refuses them anyway.
+ * Members see the masked text only. The original is requested only when an owner
+ * opens a document waiting for review, and the API records each request. Actions
+ * are hidden by role here, and the API refuses them anyway.
  */
 
 import {
@@ -39,6 +40,7 @@ import { useApi } from "../../app/api-context";
 import {
 	type DocumentListing,
 	type DocumentStatus,
+	documentReviewQuery,
 	documentsQuery,
 	isInProgress,
 	maskedDocumentQuery,
@@ -60,6 +62,7 @@ import { SectionHeading } from "../../ui/SectionHeading";
 import { MaskedText } from "../reviews/MaskedText";
 import { maskedCounts, totalMasked } from "../reviews/masking";
 import { formatSize, statusWords } from "./format";
+import { MaskingCorrections } from "./MaskingReview";
 
 /** How often the list is fetched again while a document is being processed. */
 export const POLL_INTERVAL_MS = 3000;
@@ -431,9 +434,18 @@ function MaskedReview({
 	const queryClient = useQueryClient();
 	const headingId = useId();
 	const heading = useRef<HTMLHeadingElement>(null);
-	const masked = useQuery(maskedDocumentQuery(api, projectId, document.id));
 	const [outcome, setOutcome] = useState<string | null>(null);
 	const canDecide = isOwner && document.status === "awaiting_review";
+	const review = useQuery({
+		...documentReviewQuery(api, projectId, document.id),
+		enabled: canDecide,
+	});
+	const masked = useQuery({
+		...maskedDocumentQuery(api, projectId, document.id),
+		enabled: !canDecide,
+	});
+	const shown = canDecide ? review : masked;
+	const version = shown.data?.mask_version;
 	const label = `${document.tag} ${document.name}`;
 	const title = canDecide
 		? `Privacy review: ${label}`
@@ -480,9 +492,14 @@ function MaskedReview({
 		// Someone else corrected or decided it meanwhile: show what is current.
 		onError: async (error) => {
 			if (isApiError(error, "conflict")) {
-				await queryClient.invalidateQueries({
-					queryKey: keys.documents(projectId),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: keys.documents(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: keys.documentReview(projectId, document.id),
+					}),
+				]);
 			}
 		},
 	});
@@ -527,8 +544,9 @@ function MaskedReview({
 				</Alert.Indicator>
 				<Alert.Content color="fg">
 					<Text>
-						Masking is not anonymity. Codes, numbers and rare details can still
-						point to a person, and text that is only in images was not read.
+						{canDecide && review.data !== undefined
+							? review.data.notice
+							: "Masking is not anonymity. Codes, numbers and rare details can still point to a person, and text that is only in images was not read."}
 					</Text>
 				</Alert.Content>
 			</Alert.Root>
@@ -537,14 +555,14 @@ function MaskedReview({
 					? "Nothing was masked."
 					: `Masked: ${maskedCounts(document.masked_items)}.`}
 			</Text>
-			{masked.isPending ? <Loading what="the masked text" /> : null}
-			{masked.isError ? (
-				<ErrorNotice
-					error={masked.error}
-					onRetry={() => void masked.refetch()}
-				/>
+			{shown.isPending ? <Loading what="the text" /> : null}
+			{shown.isError ? (
+				<ErrorNotice error={shown.error} onRetry={() => void shown.refetch()} />
 			) : null}
-			{masked.data === undefined ? null : (
+			{canDecide && review.data !== undefined ? (
+				<MaskingCorrections projectId={projectId} review={review.data} />
+			) : null}
+			{canDecide || masked.data === undefined ? null : (
 				<Box
 					p="4"
 					rounded="card"
@@ -565,16 +583,11 @@ function MaskedReview({
 					<Text>
 						{`If you approve it, this masked text becomes evidence the brief can cite as ${document.tag}. If you reject it, it is never used.`}
 					</Text>
-					{masked.data === undefined ? null : (
+					{version === undefined ? null : (
 						<HStack gap="3" wrap="wrap">
 							<Button
 								disabled={decide.isPending}
-								onClick={() =>
-									decide.mutate({
-										decision: "approve",
-										version: masked.data.mask_version,
-									})
-								}
+								onClick={() => decide.mutate({ decision: "approve", version })}
 							>
 								<Check />
 								Approve
@@ -582,12 +595,7 @@ function MaskedReview({
 							<Button
 								variant="outline"
 								disabled={decide.isPending}
-								onClick={() =>
-									decide.mutate({
-										decision: "reject",
-										version: masked.data.mask_version,
-									})
-								}
+								onClick={() => decide.mutate({ decision: "reject", version })}
 							>
 								<X />
 								Reject

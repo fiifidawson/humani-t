@@ -1,6 +1,6 @@
 /**
- * Project settings: name, archiving, members, and the danger zone where anyone may
- * leave and owners may delete.
+ * Project settings: name, archiving, members, masking rules, and the danger zone
+ * where anyone may leave and owners may delete.
  *
  * Deleting destroys the project's key (crypto-shredding), so it asks for the name
  * typed out. The API decides who may do what; this page only reflects it.
@@ -21,6 +21,7 @@ import { Field } from "../../ui/Field";
 import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
 import { LeaveControl } from "./LeaveProject";
+import { MaskingRulesSection } from "./MaskingRules";
 import { ArchiveControl, ArchiveStatus } from "./ProjectArchive";
 import { MembersSection } from "./ProjectMembers";
 import { SettingsSection } from "./SettingsSection";
@@ -58,6 +59,12 @@ export function ProjectSettingsPage() {
 				</SettingsSection>
 				<SettingsSection title="Members">
 					<MembersSection projectId={projectId} isOwner={role === "owner"} />
+				</SettingsSection>
+				<SettingsSection title="Privacy">
+					<MaskingRulesSection
+						projectId={projectId}
+						isOwner={role === "owner"}
+					/>
 				</SettingsSection>
 				<SettingsSection title="Danger zone" isDanger>
 					<Stack gap="4">

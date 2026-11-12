@@ -54,6 +54,7 @@ import {
 	TIERS,
 } from "./format";
 import { type LiveRun, useLiveRun } from "./liveRun";
+import { PrivacyGateCard } from "./PrivacyGateCard";
 import { type Run, stagesOf, useReview, useRunNumber } from "./reviewContext";
 
 /** The stages to run again: from the one that stopped, else every one not done. */
@@ -277,17 +278,11 @@ export function GateCard({ live }: { live: LiveRun }) {
 
 	if (gate.kind === "privacy_review") {
 		return (
-			<ChatCard title="Needs you · Privacy review" tone="warning">
-				<Text>
-					Uploaded documents need a masking check before any model reads them.
-					The run continues when an owner approves.
-				</Text>
-				<Text color="fg.muted">
-					{project.role === "owner"
-						? "The masking review isn't available in the browser yet."
-						: "Only owners can do this."}
-				</Text>
-			</ChatCard>
+			<PrivacyGateCard
+				projectId={project.id}
+				isOwner={project.role === "owner"}
+				payload={gatePayload}
+			/>
 		);
 	}
 
