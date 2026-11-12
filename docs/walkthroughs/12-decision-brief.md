@@ -186,7 +186,7 @@ uv run pytest tests/test_briefs_domain.py tests/test_briefs_retrieval.py tests/t
 | G12.1 | Not watched end to end against Ollama yet | Prompt wording may need tuning for small local models | Run T12.1 after integration |
 | G12.2 | Retrieval is lexical, without stemming | "price" does not find "prices" | A vector store behind `Retriever` ([ADR-0007](../adr/0007-bm25-retrieval-for-the-brief.md)) |
 | G12.3 | ~~No "no new evidence and no better score" stop~~ | Closed in [15](15-exports-and-questions.md): `stopped_because: no_progress` | Done |
-| G12.4 | Team documents (`D` tags) are not passages yet | Briefs cite papers only | Uploads (P2) |
+| G12.4 | ~~Team documents (`D` tags) are not passages yet~~ | Closed in [16](16-documents.md): approved documents are evidence for the brief | Done |
 | G12.5 | Brief versions are not compared, and "your view first" is not stored | UI_UX_SPEC §6.9 P3 parts | P3 |
 | G12.6 | ~~`decision_briefs` revision 0011 branches from 0007~~ | Resolved: re-chained after `0010` | Done |
 

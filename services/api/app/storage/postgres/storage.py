@@ -31,6 +31,7 @@ from app.domain.projects import AlreadyMemberError, Membership, Project, Role
 from app.domain.sessions import Session, SessionPolicy
 from app.storage.postgres.briefs import PostgresDecisionBriefRepository
 from app.storage.postgres.documents import PostgresDocumentRepository
+from app.storage.postgres.label_rules import PostgresLabelRulesRepository
 from app.storage.postgres.masking import (
     PostgresMaskingRuleRepository,
     PostgresPaperMaskRepository,
@@ -638,6 +639,7 @@ class PostgresUnitOfWork:
         self.masking_rules = PostgresMaskingRuleRepository(connection)
         self.paper_masks = PostgresPaperMaskRepository(connection)
         self.documents = PostgresDocumentRepository(connection)
+        self.label_rules = PostgresLabelRulesRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

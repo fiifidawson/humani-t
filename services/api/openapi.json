@@ -2143,6 +2143,157 @@
         }
       }
     },
+    "/api/v1/reviews/{review_id}/label-rules": {
+      "get": {
+        "tags": [
+          "label rules"
+        ],
+        "summary": "The review's label rules and every earlier version",
+        "operationId": "read_rules_api_v1_reviews__review_id__label_rules_get",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelRulesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "label rules"
+        ],
+        "summary": "Apply these rules as the review's next version",
+        "description": "Papers are relabelled from the answers already stored; no model is called.",
+        "operationId": "apply_rules_api_v1_reviews__review_id__label_rules_put",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelRulesIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesAppliedOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Someone else applied rules at the same moment"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{review_id}/label-rules/preview": {
+      "post": {
+        "tags": [
+          "label rules"
+        ],
+        "summary": "How many papers these rules would move; changes nothing",
+        "operationId": "preview_rules_api_v1_reviews__review_id__label_rules_preview_post",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelRulesIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesPreviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reviews/{review_id}/brief": {
       "get": {
         "tags": [
@@ -4839,6 +4990,28 @@
             "$ref": "#/components/schemas/ScreeningTier",
             "description": "The name shown: Highly relevant, Relevant, …"
           },
+          "label_set_by": {
+            "type": "string",
+            "enum": [
+              "model",
+              "rules"
+            ],
+            "title": "Label Set By",
+            "description": "Who set label, priority and tier: the model, or the review's rules.",
+            "default": "model"
+          },
+          "rules_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules Version",
+            "description": "The rules version that set the label, when rules did."
+          },
           "score": {
             "type": "number",
             "title": "Score"
@@ -5852,6 +6025,101 @@
         ],
         "title": "JobFinishedEvent"
       },
+      "LabelRulesIn": {
+        "properties": {
+          "possibly_min_met": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Possibly Min Met",
+            "description": "Inclusion criteria met for Possibly relevant."
+          },
+          "unclear_counts_as": {
+            "$ref": "#/components/schemas/UnclearCountsAs",
+            "description": "What an unclear inclusion answer counts as; uncertain asks a person."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "possibly_min_met",
+          "unclear_counts_as"
+        ],
+        "title": "LabelRulesIn",
+        "example": {
+          "possibly_min_met": 1,
+          "unclear_counts_as": "not_met"
+        }
+      },
+      "LabelRulesOut": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LabelRulesVersionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rules in force; null means the model's labels are shown."
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/LabelRulesVersionOut"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "Every version, oldest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "current",
+          "versions"
+        ],
+        "title": "LabelRulesOut"
+      },
+      "LabelRulesVersionOut": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "possibly_min_met": {
+            "type": "integer",
+            "title": "Possibly Min Met"
+          },
+          "unclear_counts_as": {
+            "$ref": "#/components/schemas/UnclearCountsAs"
+          },
+          "changed_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Changed By"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At"
+          },
+          "papers_moved": {
+            "type": "integer",
+            "title": "Papers Moved",
+            "description": "Papers of the newest run that changed tier."
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "possibly_min_met",
+          "unclear_counts_as",
+          "changed_by",
+          "changed_at",
+          "papers_moved"
+        ],
+        "title": "LabelRulesVersionOut"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -6531,6 +6799,12 @@
             ],
             "title": "Skipped Because",
             "description": "Set when skipped."
+          },
+          "is_cited_in_brief": {
+            "type": "boolean",
+            "title": "Is Cited In Brief",
+            "description": "Whether the brief this run wrote cites it, by `tag`.",
+            "default": false
           }
         },
         "type": "object",
@@ -7091,6 +7365,10 @@
               }
             ],
             "title": "Archived At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus",
+            "description": "UI_UX_SPEC §11.1: derived from the newest review and its latest run."
           }
         },
         "type": "object",
@@ -7099,7 +7377,8 @@
           "name",
           "role",
           "created_at",
-          "archived_at"
+          "archived_at",
+          "status"
         ],
         "title": "ProjectOut"
       },
@@ -7118,6 +7397,21 @@
           "name"
         ],
         "title": "ProjectRenameIn"
+      },
+      "ProjectStatus": {
+        "type": "string",
+        "enum": [
+          "planning",
+          "running",
+          "needs_you",
+          "brief_ready",
+          "done_without_brief",
+          "failed",
+          "cancelled",
+          "archived"
+        ],
+        "title": "ProjectStatus",
+        "description": "What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand."
       },
       "ProvenanceOut": {
         "properties": {
@@ -7513,6 +7807,92 @@
         ],
         "title": "Role"
       },
+      "RulesAppliedOut": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The review's newest run with papers, if any."
+          },
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/TierMoveOut"
+            },
+            "type": "array",
+            "title": "Moves"
+          },
+          "moved": {
+            "type": "integer",
+            "title": "Moved"
+          },
+          "untouchable": {
+            "type": "integer",
+            "title": "Untouchable",
+            "description": "Decisions rules cannot relabel: no per-criterion answers."
+          },
+          "version": {
+            "$ref": "#/components/schemas/LabelRulesVersionOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "moves",
+          "moved",
+          "untouchable",
+          "version"
+        ],
+        "title": "RulesAppliedOut"
+      },
+      "RulesPreviewOut": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The review's newest run with papers, if any."
+          },
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/TierMoveOut"
+            },
+            "type": "array",
+            "title": "Moves"
+          },
+          "moved": {
+            "type": "integer",
+            "title": "Moved"
+          },
+          "untouchable": {
+            "type": "integer",
+            "title": "Untouchable",
+            "description": "Decisions rules cannot relabel: no per-criterion answers."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "moves",
+          "moved",
+          "untouchable"
+        ],
+        "title": "RulesPreviewOut"
+      },
       "RunIn": {
         "properties": {
           "stages": {
@@ -7807,7 +8187,8 @@
         "enum": [
           "question",
           "answer",
-          "change_request"
+          "change_request",
+          "current_plan"
         ],
         "title": "SentTextKind"
       },
@@ -8589,6 +8970,27 @@
         ],
         "title": "ThreadOut"
       },
+      "TierMoveOut": {
+        "properties": {
+          "from_tier": {
+            "$ref": "#/components/schemas/ScreeningTier"
+          },
+          "to_tier": {
+            "$ref": "#/components/schemas/ScreeningTier"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_tier",
+          "to_tier",
+          "count"
+        ],
+        "title": "TierMoveOut"
+      },
       "TokensOut": {
         "properties": {
           "prompt": {
@@ -8782,6 +9184,16 @@
           "assessments"
         ],
         "title": "TradeOffOut"
+      },
+      "UnclearCountsAs": {
+        "type": "string",
+        "enum": [
+          "met",
+          "not_met",
+          "uncertain"
+        ],
+        "title": "UnclearCountsAs",
+        "description": "What an `unclear` answer to an inclusion criterion counts as."
       },
       "UnmaskIn": {
         "properties": {
@@ -9401,6 +9813,10 @@
     {
       "name": "papers",
       "description": "A run's papers and screening decisions with their provenance, PRISMA counts and the run manifest. Read-only; text is served masked."
+    },
+    {
+      "name": "label rules",
+      "description": "How per-criterion answers become labels: preview and apply a review's rules. No model is called; the model's decisions are never changed."
     },
     {
       "name": "runs",

@@ -17,7 +17,12 @@ from fastapi import Depends, Request
 
 from app.application.accounts import AccountService
 from app.application.audit import AuditLog
-from app.application.briefs import AnswerStage, BriefService, ScreenedSources
+from app.application.briefs import (
+    AnswerStage,
+    BriefService,
+    ScreenedSources,
+    StoredBriefCitations,
+)
 from app.application.documents import (
     DocumentEvidence,
     DocumentProcessor,
@@ -27,6 +32,7 @@ from app.application.documents import (
 from app.application.encryption import ScopeEncryption
 from app.application.exports import ExportService
 from app.application.inference import GuardedInference
+from app.application.label_rules import LabelRulesService, PlanCriteria
 from app.application.masking import (
     DocumentsAwaitingReview,
     MaskingRuleService,
@@ -122,6 +128,7 @@ class Providers:
     reviews: ReviewService
     runs: RunService
     papers: PaperService
+    label_rules: LabelRulesService
     plans: PlanService
     masking_rules: MaskingRuleService
     briefs: BriefService
@@ -300,6 +307,7 @@ class _Pipeline:
     masked: MaskedTextSource[UnitOfWork]
     sources: tuple[PaperSearchProvider, ...]
     inference: GuardedInference
+    rules: MaskingRuleService
     audit: AuditLog
     clock: Callable[[], datetime]
 
@@ -322,6 +330,7 @@ def _pipeline_stages(settings: Settings, pipeline: _Pipeline) -> dict[str, Stage
             plans=p.plans,
             inference=p.inference,
             masked=p.masked,
+            rules=p.rules,
             audit=p.audit,
             concurrency=settings.screening_concurrency,
             clock=p.clock,
@@ -458,10 +467,12 @@ def build_providers(
         masked=masks,
         sources=tuple(provider for provider, _ in sources),
         inference=inference,
+        rules=masking_rules,
         audit=audit,
         clock=clock,
     )
     compilers = {s: _QUERY_COMPILERS[s] for s in settings.paper_source_ids}
+    criteria = PlanCriteria(plans)
     stages = {
         "queries": QueriesStage(plans, compilers),
         "mask": _mask_stage(
@@ -474,7 +485,9 @@ def build_providers(
             audit=audit,
             inference=inference,
             retriever=Bm25Retriever(),
-            evidence=ScreenedEvidence(pipeline.store, pipeline.masked, document_evidence),
+            evidence=ScreenedEvidence(
+                pipeline.store, pipeline.masked, criteria, document_evidence
+            ),
             catalogue=ScreenedSources(pipeline.store),
             sanitizer=planning_sanitizer(settings, ner),
             rules=masking_rules,
@@ -488,6 +501,7 @@ def build_providers(
         audit=audit,
         signals=signals,
         available_stages=tuple(stages),
+        rules=masking_rules,
         clock=clock,
     )
     document_sanitizer = _document_sanitizer(ner)
@@ -533,6 +547,11 @@ def build_providers(
             store=pipeline.store,
             masked=pipeline.masked,
             encryption=encryption,
+            citations=StoredBriefCitations(encryption),
+            criteria=criteria,
+        ),
+        label_rules=LabelRulesService(
+            storage=storage, store=pipeline.store, criteria=criteria, audit=audit, clock=clock
         ),
         plans=plans,
         masking_rules=masking_rules,
@@ -551,7 +570,9 @@ def build_providers(
             encryption=encryption,
             inference=inference,
             retriever=Bm25Retriever(),
-            evidence=ScreenedEvidence(pipeline.store, pipeline.masked, document_evidence),
+            evidence=ScreenedEvidence(
+                pipeline.store, pipeline.masked, criteria, document_evidence
+            ),
             rules=masking_rules,
             worker_id=f"answers-{uuid.uuid4().hex[:12]}",
             signals=signals,
@@ -642,6 +663,13 @@ def get_papers(providers: ProvidersDep) -> PaperService:
 
 
 PapersDep = Annotated[PaperService, Depends(get_papers)]
+
+
+def get_label_rules(providers: ProvidersDep) -> LabelRulesService:
+    return providers.label_rules
+
+
+LabelRulesDep = Annotated[LabelRulesService, Depends(get_label_rules)]
 
 
 def get_plans(providers: ProvidersDep) -> PlanService:

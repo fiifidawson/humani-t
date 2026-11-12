@@ -17,6 +17,7 @@ from app.application import screening
 from app.domain.discovery import TextKind
 from app.domain.encryption import KeyDestroyedError
 from app.domain.inference import InferenceRateLimitedError
+from app.domain.plans import CriterionKind, number_criteria
 from app.domain.runs import JsonValue, RunState
 from app.domain.screening import (
     UNREADABLE_RATIONALE,
@@ -47,7 +48,7 @@ from tests.pipeline_support import (
     tag_number,
 )
 from tests.project_support import PROJECTS, project_events, send
-from tests.run_support import LEASE, SimulatedCrashError, run_until_idle
+from tests.run_support import LEASE, SimulatedCrashError, add_rule, run_until_idle
 
 
 def _run(p: Pipeline, stages: tuple[str, ...] = ALL_STAGES) -> str:
@@ -570,6 +571,34 @@ class TestScreen:
         assert _decisions(p, run_id) == []
         assert p.summary(run_id, "screen")["failed"] == 4
         assert p.rt.stored_run(run_id).state is RunState.DONE
+
+    def test_a_criterion_holding_a_masked_term_fails_the_stage_and_is_never_sent(self):
+        p = make_pipeline()
+        criteria = number_criteria(
+            [
+                (CriterionKind.INCLUSION, "Displaced people or refugees"),
+                (CriterionKind.EXCLUSION, "Reports from the Hagadera office"),
+            ]
+        )
+        p.plans.accept(p.rt.review_id, accepted_plan(p.rt.review_id, criteria=criteria))
+        add_rule(p.rt, "Hagadera", "LOCATION")
+
+        run_id = _run(p)
+
+        assert p.model.requests == []
+        failure = p.failure(run_id) or ""
+        assert "Criterion E1" in failure
+        assert "Hagadera" not in failure
+
+    def test_paper_text_holding_a_masked_term_is_stopped_by_the_privacy_check(self):
+        p = make_pipeline()
+        add_rule(p.rt, "vouchers")
+
+        run_id = _run(p)
+
+        assert p.model.requests
+        assert not any("vouchers" in paper_text_in(r).casefold() for r in p.model.requests)
+        assert p.summary(run_id, "screen")["failed"] == 1
 
     def test_a_review_without_an_accepted_plan_fails_plainly(self):
         p = make_pipeline()

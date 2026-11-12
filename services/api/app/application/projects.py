@@ -29,11 +29,14 @@ from app.domain.projects import (
     Membership,
     NoSuchAccountError,
     Project,
+    ProjectStatus,
     Role,
     can,
     normalize_project_name,
+    project_status,
     require_an_owner_remains,
 )
+from app.domain.reviews import ReviewStatus
 from app.domain.sessions import SessionPolicy
 from app.storage.base import StorageProvider, UnitOfWork
 
@@ -47,13 +50,14 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True, slots=True)
 class ProjectView:
-    """A project as one member sees it: its name in the clear and their own role."""
+    """A project as one member sees it: its name in the clear, their own role, its status."""
 
     id: UUID
     name: str
     role: Role
     created_at: datetime
     archived_at: datetime | None
+    status: ProjectStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +126,7 @@ class ProjectService:
             await uow.memberships.add(owner)
             await self._record(uow, current, request_id, "project.created", project_id)
             await uow.commit()
-        return ProjectView(project_id, name, Role.OWNER, now, None)
+        return ProjectView(project_id, name, Role.OWNER, now, None, ProjectStatus.PLANNING)
 
     async def list_mine(
         self, current: Current, *, include_archived: bool = False
@@ -155,9 +159,10 @@ class ProjectService:
             renamed = project.renamed(await self._seal_name(uow, project_id, name))
             await uow.projects.save(renamed)
             await self._record(uow, current, request_id, "project.renamed", project_id)
+            status = await _status(uow, renamed)
             await uow.commit()
         return ProjectView(
-            project_id, name, membership.role, project.created_at, project.archived_at
+            project_id, name, membership.role, project.created_at, project.archived_at, status
         )
 
     async def archive(
@@ -338,7 +343,12 @@ class ProjectService:
             uow, self._name_context(project.id), project.name_sealed
         )
         return ProjectView(
-            project.id, name.decode(), role, project.created_at, project.archived_at
+            project.id,
+            name.decode(),
+            role,
+            project.created_at,
+            project.archived_at,
+            await _status(uow, project),
         )
 
     @staticmethod
@@ -394,3 +404,17 @@ class ProjectService:
             str(membership.user_id),
             scope_id=membership.project_id,
         )
+
+
+async def _status(uow: UnitOfWork, project: Project) -> ProjectStatus:
+    reviews = await uow.reviews.list_for_project(project.id)
+    latest = reviews[0] if reviews else None
+    has_brief = False
+    if latest is not None and latest.status is ReviewStatus.DONE:
+        runs = await uow.runs.list_for_review(latest.id)
+        has_brief = bool(runs) and await uow.briefs.for_run(runs[0].id) is not None
+    return project_status(
+        is_archived=project.is_archived,
+        latest_review=None if latest is None else latest.status,
+        has_brief=has_brief,
+    )

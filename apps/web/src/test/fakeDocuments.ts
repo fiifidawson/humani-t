@@ -1,15 +1,17 @@
 /**
- * The documents half of the fake API, served through MSW like fakeApi.ts.
+ * The documents half of the fake API, served through MSW like fakeApi.ts, with
+ * the project's masking rules.
  *
  * It applies the rules the screens depend on: 404 for non-members, owner-only
- * writes, the type read from the bytes, size and quota checked first, and tags
- * never reused. Tests drive processing (`finishProcessing`, `fail`). Raw text is
- * never held here.
+ * writes and original text, the type read from the bytes, size and quota checked
+ * first, tags never reused, and corrections that mask again with the project's
+ * rules. Tests drive processing (`finishProcessing`, `fail`). The original texts
+ * here are made up.
  */
 
 import { HttpResponse, http } from "msw";
 import type { components } from "../api/schema.gen";
-import { jsonBody, nextId, problem } from "./fakeHttp";
+import { jsonBody, nextId, noContent, problem, text } from "./fakeHttp";
 
 const API = "*/api/v1";
 const MIB = 1024 * 1024;
@@ -19,16 +21,43 @@ type Role = Schemas["Role"];
 export type FakeDocument = Schemas["DocumentOut"];
 type Status = Schemas["DocumentStatus"];
 type Failure = Schemas["DocumentFailure"];
+type EntityType = Schemas["EntityType"];
+type Span = Schemas["SpanOut"];
+type Exemption = Schemas["ExemptionOut"];
+export type FakeMaskingRule = Schemas["MaskingRuleOut"];
 
 export const UNSUPPORTED =
 	"This kind of file isn't accepted. Upload a PDF, a Word document (.docx), or plain text or Markdown in UTF-8.";
 export const MASKING_CHANGED =
 	"The masking changed since you looked at it. Reload it and review again.";
 export const NOT_YOUR_ROLE = "Your role in this project does not allow this.";
+export const DUPLICATE_RULE = "This project already masks that term.";
+export const REVIEW_NOTICE =
+	"You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read.";
 
-/** The masked text a document gets when the test does not say. */
-export const EXAMPLE_MASKED_TEXT =
-	"Interview on [DATE_1] with [EMAIL_1]. [PERSON_1] leads the team. MRN [MEDICAL_RECORD_1] was referred.";
+/** A value the fake's detectors find wherever it occurs, exactly as written. */
+export interface Found {
+	value: string;
+	type: EntityType;
+	source?: string;
+}
+
+/** A document's text as read from the file, and what the detectors find in it. */
+export interface Original {
+	text: string;
+	found: readonly Found[];
+}
+
+/** The text a document gets when the test does not say. */
+export const EXAMPLE_ORIGINAL: Original = {
+	text: "Interview on 12 March with amina@example.org. Kofi Mensah leads the team. MRN 448-1207 was referred.",
+	found: [
+		{ value: "12 March", type: "DATE", source: "dates@1" },
+		{ value: "amina@example.org", type: "EMAIL" },
+		{ value: "Kofi Mensah", type: "PERSON", source: "names@1" },
+		{ value: "448-1207", type: "MEDICAL_RECORD" },
+	],
+};
 
 const FAILURE_MESSAGES: Readonly<Record<Failure, string>> = {
 	malware_found:
@@ -59,12 +88,8 @@ const STATE_MESSAGES: Partial<Record<Status, string>> = {
 	failed: "This document could not be processed.",
 };
 
-const PLACEHOLDER = /\[([A-Z]+(?:_[A-Z]+)*)_(\d+)\]/g;
-
-const ENTITY_TYPES: readonly Schemas["EntityType"][] = [
-	"PERSON",
-	"LOCATION",
-	"DATE",
+/** domain/masking.py `STRUCTURED_ENTITY_TYPES`: a detector's finding of these stays. */
+const STRUCTURED: readonly EntityType[] = [
 	"EMAIL",
 	"PHONE",
 	"MEDICAL_RECORD",
@@ -76,6 +101,13 @@ const ENTITY_TYPES: readonly Schemas["EntityType"][] = [
 	"COORDINATES",
 ];
 
+const ENTITY_TYPES: readonly EntityType[] = [
+	"PERSON",
+	"LOCATION",
+	"DATE",
+	...STRUCTURED,
+];
+
 interface Access {
 	refuseUnlessSignedIn: () => Response | null;
 	roleIn: (projectId: string) => Role | null;
@@ -85,7 +117,16 @@ interface Access {
 interface Stored {
 	projectId: string;
 	document: FakeDocument;
-	maskedText: string | null;
+	/** `null` until the worker has read the file. */
+	original: string | null;
+	spans: Span[];
+	removed: Exemption[];
+}
+
+interface Masked {
+	text: string;
+	items: Schemas["MaskedItemOut"][];
+	counts: Record<string, number>;
 }
 
 export interface DocumentOptions {
@@ -93,20 +134,93 @@ export interface DocumentOptions {
 	uploadedBy?: string;
 	sizeBytes?: number;
 	fileType?: Schemas["DocumentType"];
-	maskedText?: string;
+	original?: Original;
 	failure?: Failure;
 	isTruncated?: boolean;
 }
 
-/** Distinct placeholders by type, as the API counts `masked_items`. */
-function countMasked(maskedText: string): Record<string, number> {
-	const seen = new Map<string, Set<string>>();
-	for (const [whole, type = ""] of maskedText.matchAll(PLACEHOLDER)) {
-		seen.set(type, (seen.get(type) ?? new Set()).add(whole));
-	}
-	return Object.fromEntries(
-		[...seen].map(([type, values]) => [type, values.size]),
+const escapeRegExp = (value: string) =>
+	value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const canRemove = (source: string, type: EntityType): boolean =>
+	source.startsWith("user:") ||
+	(!source.startsWith("rule:") && !STRUCTURED.includes(type));
+
+const span = (
+	start: number,
+	end: number,
+	entity_type: EntityType,
+	source: string,
+): Span => ({
+	start,
+	end,
+	entity_type,
+	source,
+	can_remove: canRemove(source, entity_type),
+});
+
+function detect(original: Original): Span[] {
+	return original.found.flatMap(({ value, type, source = "patterns@1" }) =>
+		[...original.text.matchAll(new RegExp(escapeRegExp(value), "g"))].map(
+			(match) => span(match.index, match.index + value.length, type, source),
+		),
 	);
+}
+
+/** domain/masking.py `rule_spans`: whole words, any case. */
+function ruleSpans(raw: string, rules: readonly FakeMaskingRule[]): Span[] {
+	return rules.flatMap((rule) => {
+		const words = rule.term.split(/\s+/).map((w) => escapeRegExp(w));
+		const pattern = new RegExp(`(?<!\\w)${words.join("\\s+")}(?!\\w)`, "giu");
+		return [...raw.matchAll(pattern)].map((match) =>
+			span(
+				match.index,
+				match.index + match[0].length,
+				rule.entity_type,
+				`rule:${rule.id}`,
+			),
+		);
+	});
+}
+
+/** domain/masking.py `apply_spans`: overlaps merge, one value keeps one placeholder. */
+function applySpans(raw: string, spans: readonly Span[]): Masked {
+	const ordered = [...spans].sort((a, b) => a.start - b.start || b.end - a.end);
+	const regions: { start: number; end: number; type: EntityType }[] = [];
+	for (const s of ordered) {
+		const last = regions.at(-1);
+		if (last !== undefined && s.start < last.end) {
+			last.end = Math.max(last.end, s.end);
+		} else {
+			regions.push({ start: s.start, end: s.end, type: s.entity_type });
+		}
+	}
+	const numbers = new Map<string, number>();
+	const counts: Record<string, number> = {};
+	const items: Schemas["MaskedItemOut"][] = [];
+	let masked = "";
+	let cursor = 0;
+	for (const region of regions) {
+		const key = `${region.type} ${raw.slice(region.start, region.end).toLowerCase()}`;
+		if (!numbers.has(key)) {
+			counts[region.type] = (counts[region.type] ?? 0) + 1;
+			numbers.set(key, counts[region.type] ?? 1);
+		}
+		masked += raw.slice(cursor, region.start);
+		const placeholder = `[${region.type}_${numbers.get(key)}]`;
+		items.push({
+			start: masked.length,
+			end: masked.length + placeholder.length,
+			placeholder,
+			entity_type: region.type,
+			sources: ordered
+				.filter((s) => s.start < region.end && s.end > region.start)
+				.map((s) => s.source),
+		});
+		masked += placeholder;
+		cursor = region.end;
+	}
+	return { text: masked + raw.slice(cursor), items, counts };
 }
 
 /** The API's rule (domain/documents.py `detect_document_type`), for the bytes a test sends. */
@@ -133,8 +247,13 @@ function detectType(
 	return /\.(md|markdown)\s*$/i.test(filename) ? "md" : "txt";
 }
 
+const isEntityType = (value: unknown): value is EntityType =>
+	ENTITY_TYPES.some((type) => type === value);
+
 export class FakeDocuments {
 	readonly all: Stored[] = [];
+	/** Every project's masking rules, oldest first. */
+	readonly rules: (FakeMaskingRule & { projectId: string })[] = [];
 	maxFileBytes = 20 * MIB;
 	maxDocuments = 200;
 	maxSizeBytes = 1024 * MIB;
@@ -153,12 +272,6 @@ export class FakeDocuments {
 		const number = (this.highestNumber.get(projectId) ?? 0) + 1;
 		this.highestNumber.set(projectId, number);
 		const status = options.status ?? "uploaded";
-		const isMasked = ["awaiting_review", "approved", "rejected"].includes(
-			status,
-		);
-		const maskedText = isMasked
-			? (options.maskedText ?? EXAMPLE_MASKED_TEXT)
-			: null;
 		const document: FakeDocument = {
 			id: nextId("d"),
 			tag: `D${number}`,
@@ -176,26 +289,33 @@ export class FakeDocuments {
 			scanned_with: status === "uploaded" ? null : "none",
 			extracted_with: null,
 			page_count: null,
-			character_count: maskedText?.length ?? null,
+			character_count: null,
 			is_truncated: options.isTruncated ?? false,
-			masked_items: maskedText === null ? {} : countMasked(maskedText),
-			mask_version: maskedText === null ? 0 : 1,
+			masked_items: {},
+			mask_version: 0,
 			last_review: null,
 		};
-		this.all.push({ projectId, document, maskedText });
+		const stored: Stored = {
+			projectId,
+			document,
+			original: null,
+			spans: [],
+			removed: [],
+		};
+		this.all.push(stored);
+		if (["awaiting_review", "approved", "rejected"].includes(status)) {
+			this.read(stored, options.original ?? EXAMPLE_ORIGINAL);
+		}
 		return document;
 	}
 
 	/** The worker's part: scanned, read and masked, now waiting for an owner. */
-	finishProcessing(documentId: string, maskedText = EXAMPLE_MASKED_TEXT): void {
+	finishProcessing(documentId: string, original = EXAMPLE_ORIGINAL): void {
 		const stored = this.find(documentId);
-		stored.maskedText = maskedText;
+		this.read(stored, original);
 		Object.assign(stored.document, {
 			status: "awaiting_review",
 			scanned_with: "none",
-			character_count: maskedText.length,
-			masked_items: countMasked(maskedText),
-			mask_version: 1,
 		} satisfies Partial<FakeDocument>);
 	}
 
@@ -217,6 +337,48 @@ export class FakeDocuments {
 	/** Another owner deleted it. Its tag stays used, as the API keeps it. */
 	remove(documentId: string): void {
 		this.all.splice(this.all.indexOf(this.find(documentId)), 1);
+	}
+
+	/** Arrange a masking rule, as if an owner had added it. */
+	addRule(
+		projectId: string,
+		term: string,
+		entityType: EntityType = "PERSON",
+	): FakeMaskingRule {
+		const rule = {
+			id: nextId("mr"),
+			term,
+			entity_type: entityType,
+			created_by: this.access.userId() ?? nextId("u"),
+			created_at: "2026-11-05T09:30:00Z",
+		};
+		this.rules.push({ projectId, ...rule });
+		return rule;
+	}
+
+	/** The masked text, as the API would show it now. */
+	maskedText(documentId: string): string {
+		const { original, spans } = this.find(documentId);
+		return original === null ? "" : applySpans(original, spans).text;
+	}
+
+	private read(stored: Stored, original: Original): void {
+		stored.original = original.text;
+		stored.spans = [
+			...detect(original),
+			...ruleSpans(original.text, this.rulesIn(stored.projectId)),
+		];
+		Object.assign(stored.document, {
+			character_count: original.text.length,
+			masked_items: applySpans(original.text, stored.spans).counts,
+			mask_version: 1,
+		} satisfies Partial<FakeDocument>);
+	}
+
+	private rulesIn(projectId: string): FakeMaskingRule[] {
+		return this.rules
+			.filter((r) => r.projectId === projectId)
+			.map(({ projectId: _, ...rule }) => rule);
 	}
 
 	private find(documentId: string): Stored {
@@ -245,10 +407,38 @@ export class FakeDocuments {
 		return this.access.roleIn(projectId) ?? problem(404, "Not Found");
 	}
 
+	/** The gate, then 403 for anyone but an owner. */
+	private ownerGate(projectId: string): Response | null {
+		const role = this.gate(projectId);
+		if (role instanceof Response) {
+			return role;
+		}
+		return role === "owner" ? null : problem(403, NOT_YOUR_ROLE);
+	}
+
 	private storedIn(projectId: string, documentId: string): Stored | undefined {
 		return this.all.find(
 			(s) => s.projectId === projectId && s.document.id === documentId,
 		);
+	}
+
+	private review(stored: Stored): Schemas["DocumentReviewOut"] {
+		const raw = stored.original ?? "";
+		const masked = applySpans(raw, stored.spans);
+		return {
+			document_id: stored.document.id,
+			tag: stored.document.tag,
+			status: stored.document.status,
+			mask_version: stored.document.mask_version,
+			raw_text: raw,
+			masked_text: masked.text,
+			spans: [...stored.spans].sort((a, b) => a.start - b.start),
+			removed: stored.removed,
+			items: masked.items,
+			page_starts: [0],
+			is_truncated: stored.document.is_truncated,
+			notice: REVIEW_NOTICE,
+		};
 	}
 
 	private async upload(projectId: string, request: Request) {
@@ -303,19 +493,16 @@ export class FakeDocuments {
 
 	/** No recent sign-in needed: the API asks only for the owner's role. */
 	private delete(projectId: string, documentId: string) {
-		const role = this.gate(projectId);
-		if (role instanceof Response) {
-			return role;
-		}
-		if (role !== "owner") {
-			return problem(403, NOT_YOUR_ROLE);
+		const refused = this.ownerGate(projectId);
+		if (refused !== null) {
+			return refused;
 		}
 		const stored = this.storedIn(projectId, documentId);
 		if (stored === undefined) {
 			return problem(404, "Not Found");
 		}
 		this.remove(documentId);
-		return new HttpResponse(null, { status: 204 });
+		return noContent();
 	}
 
 	private async decide(
@@ -324,12 +511,9 @@ export class FakeDocuments {
 		decision: Schemas["DocumentDecision"],
 		request: Request,
 	) {
-		const role = this.gate(projectId);
-		if (role instanceof Response) {
-			return role;
-		}
-		if (role !== "owner") {
-			return problem(403, NOT_YOUR_ROLE);
+		const refused = this.ownerGate(projectId);
+		if (refused !== null) {
+			return refused;
 		}
 		const stored = this.storedIn(projectId, documentId);
 		if (stored === undefined) {
@@ -355,9 +539,150 @@ export class FakeDocuments {
 		return HttpResponse.json(document);
 	}
 
+	/** application/documents.py `_correct`: a new version, masked again with the rules. */
+	private async correctMasks(
+		projectId: string,
+		documentId: string,
+		request: Request,
+		change: (
+			stored: Stored,
+			body: Record<string, unknown>,
+			raw: string,
+		) => Response | null,
+	) {
+		const refused = this.ownerGate(projectId);
+		if (refused !== null) {
+			return refused;
+		}
+		const stored = this.storedIn(projectId, documentId);
+		if (stored?.original == null) {
+			return problem(404, "Not Found");
+		}
+		const { document } = stored;
+		if (!["awaiting_review", "approved"].includes(document.status)) {
+			return problem(
+				409,
+				STATE_MESSAGES[document.status] ?? "This document can't be corrected.",
+			);
+		}
+		const body = await jsonBody(request);
+		if (body["version"] !== document.mask_version) {
+			return problem(409, MASKING_CHANGED);
+		}
+		const refusal = change(stored, body, stored.original);
+		if (refusal !== null) {
+			return refusal;
+		}
+		const fromRules = ruleSpans(stored.original, this.rulesIn(projectId));
+		stored.spans = [
+			...stored.spans,
+			...fromRules.filter(
+				(r) =>
+					!stored.spans.some(
+						(s) =>
+							s.start === r.start && s.end === r.end && s.source === r.source,
+					),
+			),
+		];
+		Object.assign(document, {
+			mask_version: document.mask_version + 1,
+			status: "awaiting_review",
+			masked_items: applySpans(stored.original, stored.spans).counts,
+		} satisfies Partial<FakeDocument>);
+		return HttpResponse.json(this.review(stored));
+	}
+
+	private addMask(stored: Stored, body: Record<string, unknown>, raw: string) {
+		const { start, end, entity_type: type } = body;
+		if (typeof start !== "number" || typeof end !== "number") {
+			return problem(422, "The request body is not valid.");
+		}
+		if (!isEntityType(type)) {
+			return problem(422, "The request body is not valid.");
+		}
+		if (!(start >= 0 && start < end && end <= raw.length)) {
+			return problem(422, "The range to mask must lie within the text");
+		}
+		if (raw.slice(start, end).trim() === "") {
+			return problem(422, "The range to mask must contain text");
+		}
+		stored.spans.push(span(start, end, type, `user:${this.access.userId()}`));
+		return null;
+	}
+
+	private unmask(stored: Stored, body: Record<string, unknown>) {
+		const reason = text(body, "reason").split(/\s+/).join(" ").trim();
+		if (reason === "") {
+			return problem(422, "The reason must not be blank");
+		}
+		const matching = stored.spans.filter(
+			(s) => s.start === body["start"] && s.end === body["end"],
+		);
+		if (matching.length === 0) {
+			return problem(422, "No mask covers exactly that range");
+		}
+		if (matching.some((s) => s.source.startsWith("rule:"))) {
+			return problem(
+				422,
+				"A project masking rule made this mask; remove the rule to stop masking it",
+			);
+		}
+		if (matching.some((s) => !s.can_remove)) {
+			return problem(
+				422,
+				"Structured identifiers (emails, phone numbers, ID numbers…) stay masked",
+			);
+		}
+		stored.spans = stored.spans.filter((s) => !matching.includes(s));
+		stored.removed.push(
+			...matching.map((s) => ({
+				start: s.start,
+				end: s.end,
+				entity_type: s.entity_type,
+				source: s.source,
+				removed_by: this.access.userId() ?? "",
+				reason,
+			})),
+		);
+		return null;
+	}
+
+	private async createRule(projectId: string, request: Request) {
+		const refused = this.ownerGate(projectId);
+		if (refused !== null) {
+			return refused;
+		}
+		const body = await jsonBody(request);
+		const term = text(body, "term").split(/\s+/).join(" ").trim();
+		const type = body["entity_type"] ?? "PERSON";
+		if (!isEntityType(type)) {
+			return problem(422, "The request body is not valid.");
+		}
+		if (term.length < 2) {
+			return problem(422, "MaskingRule.term must be at least 2 characters");
+		}
+		if (
+			this.rulesIn(projectId).some(
+				(r) => r.term.toLowerCase() === term.toLowerCase(),
+			)
+		) {
+			return problem(409, DUPLICATE_RULE);
+		}
+		const rule = this.addRule(projectId, term, type);
+		return HttpResponse.json(rule, {
+			status: 201,
+			headers: {
+				location: `/api/v1/projects/${projectId}/masking-rules/${rule.id}`,
+			},
+		});
+	}
+
 	handlers() {
 		const documents = `${API}/projects/:projectId/documents`;
 		const one = `${documents}/:documentId`;
+		const rules = `${API}/projects/:projectId/masking-rules`;
+		const ids = (params: Record<string, unknown>) =>
+			[String(params["projectId"]), String(params["documentId"])] as const;
 		return [
 			http.get(documents, ({ params }) => {
 				const projectId = String(params["projectId"]);
@@ -383,84 +708,107 @@ export class FakeDocuments {
 
 			http.post(documents, async ({ params, request }) => {
 				const projectId = String(params["projectId"]);
-				const role = this.gate(projectId);
-				if (role instanceof Response) {
-					return role;
-				}
-				return role === "owner"
-					? this.upload(projectId, request)
-					: problem(403, NOT_YOUR_ROLE);
+				const refused = this.ownerGate(projectId);
+				return refused ?? this.upload(projectId, request);
 			}),
 
 			http.get(one, ({ params }) => {
-				const projectId = String(params["projectId"]);
+				const [projectId, documentId] = ids(params);
 				const role = this.gate(projectId);
 				if (role instanceof Response) {
 					return role;
 				}
-				const stored = this.storedIn(projectId, String(params["documentId"]));
+				const stored = this.storedIn(projectId, documentId);
 				return stored === undefined
 					? problem(404, "Not Found")
 					: HttpResponse.json(stored.document);
 			}),
 
-			http.delete(one, ({ params }) =>
-				this.delete(String(params["projectId"]), String(params["documentId"])),
-			),
+			http.delete(one, ({ params }) => this.delete(...ids(params))),
 
 			http.get(`${one}/masked`, ({ params }) => {
-				const projectId = String(params["projectId"]);
+				const [projectId, documentId] = ids(params);
 				const role = this.gate(projectId);
 				if (role instanceof Response) {
 					return role;
 				}
-				const stored = this.storedIn(projectId, String(params["documentId"]));
-				if (stored === undefined || stored.maskedText === null) {
+				const stored = this.storedIn(projectId, documentId);
+				if (stored?.original == null) {
 					return problem(404, "Not Found");
 				}
-				const { document, maskedText } = stored;
+				const { document } = stored;
+				const masked = applySpans(stored.original, stored.spans);
 				return HttpResponse.json({
 					document_id: document.id,
 					tag: document.tag,
 					status: document.status,
 					mask_version: document.mask_version,
-					masked_text: maskedText,
-					items: [...maskedText.matchAll(PLACEHOLDER)].flatMap((match) => {
-						const type = ENTITY_TYPES.find((t) => t === match[1]);
-						return type === undefined
-							? []
-							: [
-									{
-										start: match.index,
-										end: match.index + match[0].length,
-										placeholder: match[0],
-										entity_type: type,
-										sources: ["patterns@1"],
-									},
-								];
-					}),
+					masked_text: masked.text,
+					items: masked.items,
 					page_starts: [0],
 					is_truncated: document.is_truncated,
 				} satisfies Schemas["MaskedDocumentOut"]);
 			}),
 
-			http.post(`${one}/approve`, ({ params, request }) =>
-				this.decide(
-					String(params["projectId"]),
-					String(params["documentId"]),
-					"approve",
-					request,
+			http.get(`${one}/review`, ({ params }) => {
+				const [projectId, documentId] = ids(params);
+				const refused = this.ownerGate(projectId);
+				if (refused !== null) {
+					return refused;
+				}
+				const stored = this.storedIn(projectId, documentId);
+				return stored?.original == null
+					? problem(404, "Not Found")
+					: HttpResponse.json(this.review(stored));
+			}),
+
+			http.post(`${one}/masks`, ({ params, request }) =>
+				this.correctMasks(...ids(params), request, (stored, body, raw) =>
+					this.addMask(stored, body, raw),
 				),
 			),
 
-			http.post(`${one}/reject`, ({ params, request }) =>
-				this.decide(
-					String(params["projectId"]),
-					String(params["documentId"]),
-					"reject",
-					request,
+			http.post(`${one}/unmask`, ({ params, request }) =>
+				this.correctMasks(...ids(params), request, (stored, body) =>
+					this.unmask(stored, body),
 				),
 			),
+
+			http.post(`${one}/approve`, ({ params, request }) =>
+				this.decide(...ids(params), "approve", request),
+			),
+
+			http.post(`${one}/reject`, ({ params, request }) =>
+				this.decide(...ids(params), "reject", request),
+			),
+
+			http.get(rules, ({ params }) => {
+				const projectId = String(params["projectId"]);
+				return (
+					this.ownerGate(projectId) ??
+					HttpResponse.json(this.rulesIn(projectId))
+				);
+			}),
+
+			http.post(rules, ({ params, request }) =>
+				this.createRule(String(params["projectId"]), request),
+			),
+
+			http.delete(`${rules}/:ruleId`, ({ params }) => {
+				const projectId = String(params["projectId"]);
+				const refused = this.ownerGate(projectId);
+				if (refused !== null) {
+					return refused;
+				}
+				const index = this.rules.findIndex(
+					(r) => r.projectId === projectId && r.id === params["ruleId"],
+				);
+				if (index === -1) {
+					return problem(404, "Not Found");
+				}
+				this.rules.splice(index, 1);
+				return noContent();
+			}),
 		];
 	}
 }

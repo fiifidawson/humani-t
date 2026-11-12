@@ -283,6 +283,179 @@ describe("the papers canvas (UI_UX_SPEC §6.8)", () => {
 		expect(details).not.toHaveTextContent(/\b[IE]\d\b/);
 	});
 
+	it("opens a row to each criterion's answer and quote, the label, what was read, and where the brief cites it", async () => {
+		const { api, path, review, run } = screenedReview();
+		api.reviews.addPaper(review, run, {
+			title: "Mobile money in displacement settings",
+			tier: "highly_relevant",
+			url: "https://example.org/mobile-money",
+			isCitedInBrief: true,
+			answers: [
+				{ id: "I1", answer: "yes", quote: "internally displaced households" },
+				{ id: "I2", answer: "partly", quote: "<b>food</b> consumption score" },
+				{ id: "E1", answer: "no", quote: null },
+			],
+		});
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", {
+				name: "Mobile money in displacement settings",
+			}),
+		);
+
+		const details = within(canvas).getByRole("region", {
+			name: "Why: Mobile money in displacement settings",
+		});
+		const answers = within(details).getByRole("list", {
+			name: "Each criterion",
+		});
+		const items = within(answers).getAllByRole("listitem");
+		expect(items[0]).toHaveTextContent(
+			"Displaced households or camps · Yes“internally displaced households”",
+		);
+		expect(items[1]).toHaveTextContent(
+			"Reports a food security outcome · Partly“<b>food</b> consumption score”",
+		);
+		expect(items[2]).toHaveTextContent(
+			"Excluded if: School feeding programmes · No",
+		);
+		expect(details.querySelector("b")).toBeNull();
+		expect(details).not.toHaveTextContent(/\b[IE]\d\b/);
+		expect(details).toHaveTextContent(
+			"Label: Highly relevant, as the model judged it. No rule changed it.",
+		);
+		expect(details).toHaveTextContent(
+			"Read: the abstract only, not the full text",
+		);
+		expect(
+			within(details).getByRole("link", { name: "Open paper" }),
+		).toHaveAttribute("href", "https://example.org/mobile-money");
+		expect(details).toHaveTextContent("Cited in the brief as [P5]");
+	});
+
+	it("says when the label rules set a label, and which version", async () => {
+		const { api, path, review, run } = screenedReview();
+		api.reviews.addPaper(review, run, {
+			title: "Mobile money in displacement settings",
+			tier: "relevant",
+			rulesVersion: 2,
+		});
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", {
+				name: "Mobile money in displacement settings",
+			}),
+		);
+
+		const details = within(canvas).getByRole("region", {
+			name: "Why: Mobile money in displacement settings",
+		});
+		expect(details).toHaveTextContent(
+			"Label: Relevant, set by the label rules (version 2).",
+		);
+		expect(details).not.toHaveTextContent("as the model judged it");
+	});
+
+	it("doesn't say a paper is cited when the brief doesn't cite it", async () => {
+		const { path } = screenedReview();
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", { name: "Vouchers in Niger" }),
+		);
+
+		const details = within(canvas).getByRole("region", {
+			name: "Why: Vouchers in Niger",
+		});
+		expect(details).not.toHaveTextContent("Cited in the brief");
+	});
+
+	it("filters to skipped and failed papers, and says in each row why", async () => {
+		const { api, path, review, run } = screenedReview();
+		api.reviews.addPaper(review, run, {
+			title: "A paper not masked yet",
+			tier: null,
+			status: "skipped",
+			skippedBecause: "not_masked",
+		});
+		api.reviews.addPaper(review, run, {
+			title: "A paper with only a title",
+			tier: null,
+			status: "skipped",
+			skippedBecause: "no_abstract",
+		});
+		api.reviews.addPaper(review, run, {
+			title: "A paper the privacy check stopped",
+			tier: null,
+			status: "failed",
+		});
+		const { user } = renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		await user.click(
+			await within(canvas).findByRole("button", { name: "Skipped 2" }),
+		);
+
+		await waitFor(() =>
+			expect(within(canvas).getAllByRole("row")).toHaveLength(3),
+		);
+		const skipped = within(canvas).getAllByRole("row").slice(1);
+		expect(skipped[0]).toHaveTextContent("Skipped");
+		expect(skipped[0]).toHaveTextContent(
+			"Its text wasn't masked, so it wasn't sent to the model.",
+		);
+		expect(skipped[1]).toHaveTextContent(
+			"It has no abstract, so there was nothing to screen.",
+		);
+
+		await user.click(within(canvas).getByRole("button", { name: "Failed 1" }));
+
+		await waitFor(() =>
+			expect(within(canvas).getAllByRole("row")).toHaveLength(2),
+		);
+		const failed = within(canvas).getAllByRole("row")[1];
+		expect(failed).toHaveTextContent("Failed");
+		expect(failed).toHaveTextContent(
+			"The privacy check stopped its text, so it wasn't sent to the model.",
+		);
+		expect(
+			within(canvas).getByRole("button", { name: "Failed 1" }),
+		).toHaveAttribute("aria-pressed", "true");
+		expect(
+			within(canvas).getByRole("button", { name: "Not screened 1" }),
+		).toBeInTheDocument();
+	});
+
+	it("counts every paper once in All", async () => {
+		const { api, path, review, run } = screenedReview();
+		api.reviews.addPaper(review, run, {
+			title: "A paper the privacy check stopped",
+			tier: null,
+			status: "failed",
+		});
+		renderApp(`${path}/papers`);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+
+		expect(
+			await within(canvas).findByRole("button", { name: "All 5" }),
+		).toBeInTheDocument();
+	});
+
 	it("opens on the PRISMA flow, from what was found to what was included", async () => {
 		const { path } = screenedReview();
 		renderApp(`${path}/papers`);

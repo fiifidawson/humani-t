@@ -34,6 +34,8 @@ export const keys = {
 		["reviews", reviewId, "papers", "one", paperId, runId] as const,
 	prisma: (reviewId: string, runId: string) =>
 		["reviews", reviewId, "prisma", runId] as const,
+	labelRules: (reviewId: string) =>
+		["reviews", reviewId, "label-rules"] as const,
 	brief: (reviewId: string, runId: string | null) =>
 		["reviews", reviewId, "brief", runId] as const,
 	evidence: (briefId: string, tag: string) =>
@@ -43,6 +45,12 @@ export const keys = {
 		["projects", "one", projectId, "documents"] as const,
 	maskedDocument: (projectId: string, documentId: string) =>
 		["projects", "one", projectId, "documents", documentId, "masked"] as const,
+	// Outside the project's keys: refreshing the project or its documents must not
+	// fetch raw text again, because the API audits every fetch of it.
+	documentReview: (projectId: string, documentId: string) =>
+		["raw-text", projectId, "document", documentId] as const,
+	maskingRules: (projectId: string) =>
+		["raw-text", projectId, "masking-rules"] as const,
 	threads: (reviewId: string) => ["reviews", reviewId, "threads"] as const,
 	thread: (threadId: string) => ["threads", threadId] as const,
 	question: (questionId: string) => ["questions", questionId] as const,
@@ -52,6 +60,8 @@ export interface PaperFilter {
 	runId: string;
 	/** include, exclude, uncertain or unscreened; `null` for every paper. */
 	label: string | null;
+	/** skipped, failed or not_screened; `null` for any. */
+	tier: string | null;
 	page: number;
 }
 

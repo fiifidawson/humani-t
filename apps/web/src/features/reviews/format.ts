@@ -9,6 +9,8 @@ import type { components } from "../../api/schema.gen";
 type Schemas = components["schemas"];
 export type PlanMode = Schemas["PlanMode"];
 export type Tier = Schemas["ScreeningTier"];
+/** A row's label: its tier once screened, else why it has none (§6.8). */
+export type ShownLabel = Tier | "skipped" | "failed" | "not_screened";
 
 /** The UI says Quick and Deep; the API keeps shallow and deep (§6.3). */
 export const MODES: readonly {
@@ -33,10 +35,9 @@ export const MODES: readonly {
 export const modeLabel = (mode: PlanMode): string =>
 	mode === "deep" ? "Deep search" : "Quick search";
 
-/** A tier's word, and the tone and shape that repeat it (§9.2.3): never colour alone. */
-/** Each label's word, its icon's colour (`tone`) and its tag's fill (`fill`). */
+/** Each label's word, its icon's colour (`tone`) and its tag's fill (`fill`): never colour alone (§9.2.3). */
 export const TIERS: Readonly<
-	Record<Tier | "unscreened", { word: string; tone: string; fill: string }>
+	Record<ShownLabel, { word: string; tone: string; fill: string }>
 > = {
 	highly_relevant: {
 		word: "Highly relevant",
@@ -51,16 +52,21 @@ export const TIERS: Readonly<
 	},
 	uncertain: { word: "Uncertain", tone: "caveat.solid", fill: "caveat.subtle" },
 	excluded: { word: "Excluded", tone: "fg.muted", fill: "bg.muted" },
-	unscreened: { word: "Not screened", tone: "fg.muted", fill: "transparent" },
+	skipped: { word: "Skipped", tone: "fg.muted", fill: "transparent" },
+	failed: { word: "Failed", tone: "caveat.solid", fill: "caveat.subtle" },
+	not_screened: { word: "Not screened", tone: "fg.muted", fill: "transparent" },
 };
 
-export const TIER_ORDER: readonly (Tier | "unscreened")[] = [
+/** Every label once, so their counts add up to the run's papers. */
+export const TIER_ORDER: readonly ShownLabel[] = [
 	"highly_relevant",
 	"relevant",
 	"possibly_relevant",
 	"uncertain",
 	"excluded",
-	"unscreened",
+	"skipped",
+	"failed",
+	"not_screened",
 ];
 
 /** The pipeline's own labels on a screened item ("HIGH · title — reason"). */
@@ -145,3 +151,10 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 
 export const plural = (count: number, one: string, many = `${one}s`) =>
 	`${count} ${count === 1 ? one : many}`;
+
+/** The label a paper's row shows: its tier, else why it has none. */
+export const shownLabel = (paper: Schemas["PaperOut"]): ShownLabel =>
+	paper.decision?.tier ??
+	(paper.screening_status === "screened"
+		? "not_screened"
+		: paper.screening_status);

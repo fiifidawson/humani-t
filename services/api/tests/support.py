@@ -103,9 +103,17 @@ class ObservingEmail(RecordingEmailProvider):
         super().__init__()
         self._storage = storage
         self.open_units_seen: list[int] = []
+        self._release: asyncio.Event | None = None
+
+    def hold(self) -> asyncio.Event:
+        """Make each send wait until the returned event is set, like a slow mail server."""
+        self._release = asyncio.Event()
+        return self._release
 
     async def send(self, message: EmailMessage) -> None:
         self.open_units_seen.append(self._storage.open_units)
+        if self._release is not None:
+            await self._release.wait()
         await super().send(message)
 
 

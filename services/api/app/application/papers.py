@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -19,6 +19,7 @@ from app.application.encryption import ScopeEncryption
 from app.application.membership import require_member, require_review_member
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
+from app.domain.briefs import BriefCitations
 from app.domain.discovery import (
     IngestedText,
     PaperSet,
@@ -31,8 +32,10 @@ from app.domain.discovery import (
 )
 from app.domain.documents import DocumentPassageSource
 from app.domain.encryption import EncryptionContext
+from app.domain.label_rules import CriteriaSource, LabelRules, label_under
 from app.domain.manifest import RunManifest, StageSummary, assemble_manifest
 from app.domain.paper import PaperRecord
+from app.domain.plans import CriterionKind
 from app.domain.projects import Action
 from app.domain.runs import EventName, Run
 from app.domain.screening import (
@@ -290,18 +293,22 @@ def _answers_from_json(data: bytes) -> tuple[CriterionAnswer, ...]:
 class ScreenedEvidence:
     """`EvidenceSource`: the masked passages of a run's included papers, tagged by place.
 
-    With `documents`, approved documents follow, tagged `D<n>`: the team chose them, so
-    they are evidence without screening once an owner approved their masking.
+    Included means as the review's latest label rules label them (ADR 0013), so a brief
+    never cites a paper the papers list shows as excluded. With `documents`, approved
+    documents follow, tagged `D<n>`: the team chose them, so they are evidence without
+    screening once an owner approved their masking.
     """
 
     def __init__(
         self,
         store: PaperStore,
         masked: MaskedTextSource[UnitOfWork],
+        criteria: CriteriaSource[UnitOfWork],
         documents: DocumentPassageSource[UnitOfWork] | None = None,
     ) -> None:
         self._store = store
         self._masked = masked
+        self._criteria = criteria
         self._documents = documents
 
     async def included_passages(
@@ -311,11 +318,16 @@ class ScreenedEvidence:
         if run is None or run.review_id != review_id:
             return ()
         decided_by = await self._store.screened_by(uow, run)
-        included = {
-            d.paper_id
-            for d in await uow.screening.list_for_run(decided_by.id)
-            if d.label is ScreeningLabel.INCLUDE
-        }
+        latest = await uow.label_rules.latest(review_id)
+        labelled = await relabel(
+            uow,
+            self._store,
+            self._criteria,
+            review_id,
+            await uow.screening.list_for_run(decided_by.id),
+            None if latest is None else latest.rules,
+        )
+        included = {d.paper_id for d in labelled.decisions if d.label is ScreeningLabel.INCLUDE}
         passages: list[Passage] = []
         for paper in await self._store.run_papers(uow, run):
             if paper.paper_id not in included:
@@ -348,7 +360,8 @@ class PaperRow:
     """One row of the screening table: metadata, its place, and its decision if any.
 
     `status` is `skipped` when there was no masked text to send (see `skipped_because`)
-    and `failed` when the privacy check stopped it.
+    and `failed` when the privacy check stopped it. `is_cited_in_brief` is about the
+    brief this run wrote, by the paper's tag.
     """
 
     paper_id: UUID
@@ -359,6 +372,8 @@ class PaperRow:
     decision: ScreeningDecision | None
     status: str = SCREENED
     skipped_because: str | None = None
+    is_cited_in_brief: bool = False
+    rules_version: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,8 +449,71 @@ def prisma_for(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Labelled:
+    """A run's decisions with the labels rules give them (ADR 0013).
+
+    `ruled` holds the papers whose label the rules set; the others keep the model's.
+    `untouchable` counts decisions no rule can reach, such as those without answers.
+    `rules_version` is the stored rules version applied, if any.
+    """
+
+    decisions: tuple[StoredDecision, ...]
+    ruled: frozenset[UUID] = frozenset()
+    untouchable: int = 0
+    rules_version: int | None = None
+
+
+async def relabel(
+    uow: UnitOfWork,
+    store: PaperStore,
+    criteria: CriteriaSource[UnitOfWork],
+    review_id: UUID,
+    decisions: Sequence[StoredDecision],
+    rules: LabelRules | None,
+) -> Labelled:
+    """The decisions as `rules` label them; unchanged, and unopened, when there are none."""
+    if rules is None:
+        return Labelled(tuple(decisions))
+    kinds_by_version: dict[int, dict[str, CriterionKind] | None] = {}
+    relabelled: list[StoredDecision] = []
+    ruled: set[UUID] = set()
+    for stored in decisions:
+        version = stored.criteria_version
+        if version not in kinds_by_version:
+            found = await criteria.criteria(uow, review_id, version)
+            kinds_by_version[version] = None if found is None else {c.id: c.kind for c in found}
+        kinds = kinds_by_version[version]
+        ruled_label = None
+        if kinds is not None and stored.answers_sealed is not None:
+            ruled_label = label_under(rules, await store.open_decision(uow, stored), kinds)
+        if ruled_label is None:
+            relabelled.append(stored)
+            continue
+        ruled.add(stored.paper_id)
+        relabelled.append(
+            replace(
+                stored,
+                label=ruled_label.label,
+                priority=ruled_label.priority,
+                exclusion_reasons=ruled_label.exclusion_reasons,
+            )
+        )
+    return Labelled(tuple(relabelled), frozenset(ruled), len(decisions) - len(ruled))
+
+
+async def newest_run_with_papers(uow: UnitOfWork, review_id: UUID) -> Run | None:
+    for run in await uow.runs.list_for_review(review_id):
+        if await uow.papers.get_set(run.id) is not None:
+            return run
+    return None
+
+
 class PaperService:
-    """The paper, PRISMA and manifest routes. Each call is one read-only transaction."""
+    """The paper, PRISMA and manifest routes. Each call is one read-only transaction.
+
+    Labels are the ones the review's latest rules give, where they reach (ADR 0013).
+    """
 
     def __init__(
         self,
@@ -444,11 +522,15 @@ class PaperService:
         store: PaperStore,
         masked: MaskedTextSource[UnitOfWork],
         encryption: ScopeEncryption,
+        citations: BriefCitations[UnitOfWork],
+        criteria: CriteriaSource[UnitOfWork],
     ) -> None:
         self._storage = storage
         self._store = store
         self._masked = masked
+        self._criteria = criteria
         self._log = RunLog(encryption)
+        self._citations = citations
 
     async def list_papers(
         self,
@@ -474,7 +556,10 @@ class PaperService:
             await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             run = await self._run_of(uow, review_id, run_id)
             papers = await self._store.run_papers(uow, run)
-            decided = {d.paper_id: d for d in await uow.screening.list_for_run(run.id)}
+            labelled = await self._labelled(
+                uow, review_id, await uow.screening.list_for_run(run.id)
+            )
+            decided = {d.paper_id: d for d in labelled.decisions}
             why = await self._undecided(
                 uow, run, [p for p in papers if p.paper_id not in decided]
             )
@@ -487,6 +572,7 @@ class PaperService:
                 rows = [r for r in rows if _status_or_tier(r, why) == tier]
             start = (page - 1) * PAGE_SIZE
             chosen = rows[start : start + PAGE_SIZE]
+            cited = await self._citations.cited_tags(uow, run.id)
             return PaperPage(
                 run_id=run.id,
                 page=page,
@@ -495,7 +581,9 @@ class PaperService:
                 counts=tier_counts(
                     list(decided.values()), len(papers), [s for s, _ in why.values()]
                 ),
-                rows=tuple([await self._row(uow, run, p, d, why) for p, d in chosen]),
+                rows=tuple(
+                    [await self._row(uow, run, p, d, why, cited, labelled) for p, d in chosen]
+                ),
             )
 
     async def paper(
@@ -513,9 +601,12 @@ class PaperService:
             )
             if seen is None:
                 raise NotFoundError(_PAPER_NOT_FOUND)
-            decision = await uow.screening.get(run.id, paper_id)
+            stored = await uow.screening.get(run.id, paper_id)
+            labelled = await self._labelled(uow, review_id, [] if stored is None else [stored])
+            decision = next(iter(labelled.decisions), None)
             why = {} if decision else await self._undecided(uow, run, [seen])
-            row = await self._row(uow, run, seen, decision, why)
+            cited = await self._citations.cited_tags(uow, run.id)
+            row = await self._row(uow, run, seen, decision, why, cited, labelled)
             texts = await uow.papers.list_texts([paper_id])
             return PaperDetail(
                 row=row,
@@ -535,7 +626,11 @@ class PaperService:
                 prisma_for(
                     await self._store.run_sources(uow, run),
                     len(await self._store.run_papers(uow, run)),
-                    await uow.screening.list_for_run(run.id),
+                    (
+                        await self._labelled(
+                            uow, review_id, await uow.screening.list_for_run(run.id)
+                        )
+                    ).decisions,
                 ),
             )
 
@@ -578,10 +673,19 @@ class PaperService:
             if run is None or run.review_id != review_id:
                 raise NotFoundError(_RUN_NOT_FOUND)
             return run
-        for run in await uow.runs.list_for_review(review_id):
-            if await uow.papers.get_set(run.id) is not None:
-                return run
-        raise NotFoundError("This review has no papers yet.")
+        run = await newest_run_with_papers(uow, review_id)
+        if run is None:
+            raise NotFoundError("This review has no papers yet.")
+        return run
+
+    async def _labelled(
+        self, uow: UnitOfWork, review_id: UUID, decisions: Sequence[StoredDecision]
+    ) -> Labelled:
+        """The decisions under the review's latest rules, if it has any."""
+        latest = await uow.label_rules.latest(review_id)
+        rules = None if latest is None else latest.rules
+        labelled = await relabel(uow, self._store, self._criteria, review_id, decisions, rules)
+        return labelled if latest is None else replace(labelled, rules_version=latest.version)
 
     async def _undecided(
         self, uow: UnitOfWork, run: Run, papers: Sequence[RunPaper]
@@ -630,11 +734,14 @@ class PaperService:
         paper: RunPaper,
         decision: StoredDecision | None,
         why: dict[UUID, tuple[str, str | None]],
+        cited: frozenset[str],
+        labelled: Labelled,
     ) -> PaperRow:
         status, skipped_because = why.get(paper.paper_id, (SCREENED, None))
+        tag = passage_tag(paper.position)
         return PaperRow(
             paper_id=paper.paper_id,
-            tag=passage_tag(paper.position),
+            tag=tag,
             position=paper.position,
             found_by=paper.found_by,
             record=await self._store.open_record(uow, run.project_id, paper.paper_id),
@@ -643,6 +750,8 @@ class PaperService:
             else await self._store.open_decision(uow, decision),
             status=SCREENED if decision is not None else status,
             skipped_because=None if decision is not None else skipped_because,
+            is_cited_in_brief=tag in cited,
+            rules_version=labelled.rules_version if paper.paper_id in labelled.ruled else None,
         )
 
 

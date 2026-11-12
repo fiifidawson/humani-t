@@ -301,6 +301,7 @@ def use_test_signals(harness: AuthHarness) -> ClockAdvancingSignals:
         audit=providers.audit,
         signals=signals,
         available_stages=tuple(providers.stages),
+        rules=providers.masking_rules,
         session_policy=providers.accounts.session_policy,
         clock=harness.clock,
         poll_interval=timedelta(seconds=15),
@@ -308,6 +309,17 @@ def use_test_signals(harness: AuthHarness) -> ClockAdvancingSignals:
     harness.providers = dataclasses.replace(providers, runs=runs, signals=signals)
     harness.app.state.providers = harness.providers
     return signals
+
+
+def add_rule(rt: RunTeam, term: str, entity_type: str = "PERSON") -> None:
+    """Have the owner add a project masking rule through the API."""
+    response = send(
+        rt.owner,
+        "POST",
+        f"/api/v1/projects/{rt.project_id}/masking-rules",
+        {"term": term, "entity_type": entity_type},
+    )
+    assert response.status_code == 201, response.text
 
 
 def make_run_team() -> RunTeam:

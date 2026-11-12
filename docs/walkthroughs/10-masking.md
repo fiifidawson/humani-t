@@ -138,6 +138,27 @@ print(asyncio.run(prompt_guard().inspect(masked)))
 | T10.3.4 | In pgAdmin, `SELECT term_sealed FROM masking_rules` | bytes, no readable name | sealed at rest | check `_TERM_PURPOSE` sealing |
 | T10.3.5 | In pgAdmin, `SELECT action, target_id FROM audit_events ORDER BY sequence DESC LIMIT 3` | `masking_rule.listed`, `masking_rule.created`, ids only | audited without values | check the `record` calls |
 
+### T10.4 A masked term cannot be written into a plan
+
+Uses the project and the `Kofi Mensah` rule from T10.3, and a review of that project.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T10.4.1 | As owner, `PUT /api/v1/reviews/{review_id}/plan/vocabulary` with `{"format": "text", "content": "cash transfers", "criteria": [{"kind": "exclusion", "text": "Reports written by Kofi Mensah"}]}` | `422`, `"Criterion E1 holds a term this project always masks. Remove it or reword it."`; the name is not in the response | criteria are checked when written | check `refuse_rule_terms` in `upload_vocabulary` |
+| T10.4.2 | Same with `"content": "[setting]\ncamps; Kofi Mensah clinic"` and no `criteria` | `422` naming `Concept 1` | search terms are checked too | as above |
+| T10.4.3 | Upload `"content": "cash transfers"` with no criteria, start a run with the `queries` stage, and approve its `vocabulary` gate with `"revisions": {"criteria": [{"kind": "inclusion", "text": "Clinics run by Kofi Mensah"}]}` | `422` naming `revisions.criteria[0].text`; the run still waits at the gate | gate edits are checked | check `RunService.resolve_gate` |
+| T10.4.4 | Needs a model server. In a new review, `POST …/plan` with `{"mode": "shallow"}`; pick a word from one of the drafted criteria (say `E1`), add it as a masking rule, then `POST …/plan/changes` with any request | `422` naming that criterion; no new receipt | a rule added later stops the plan reaching the model | check `request_changes` |
+
+### T10.5 Masking rules in Project settings
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T10.5.1 | As the owner, open Project settings → **Privacy** | The rules from T10.3 are listed, such as "Kofi Mensah · Person" | the screen reads the API | |
+| T10.5.2 | Type `Gao Clinic` in **Term**, choose **Mask as** Location, click **Add rule** | It joins the list; the field empties; the API logs `201` | rules can be added on the web | |
+| T10.5.3 | Add `kofi mensah` | "This project already masks that term." under the field | duplicates ignore case | |
+| T10.5.4 | Click **Remove** on Gao Clinic | It leaves the list; the API logs `204` | rules can be removed | |
+| T10.5.5 | As a reviewer, open the same page | "Only owners can see and change the masking rules, because they hold names."; no `GET …/masking-rules` in the network tab | owners only | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -145,6 +166,8 @@ print(asyncio.run(prompt_guard().inspect(masked)))
 | T10.1 | ☐ | |
 | T10.2 | ☐ | |
 | T10.3 | ☐ | |
+| T10.4 | ☐ | |
+| T10.5 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -158,6 +181,7 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | An unmasked email stops the call; a masked one goes through | `tests/test_privacy_sanitizer.py::TestGuardedInferenceWithTheRealGuard` |
 | The stage masks, seals, skips on re-runs and gates on documents | `tests/test_mask_stage.py` |
 | Rules are owners only, sealed, shredded with the project and audited by id | `tests/test_masking_api.py` |
+| Project settings → Privacy lists, adds and removes rules, owners only | `apps/web/src/features/projects/MaskingRules.test.tsx` |
 
 ```powershell
 uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/test_privacy_sanitizer.py tests/test_mask_stage.py tests/test_masking_api.py tests/test_masking_storage_contract.py -v
@@ -169,7 +193,7 @@ uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/
 | --- | --- | --- | --- |
 | G10.1 | Unlabelled numbers (a bare `4481207`) are not masked | an identifier written without its label can reach a model | deliberate, to keep the guard from refusing statistics; project rules cover known values |
 | G10.2 | The small spaCy model misses unfamiliar names | a name in a question can reach the model | a second detector (GLiNER) behind the same Protocol; owners can add rules |
-| G10.3 | Uploaded documents, the review screen and "not personal" corrections are not built | the `privacy_review` gate is only reached through a fake in tests | P2 |
+| G10.3 | Closed: uploaded documents, the review screen and "not personal" corrections are built ([16 — Documents](16-documents.md), D16.12) | — | — |
 | G10.4 | Postgres contract tests for `masking_rules` and `paper_masks` were not run in this phase (no database available) | a SQL mistake would show only at integration | run them against the lane database at integration |
 
 ## Glossary

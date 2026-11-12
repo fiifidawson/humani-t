@@ -1,6 +1,6 @@
 /**
- * Create a project. The API's contract today is a name only; the question,
- * mode and options of UI_UX_SPEC §6.3 arrive with the planning endpoints.
+ * Create a project by name. The question, mode and options of UI_UX_SPEC §6.3
+ * are asked in the workspace that opens next.
  */
 
 import { Button, Stack } from "@chakra-ui/react";

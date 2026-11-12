@@ -18,7 +18,7 @@ from app.search.arxiv import compile_arxiv_query
 from app.search.openalex import compile_openalex_query
 from tests.plan_support import PlanTeam, make_plan_team
 from tests.project_support import send
-from tests.run_support import run_until_idle
+from tests.run_support import add_rule, run_until_idle
 
 COMPILERS = {"openalex": compile_openalex_query, "arxiv": compile_arxiv_query}
 
@@ -205,6 +205,26 @@ class TestWithoutAnAcceptedPlan:
         manifest = _finished(team, run_id)["manifest"]
         assert manifest["vocabulary_origin"] == "user_supplied"
         assert manifest["plan_model_id"] is None
+
+
+class TestMaskedTermsAtTheGate:
+    def test_a_revision_holding_a_masked_term_is_refused_naming_the_field(self, team):
+        team.drafted()
+        run_id = _run_queries(team)
+        add_rule(team.rt, "Hagadera", "LOCATION")
+        revisions = {
+            "criteria": [
+                {"kind": "inclusion", "text": "Cash programmes"},
+                {"kind": "exclusion", "text": "Reports from the Hagadera office"},
+            ]
+        }
+
+        response = _resolve(team, run_id, "approve", revisions)
+
+        assert response.status_code == 422
+        assert "revisions.criteria[1].text" in response.json()["detail"]
+        assert "Hagadera" not in response.json()["detail"]
+        assert team.rt.stored_run(run_id).state.value == "waiting"
 
 
 class TestPlanningDuringARun:

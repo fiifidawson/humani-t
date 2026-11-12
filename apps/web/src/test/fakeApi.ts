@@ -7,6 +7,7 @@
  */
 
 import { HttpResponse, http } from "msw";
+import type { components } from "../api/schema.gen";
 import { FakeDocuments } from "./fakeDocuments";
 import {
 	jsonBody,
@@ -59,7 +60,14 @@ interface FakeProject {
 	role: Role;
 	created_at: string;
 	archived_at: string | null;
+	/** What the newest review makes it; archiving overrides it, as in the API. */
+	status: components["schemas"]["ProjectStatus"];
 }
+
+const projectOut = (project: FakeProject) => ({
+	...project,
+	status: project.archived_at === null ? project.status : "archived",
+});
 
 /** Someone in a project other than the signed-in person, whose role is the project's `role`. */
 interface FakeMember {
@@ -113,6 +121,9 @@ export class FakeApi {
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
 		userId: () => this.session?.userId ?? null,
 	});
+	/** Invitation and reset tokens as the emailed links carry them. */
+	readonly invitations = new Map<string, string>();
+	readonly passwordResets = new Map<string, FakeUser>();
 	csrfToken = "csrf-1";
 	/** Seconds the next sign-in attempt must wait, as `Retry-After`. */
 	throttleNextSignIn: number | null = null;
@@ -145,6 +156,14 @@ export class FakeApi {
 		return user;
 	}
 
+	addInvitation(token: string, email = "kofi@example.org"): void {
+		this.invitations.set(token, email);
+	}
+
+	addPasswordReset(user: FakeUser, token: string): void {
+		this.passwordResets.set(token, user);
+	}
+
 	/** Start the test already signed in, by default at full strength with a recent sign-in. */
 	signInAs(user: FakeUser, stage: Stage = "full"): void {
 		this.startSession(user, stage);
@@ -161,6 +180,7 @@ export class FakeApi {
 			role,
 			created_at: createdAt,
 			archived_at: null,
+			status: "planning",
 		};
 		this.projects.push(project);
 		return project;
@@ -411,6 +431,60 @@ export class FakeApi {
 					status: "mfa_enrolment_required",
 					user: this.userOut(user),
 				});
+			}),
+
+			http.post(`${API}/auth/register`, async ({ request }) => {
+				const body = await jsonBody(request);
+				const displayName = text(body, "display_name");
+				if (displayName === "") {
+					return invalidBody(
+						"display_name",
+						"String should have at least 1 character",
+					);
+				}
+				const email = this.invitations.get(text(body, "token"));
+				if (email === undefined) {
+					return problem(400, "This invitation is invalid or has expired.");
+				}
+				const refused = refusePassword(text(body, "password"));
+				if (refused !== null) {
+					return refused;
+				}
+				this.invitations.delete(text(body, "token"));
+				const user = this.addUser({ email, displayName });
+				user.password = text(body, "password");
+				this.startSession(user, "enrolment");
+				return HttpResponse.json(
+					{ status: "mfa_enrolment_required", user: this.userOut(user) },
+					{ status: 201 },
+				);
+			}),
+
+			http.post(`${API}/auth/password-reset`, () =>
+				HttpResponse.json(
+					{
+						status:
+							"If an account exists for that email, a reset link has been sent.",
+					},
+					{ status: 202 },
+				),
+			),
+
+			http.post(`${API}/auth/password-reset/confirm`, async ({ request }) => {
+				const body = await jsonBody(request);
+				const user = this.passwordResets.get(text(body, "token"));
+				if (user === undefined) {
+					return problem(400, "This link is invalid or has expired.");
+				}
+				const refused = refusePassword(text(body, "new_password"));
+				if (refused !== null) {
+					return refused;
+				}
+				this.passwordResets.delete(text(body, "token"));
+				user.password = text(body, "new_password");
+				// The real API ends every session of the account.
+				this.endSession();
+				return noContent();
 			}),
 
 			http.post(`${API}/auth/logout`, () => {
@@ -748,9 +822,9 @@ export class FakeApi {
 				const includeArchived =
 					new URL(request.url).searchParams.get("include_archived") === "true";
 				return HttpResponse.json(
-					this.projects.filter(
-						(p) => includeArchived || p.archived_at === null,
-					),
+					this.projects
+						.filter((p) => includeArchived || p.archived_at === null)
+						.map(projectOut),
 				);
 			}),
 
@@ -772,7 +846,7 @@ export class FakeApi {
 					});
 				}
 				const project = this.addProject(name, "owner", "2026-11-03T10:30:00Z");
-				return HttpResponse.json(project, {
+				return HttpResponse.json(projectOut(project), {
 					status: 201,
 					headers: { location: `/api/v1/projects/${project.id}` },
 				});
@@ -786,7 +860,7 @@ export class FakeApi {
 				const project = this.projects.find((p) => p.id === params["projectId"]);
 				return project === undefined
 					? problem(404, "Not Found")
-					: HttpResponse.json(project);
+					: HttpResponse.json(projectOut(project));
 			}),
 
 			http.delete(`${API}/projects/:projectId`, ({ params }) => {
@@ -832,7 +906,7 @@ export class FakeApi {
 					);
 				}
 				project.name = name.trim();
-				return HttpResponse.json(project);
+				return HttpResponse.json(projectOut(project));
 			}),
 
 			// Owner only, with no recent sign-in; archiving twice keeps the first date.
@@ -844,7 +918,7 @@ export class FakeApi {
 					return refused;
 				}
 				project.archived_at ??= "2026-11-09T10:00:00Z";
-				return HttpResponse.json(project);
+				return HttpResponse.json(projectOut(project));
 			}),
 
 			http.post(`${API}/projects/:projectId/unarchive`, ({ params }) => {
@@ -855,7 +929,7 @@ export class FakeApi {
 					return refused;
 				}
 				project.archived_at = null;
-				return HttpResponse.json(project);
+				return HttpResponse.json(projectOut(project));
 			}),
 
 			http.get(`${API}/projects/:projectId/members`, ({ params }) => {
@@ -995,6 +1069,19 @@ function isRole(value: string): value is Role {
 }
 
 /** The API's 422 for a body that fails its schema, naming the field. */
+const COMMON_PASSWORDS: readonly string[] = ["passwordpassword"];
+
+/** The domain's password policy (domain/passwords.py), the two rules the screens show. */
+function refusePassword(password: string) {
+	const violations = [
+		...(password.length < 15 ? ["too_short"] : []),
+		...(COMMON_PASSWORDS.includes(password) ? ["too_common"] : []),
+	];
+	return violations.length === 0
+		? null
+		: problem(422, "The password does not meet the policy.", { violations });
+}
+
 function invalidBody(field: string, message: string) {
 	return problem(422, "The request body is not valid.", {
 		errors: [{ loc: ["body", field], msg: message, type: "value_error" }],
