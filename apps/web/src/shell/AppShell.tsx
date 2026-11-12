@@ -1,8 +1,7 @@
 /**
- * The signed-in frame (UI_UX_SPEC §4, §6.1): the header with the two logo
- * slots, the rail, the main area, the footer, and the banner that says the
- * session has ended. Breakpoints are CSS (railStyles.ts); the rail is a drawer
- * below 1024 px, which is the only layout state kept here.
+ * The signed-in frame: header with the two logo slots, rail, main area, footer,
+ * and the banner when the session ends. Breakpoints are CSS (railStyles.ts); the
+ * rail's drawer below 1024 px is the only layout state kept here.
  */
 
 import {
@@ -167,10 +166,9 @@ export function AppShell() {
 					overflowY="auto"
 				>
 					<SignedOutBanner />
-					{/* A workspace is exactly as tall as the window, and its chat and canvas
-					    scroll inside it. Without minH 0 it grows to fit a long table, and
-					    the whole workspace scrolls, composer included. Other pages grow,
-					    and this column scrolls them. */}
+					{/* A workspace is exactly as tall as the window. Without minH 0 a long table
+					    grows it and the composer scrolls away; other pages grow, and this
+					    column scrolls them. */}
 					<Box
 						as="main"
 						id="main"

@@ -1,9 +1,6 @@
 /**
- * Passkey ceremonies: the API's JSON options in, the browser's credential out.
- *
- * The API speaks WebAuthn's JSON forms (bytes as base64url); the browser's
- * `navigator.credentials` speaks ArrayBuffers. This module converts between
- * them and nothing else: whether a passkey is accepted is the API's decision.
+ * Passkey ceremonies: convert between the API's WebAuthn JSON (base64url) and the
+ * browser's ArrayBuffers. Whether a passkey is accepted is the API's decision.
  */
 
 /** A new passkey as the API verifies it: the RegistrationResponseJSON fields py_webauthn reads. */

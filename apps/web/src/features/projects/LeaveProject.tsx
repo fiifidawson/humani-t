@@ -1,9 +1,8 @@
 /**
- * Leaving a project (UI_UX_SPEC §6.14), open to every member.
+ * Leaving a project, open to every member.
  *
- * The API refuses the last owner; the page locks the control only when the
- * member list it already holds shows that, and otherwise shows the refusal.
- * Leaving is self-service, so unlike removing someone it needs no recent sign-in.
+ * The API refuses the last owner; the control is locked only when the member list
+ * already shows that. Unlike removing someone, it needs no recent sign-in.
  */
 
 import { Button, Flex, Stack, Text } from "@chakra-ui/react";

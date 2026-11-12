@@ -1,9 +1,6 @@
 /**
- * The run strip's one-line form (UI_UX_SPEC §5.3.5, level L0).
- *
- * One line that updates in place for the whole run. The words come from the
- * state alone. The caller may put a toggle at the end of the line and the
- * expanded form (L1, features/reviews/RunCards) inside the same frame.
+ * The run strip's one-line form, updated in place for the whole run, its words
+ * from the state alone. The caller may add a toggle and the expanded form.
  */
 
 import { Box, Flex, Heading, Text, VisuallyHidden } from "@chakra-ui/react";

@@ -1,10 +1,9 @@
 /**
  * API failures as one error type, read from RFC 9457 problem documents.
  *
- * Every error the API sends is a problem document, written in plain language
- * by the API (services/api/app/api/errors.py). This module reads it, decides
- * which of the UI_UX_SPEC §11.4 cases it is, and picks the words a person
- * sees. It does not decide what a screen does about it.
+ * Every API error arrives in plain language; this module sorts it into the cases the
+ * UI handles and picks the words a person sees. What a screen does about it is the
+ * screen's call.
  */
 
 const STATUS_TITLES: Readonly<Record<number, string>> = {

@@ -1,15 +1,9 @@
 /**
  * A fake humani-t API for component tests, served through MSW.
  *
- * It keeps state and applies the API's rules for real: passwords are checked,
- * a second factor is required once one is enrolled, writes need the CSRF token
- * from the `__Host-csrf` cookie, sensitive actions need a recent sign-in. A
- * fake that returned canned responses would let every screen pass whether or
- * not it sent the right request.
- *
- * Shapes follow the API's contract tests (services/api/tests/test_mfa_api.py,
- * test_projects_api.py) and the generated schema. It is not a second
- * implementation of the API: rules the screens never exercise are left out.
+ * It keeps state and applies the API's rules for real (passwords, second factor,
+ * CSRF token, recent sign-in), so a screen that sends the wrong request fails.
+ * Rules the screens never exercise are left out.
  */
 
 import { HttpResponse, http } from "msw";

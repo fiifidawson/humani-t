@@ -1,5 +1,5 @@
 /**
- * Sign in: the password, then the second factor (UI_UX_SPEC §6.1).
+ * Sign in: the password, then the second factor.
  *
  * Every rule (which account exists, which factor is needed, how many tries)
  * is the API's. This screen sends what was typed and follows the answer.

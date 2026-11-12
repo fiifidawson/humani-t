@@ -1,9 +1,8 @@
 /**
  * The API's sign-in answer as a union the screens can switch on.
  *
- * `SignedInOut` is generated, and flat: `status` plus `user` and `methods`,
- * each present only where it applies. Narrowing it once here means a screen
- * can never read `user` on an answer that has none.
+ * The generated `SignedInOut` is flat; narrowing it once here stops a screen
+ * reading `user` on an answer that has none.
  */
 
 import type { components } from "../../api/schema.gen";

@@ -1,11 +1,9 @@
 /**
  * Follow one run's event stream: connect, resume, de-duplicate, throttle.
  *
- * The browser's EventSource reconnects by itself after a drop and sends
- * `Last-Event-ID`, and the API replays what was missed (architecture §4.4).
- * This hook adds the three things EventSource does not do: open a new stream
- * when the browser gives up, apply each event once whatever is replayed, and
- * redraw progress at most twice a second (UI_UX_SPEC §11.2).
+ * EventSource reconnects by itself with `Last-Event-ID`, and the API replays what
+ * was missed. This hook adds the rest: a new stream when the browser gives up,
+ * each event applied once, and progress redrawn at most twice a second.
  */
 
 import { useEffect, useRef, useState } from "react";

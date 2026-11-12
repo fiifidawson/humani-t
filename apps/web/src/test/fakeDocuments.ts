@@ -1,20 +1,10 @@
 /**
- * The documents half of the fake API: upload, the listing, masked text, the
- * owner's approve or reject, and delete, served through MSW like the rest of
- * fakeApi.ts.
+ * The documents half of the fake API, served through MSW like fakeApi.ts.
  *
- * It applies the API's rules the screens depend on: a non-member gets 404, only
- * owners upload, decide and delete, the upload is multipart with exactly one
- * `file` part, its type is read from the bytes and never from the name, size
- * and quota are checked before anything is kept, masked text is there only
- * once a document is masked, a decision names the masked version it was
- * about, and a deleted document's tag is never given to another.
- * Processing is driven by the test (`finishProcessing`, `fail`), as the API's
- * worker would drive it, so a screen has to look again to see it.
- *
- * Shapes and messages follow docs/api.md "Documents" and
- * services/api/app/domain/documents.py. Raw text is never held here: the
- * screens never ask for it.
+ * It applies the rules the screens depend on: 404 for non-members, owner-only
+ * writes, the type read from the bytes, size and quota checked first, and tags
+ * never reused. Tests drive processing (`finishProcessing`, `fail`). Raw text is
+ * never held here.
  */
 
 import { HttpResponse, http } from "msw";
