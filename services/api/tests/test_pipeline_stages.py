@@ -24,6 +24,7 @@ from app.domain.screening import (
     ScreeningLabel,
 )
 from app.inference.fake import FakePromptGuard
+from app.inference.schema import validate_output
 from app.runs.base import Stage, StageContext
 from tests.pipeline_support import (
     ALL_STAGES,
@@ -504,6 +505,33 @@ class TestScreen:
         run_id = _run(p)
 
         assert all(d.is_unreadable for d in _decisions(p, run_id))
+
+    def test_a_quote_in_another_case_is_decided_at_once_in_the_papers_own_words(self):
+        sent: list[str] = []
+
+        def shouting(request):
+            sent.append(paper_text_in(request))
+            given = reasonable_answer(request)
+            for item in given["answers"]:
+                item["quote"] = item["quote"] and item["quote"].upper()
+            return given
+
+        p = make_pipeline(script=shouting)
+
+        run_id = _run(p)
+
+        decisions = _decisions(p, run_id)
+        assert len(p.model.requests) == len(decisions) == 4
+        assert not any(d.is_unreadable for d in decisions)
+        quotes = [a.quote for d in decisions for a in d.criterion_answers if a.quote]
+        assert quotes
+        assert all(any(q in text for text in sent) and q != q.upper() for q in quotes)
+
+    def test_the_answer_format_lets_a_long_quote_through_to_be_shortened(self):
+        given = answer("include", "high", ["I1"])
+        given["answers"] = [{"id": "I1", "answer": "yes", "quote": "word " * 100}]
+
+        validate_output(given, screening.screening_schema(["I1"]))
 
     def test_a_rate_limited_model_stops_screening_saying_so_and_keeps_decisions(self):
         p = make_pipeline()

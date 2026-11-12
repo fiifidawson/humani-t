@@ -2,7 +2,7 @@
 
 > **Milestones:** P1 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested; the mask store and the brief stage are still to be wired to it) · **Previous:** [09 — Plan and discover](09-plan-and-discover.md) · **Next:** `12-decision-brief` (planned)
 
-Before this phase a run's Discover, Ingest, Screen and Export stages were stand-ins that counted to five. Now a run searches every paper source the operator switched on with the review's accepted plan, merges what they return into one list of distinct papers, keeps each paper's title and abstract for the mask stage, sends each paper's **masked** text to the deployment's own model with the accepted criteria, and stores one `ScreeningDecision` per paper with the model id, prompt version and criteria version that produced it. Export counts the run PRISMA-style. Members can list a run's papers with their decisions, open one, see the PRISMA counts and read the run manifest. Everything is sealed under the project's key, so deleting the project shreds it. This answers the provenance test in [`CLAUDE.md`](../../CLAUDE.md) ("could a reviewer reconstruct why this paper was included or excluded, six months from now?"), [`architecture.md` §3.8](../architecture.md#38-screeningprovider) and [§4.2](../architecture.md#42-reviews), and the screening parts of UI_UX_SPEC [§5.3.7](../UI_UX_SPEC.md#537-screening-summary), [§6.7](../UI_UX_SPEC.md#67-run-progress) and [§6.8](../UI_UX_SPEC.md#68-screening-results).
+Before this phase a run's Discover, Ingest, Screen and Export stages were stand-ins that counted to five. Now a run searches every paper source the operator switched on with the review's accepted plan, merges what they return into one list of distinct papers, keeps each paper's title and abstract for the mask stage, sends each paper's **masked** text to the deployment's own model with the accepted criteria, and stores one `ScreeningDecision` per paper with the model id, prompt version and criteria version that produced it. Export counts the run PRISMA-style. Members can list a run's papers with their decisions, open one, see the PRISMA counts and read the run manifest. Everything is sealed under the project's key, so deleting the project shreds it. This answers the provenance test in [`CLAUDE.md`](../../CLAUDE.md) ("could a reviewer reconstruct why this paper was included or excluded, six months from now?"), [`architecture.md` §3.8](../architecture.md#38-screening) and [§4.2](../architecture.md#42-reviews), and the screening parts of UI_UX_SPEC [§5.3.7](../UI_UX_SPEC.md#537-screening-summary), [§6.7](../UI_UX_SPEC.md#67-run-progress) and [§6.8](../UI_UX_SPEC.md#68-screening-results).
 
 ## What this phase delivers
 
@@ -124,7 +124,19 @@ The app role has no `UPDATE` on `screening_decisions`: a decision is provenance 
   - a burst of four concurrent calls hit a rate limit and was reported as "isn't answering".
 - **Where:** [`application/screening.py`](../../services/api/app/application/screening.py).
 - **Proven by:** `tests/test_pipeline_stages.py::TestScreen::test_the_answer_format_asks_for_exactly_one_answer_per_criterion`, `…::test_a_refused_answer_is_logged_with_its_reason_and_never_the_text`, `…::test_a_rate_limited_model_stops_screening_saying_so_and_keeps_decisions`, `tests/test_papers_api.py::TestCriterionAnswers`.
-- **Still open:** a hosted model often joins quotes with "…", changes a capital letter, or quotes past 300 characters. Such quotes are refused as before.
+- **Still open:** a hosted model often joins quotes with "…", changes a capital letter, or quotes past 300 characters. Settled in D11.11.
+
+### D11.11 A quote is found loosely and stored in the paper's own words (2026-11-12)
+
+- **Decision:**
+  - the model's quote is matched against the masked text ignoring case and runs of whitespace, and may join pieces with `…` or `...` if they appear in that order without overlapping and each has at least three words;
+  - what is stored is the matching span of the masked text, never the model's wording; several pieces are joined with ` … `, and a result over 300 characters is cut at a word and ended with `…`;
+  - still refused, and asked again: words not in the text, pieces out of order, a joined piece under three words, a blank quote;
+  - the screening schema no longer sets `maxLength` on a quote; its description says longer quotes are cut. The prompt text is unchanged, but the version is now `screen-3`, so a decision records which quote rule it was made under.
+- **Why:** gpt-5-mini quoted honestly but not exactly (a changed capital, an ellipsis, a long passage), so papers were refused twice and recorded `uncertain`, and real runs stalled at Screen. Storing the text's own span keeps the provenance rule: a reviewer only ever sees the paper's words as the paper's.
+- **Rejected:** storing the model's quote once it matches loosely (a reviewer would read the model's capitals and joins as the paper's); fuzzy matching (it accepts paraphrase); one-word pieces around an ellipsis (`the … and … of` matches almost any abstract); refusing quotes over 300 characters (an honest quote, asked again, fails the same way).
+- **Where:** [`domain/screening.py`](../../services/api/app/domain/screening.py) (`CriterionAnswer.located`), [`application/screening.py`](../../services/api/app/application/screening.py) (`screening_schema`, `_criterion_answers`).
+- **Proven by:** `tests/test_screening_domain.py::TestQuotes`, `::TestQuoteProperties::test_every_stored_piece_is_an_exact_piece_of_the_text`, `tests/test_pipeline_stages.py::TestScreen::test_a_quote_in_another_case_is_decided_at_once_in_the_papers_own_words`, `…::test_the_answer_format_lets_a_long_quote_through_to_be_shortened`.
 
 ### Deliberately not used
 

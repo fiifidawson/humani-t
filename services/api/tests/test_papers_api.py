@@ -235,7 +235,7 @@ class TestManifest:
         assert body["vocabulary_versions"] == [3]
         assert body["criteria_versions"] == [3]
         assert body["model_ids"] == ["llama3.1:8b"]
-        assert body["prompt_versions"] == {"screen": "screen-2"}
+        assert body["prompt_versions"] == {"screen": "screen-3"}
         assert set(body["queries"]) == {"first", "second"}
         assert [s["stage"] for s in body["stage_facts"]] == list(ALL_STAGES)
 

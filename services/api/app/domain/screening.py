@@ -77,15 +77,20 @@ class CriterionVerdict(StrEnum):
 
 
 _MET = frozenset({CriterionVerdict.YES, CriterionVerdict.PARTLY})
-_SPACES = re.compile(r"\s+")
+_ELLIPSIS = re.compile(r"…|\.\.\.")
+_PART_WORD = re.compile(r"\S+$")
+_TRAILING = re.compile(r"[\s…]+$")
+# Shorter pieces, such as `the … and … of`, would match almost any abstract.
+_MIN_PIECE_WORDS = 3
+_PIECE_JOIN = " … "
 
 
 @dataclass(frozen=True, slots=True)
 class CriterionAnswer:
     """One criterion's answer for one paper, and the words of the paper it rests on.
 
-    `quote` is cut from the masked text the model read, never written by it:
-    `check_quotes` refuses any other. `None` means the model quoted nothing.
+    `quote` is cut from the masked text the model read, never written by it: build one
+    from a model's answer with `located`. `None` means the model quoted nothing.
     """
 
     criterion_id: str
@@ -103,25 +108,52 @@ class CriterionAnswer:
                     f"CriterionAnswer.quote must be at most {MAX_QUOTE_LENGTH} characters"
                 )
 
+    @classmethod
+    def located(
+        cls, criterion_id: str, verdict: CriterionVerdict, quote: str | None, text: str
+    ) -> Self:
+        """The answer, its quote replaced by the words of `text` the model's quote points to.
+
+        The model's quote matches ignoring case and runs of whitespace, and may join pieces
+        of at least three words with an ellipsis, in order. `ValueError` if it does not match.
+        """
+        if quote is None:
+            return cls(criterion_id, verdict)
+        pieces = [piece.split() for piece in _ELLIPSIS.split(quote) if piece.strip()]
+        if not pieces:
+            raise ValueError(f"the quote for {criterion_id} is blank; use null")
+        if len(pieces) > 1 and any(len(words) < _MIN_PIECE_WORDS for words in pieces):
+            raise ValueError(
+                f"the quote for {criterion_id} joins a piece shorter than three words"
+            )
+        spans: list[str] = []
+        start = 0
+        for words in pieces:
+            pattern = r"\s+".join(re.escape(word) for word in words)
+            found = re.compile(pattern, re.IGNORECASE).search(text, start)
+            if found is None:
+                raise ValueError(
+                    f"the quote for {criterion_id} is not in the text the model was sent"
+                )
+            # The text's own characters, never the model's: shown as the paper's words.
+            spans.append(found.group())
+            start = found.end()
+        return cls(criterion_id, verdict, _shortened(_PIECE_JOIN.join(spans)))
+
     @property
     def is_met(self) -> bool:
         return self.verdict in _MET
 
 
-def check_quotes(answers: Sequence[CriterionAnswer], text: str) -> None:
-    """Refuse, with `ValueError`, any quote that is not a piece of `text`.
-
-    Runs of whitespace count as one space, since a model may rejoin a line break. Any other
-    difference would show a reviewer the model's words as the paper's.
-    """
-    haystack = _SPACES.sub(" ", text).strip()
-    for answer in answers:
-        if answer.quote is None:
-            continue
-        if _SPACES.sub(" ", answer.quote).strip() not in haystack:
-            raise ValueError(
-                f"the quote for {answer.criterion_id} is not in the text the model was sent"
-            )
+def _shortened(quote: str) -> str:
+    if len(quote) <= MAX_QUOTE_LENGTH:
+        return quote
+    # Room for the `…`; a word cut in half is dropped whole.
+    head = quote[: MAX_QUOTE_LENGTH - 1]
+    if not quote[MAX_QUOTE_LENGTH - 1].isspace():
+        head = _PART_WORD.sub("", head)
+    head = _TRAILING.sub("", head)
+    return f"{head or quote[: MAX_QUOTE_LENGTH - 1]}…"
 
 
 def exclusion_reasons(
