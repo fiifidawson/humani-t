@@ -48,6 +48,8 @@ class TestOpenAPI:
             "/api/v1/runs/{run_id}/cancel",
             "/api/v1/runs/{run_id}/manifest",
             "/api/v1/reviews/{review_id}/papers",
+            "/api/v1/reviews/{review_id}/label-rules",
+            "/api/v1/reviews/{review_id}/label-rules/preview",
             "/api/v1/reviews/{review_id}/papers/{paper_id}",
             "/api/v1/reviews/{review_id}/prisma",
             "/api/v1/gates/{gate_id}",
@@ -126,6 +128,7 @@ class TestOpenAPI:
             "questions",
             "plans",
             "papers",
+            "label rules",
             "masking",
             "documents",
         }

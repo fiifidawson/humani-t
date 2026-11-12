@@ -48,6 +48,7 @@ import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { paperDownloads } from "./exports";
 import { plural, shownLabel, sourceName, TIER_ORDER, TIERS } from "./format";
 import { MaskedText } from "./MaskedText";
+import { RulesEditor } from "./RulesEditor";
 import { LabelBadge } from "./RunCards";
 import { useReview, useRunNumber } from "./reviewContext";
 
@@ -252,10 +253,11 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 							uncertain.
 						</Text>
 					) : (
-						// The model sets label and priority itself; no rule is applied yet.
 						<Text>
-							Label: {TIERS[decision.tier].word}, as the model judged it. No
-							rule changed it.
+							Label: {TIERS[decision.tier].word},{" "}
+							{decision.rules_version === null
+								? "as the model judged it. No rule changed it."
+								: `set by the label rules (version ${decision.rules_version}).`}
 						</Text>
 					)}
 					<Text color="fg.muted">
@@ -715,6 +717,8 @@ export function PapersCanvas() {
 					</Button>
 				</Flex>
 			) : null}
+
+			<RulesEditor />
 
 			<CanvasHeading>How this list was made</CanvasHeading>
 			<Text color="fg.muted">

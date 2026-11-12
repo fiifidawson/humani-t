@@ -20,6 +20,7 @@ from uuid import UUID
 
 from app.application.briefs import StoredBriefCitations
 from app.application.inference import GuardedInference
+from app.application.label_rules import LabelRulesService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.screening import ScreenStage
@@ -152,6 +153,13 @@ class FakePlans:
 
     async def accepted_plan(self, uow: UnitOfWork, review_id: UUID) -> ReviewPlan | None:
         return self.plans.get(review_id)
+
+    async def criteria(
+        self, uow: UnitOfWork, review_id: UUID, version: int
+    ) -> tuple[Criterion, ...] | None:
+        """`CriteriaSource`: the accepted plan's criteria, when it is that version."""
+        plan = self.plans.get(review_id)
+        return plan.criteria if plan is not None and plan.version == version else None
 
 
 class FakeMaskedTexts:
@@ -369,7 +377,7 @@ class Pipeline:
 
     @property
     def evidence(self) -> ScreenedEvidence:
-        return ScreenedEvidence(self.store, self.masked)
+        return ScreenedEvidence(self.store, self.masked, self.plans)
 
     @property
     def service(self) -> PaperService:
@@ -380,6 +388,18 @@ class Pipeline:
             masked=self.masked,
             encryption=providers.encryption,
             citations=StoredBriefCitations(providers.encryption),
+            criteria=self.plans,
+        )
+
+    @property
+    def label_rules(self) -> LabelRulesService:
+        providers = self.rt.harness.providers
+        return LabelRulesService(
+            storage=providers.storage,
+            store=self.store,
+            criteria=self.plans,
+            audit=providers.audit,
+            clock=self.rt.clock,
         )
 
     def summary(self, run_id: str, stage: str) -> dict[str, Any]:
@@ -434,7 +454,9 @@ def make_pipeline(
         concurrency=concurrency,
     )
     # The routes read masked text through the same fake the stages do.
-    rt.harness.providers = dataclasses.replace(providers, papers=pipeline.service)
+    rt.harness.providers = dataclasses.replace(
+        providers, papers=pipeline.service, label_rules=pipeline.label_rules
+    )
     rt.harness.app.state.providers = rt.harness.providers
     return pipeline
 

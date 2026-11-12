@@ -1,6 +1,6 @@
 # ADR-0006: Papers are kept once per review under a keyed digest; decisions belong to the run that made them
 
-- **Status:** Accepted
+- **Status:** Accepted; its relabelling plan is replaced by [ADR-0013](0013-label-rules-applied-on-read.md)
 - **Date:** 2026-11-04
 
 ## Context

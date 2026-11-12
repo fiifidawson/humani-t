@@ -522,3 +522,23 @@ questions = Table(
         postgresql_where=text("status IN ('pending', 'answering')"),
     ),
 )
+
+label_rule_versions = Table(
+    "label_rule_versions",
+    metadata,
+    Column("review_id", Uuid, ForeignKey("reviews.id"), primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("possibly_min_met", SmallInteger, nullable=False),
+    Column("unclear_counts_as", String(16), nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("papers_moved", Integer, nullable=False),
+    CheckConstraint("version >= 1", name="version_counts_from_one"),
+    CheckConstraint("possibly_min_met >= 1", name="possibly_needs_a_criterion"),
+    CheckConstraint(
+        "unclear_counts_as IN ('met', 'not_met', 'uncertain')",
+        name="unclear_counts_as_is_known",
+    ),
+    CheckConstraint("papers_moved >= 0", name="papers_moved_is_a_count"),
+)

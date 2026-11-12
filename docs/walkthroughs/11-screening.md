@@ -147,6 +147,14 @@ The app role has no `UPDATE` on `screening_decisions`: a decision is provenance 
 - **Where:** [`application/papers.py`](../../services/api/app/application/papers.py), [`application/briefs.py`](../../services/api/app/application/briefs.py) (`StoredBriefCitations`).
 - **Proven by:** `tests/test_papers_api.py::TestCitedInBrief`.
 
+### D11.13 Label rules are versioned and applied when a label is read (2026-11-12)
+
+- **Decision:** owners and reviewers set two rules (how many inclusion criteria Possibly relevant needs, and what an `unclear` answer counts as). Each apply is a new `label_rule_versions` row; every list, count, PRISMA and download computes the label from the stored per-criterion answers and the latest version. The model's decision never changes. Decisions without answers, unreadable ones, and skipped or failed papers keep the model's label. No model is called.
+- **Why:** a versioned rule set plus the stored answers reproduces every label ever shown, in one small row per change instead of one per paper.
+- **Rejected:** a relabel record per paper (ADR 0006's plan); updating decisions; rules in the browser.
+- **Where:** [`domain/label_rules.py`](../../services/api/app/domain/label_rules.py) (`label_under`), [`application/label_rules.py`](../../services/api/app/application/label_rules.py), `relabel` in [`application/papers.py`](../../services/api/app/application/papers.py), [ADR 0013](../adr/0013-label-rules-applied-on-read.md).
+- **Proven by:** `tests/test_label_rules_domain.py`, `tests/test_label_rules_api.py`, `tests/test_label_rules_storage_contract.py`, `apps/web/src/features/reviews/RulesEditor.test.tsx`.
+
 ### Deliberately not used
 
 | Approach | Why not |
@@ -271,6 +279,22 @@ Have a project `{{project}}` with Amara (owner) and Maya (viewer), as in [07](07
 - **Proves:** D11.12 and UI_UX_SPEC §6.8, §5.3.7.
 - **If it fails:** compare with `GET {{base}}/reviews/{{review}}/papers?tier=failed`; a wrong `is_cited_in_brief` is an API bug, a wrong word a web one.
 
+### T11.11 Label rules: preview, apply, and what they change
+
+Needs a run that screened with per-criterion answers (prompt `screen-2` or later), as in walkthrough 12 or with the demo model. Use Amara (owner) unless the row says otherwise.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T11.11.1 | `GET {{base}}/reviews/{{review}}/label-rules` | `200 {"current": null, "versions": []}`; every decision in `GET …/papers` has `label_set_by: "model"`, `rules_version: null` | No rules means the model's labels, exactly | |
+| T11.11.2 | `POST {{base}}/reviews/{{review}}/label-rules/preview` with `{"possibly_min_met": 1, "unclear_counts_as": "not_met"}` | `200` with `moves` (`from_tier`, `to_tier`, `count`), `moved` and `untouchable`; `GET …/papers` unchanged; the model server's log shows no request | Preview changes nothing and calls no model | |
+| T11.11.3 | `PUT` the same body to `…/label-rules` | `200`, `version.version: 1`, `moved` as previewed; `GET …/papers` shows the new tiers and counts, and relabelled decisions say `label_set_by: "rules"`, `rules_version: 1`; `rationale` and `criteria` unchanged | Apply relabels on read; the model's decision is kept | |
+| T11.11.4 | `GET …/prisma`, then download `dataset.csv` and `included.ris` | Included and excluded counts match the papers list; the CSV has `label_set_by` and `rules_version` columns | Results follow the rules | Counts that disagree with the list are a bug |
+| T11.11.5 | As Maya (viewer): `GET …/label-rules`, then `POST …/preview` and `PUT …/label-rules` | `200`, then `403` twice | Viewers read, never change | |
+| T11.11.6 | As Tariq (not a member): `GET …/label-rules` | `404`, the same body as for a missing review | §5.5 | |
+| T11.11.7 | `PUT` with `{"possibly_min_met": 0, "unclear_counts_as": "met"}` | `422` | Rules checked | |
+| T11.11.8 | pgAdmin, as `humani_t_app`: `UPDATE label_rule_versions SET papers_moved = 0;` | `permission denied for table label_rule_versions` | Versions are append-only (migration `0015`) | Role script missing |
+| T11.11.9 | In the browser, as Amara: open the papers canvas, **Edit rules**, change a field, **Preview**, then **Apply** | Preview lists "N would move from X to Y" and "M papers can't be relabelled (no per-criterion answers)"; **Apply** shows "Applying…" and the table changes only after it; the chat gets a grey line "Labels changed by new rules: N papers moved". As Maya there is no **Edit rules** button, but the line shows | The rules editor (UI_UX_SPEC §6.8, §5.3.11) | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -285,6 +309,7 @@ Have a project `{{project}}` with Amara (owner) and Maya (viewer), as in [07](07
 | T11.8 | ☐ | |
 | T11.9 | ☐ | |
 | T11.10 | ☐ | |
+| T11.11 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -307,6 +332,8 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Deleting the project makes it all unreadable | `tests/test_pipeline_stages.py::TestDeletedProjects`, `tests/test_papers_api.py::TestDeletedProject` |
 | The routes: order, filters, masked text only, 404 for non-members | `tests/test_papers_api.py` |
 | A paper says whether the run's brief cites it | `tests/test_papers_api.py::TestCitedInBrief` |
+| Label rules: the label from the answers, deterministic, never reaching a paper without answers | `tests/test_label_rules_domain.py` |
+| Label rules: preview changes nothing, apply versions and relabels the list, PRISMA and downloads; viewers 403 | `tests/test_label_rules_api.py`, `tests/test_label_rules_storage_contract.py` |
 
 How to run only this phase's tests:
 
@@ -322,7 +349,7 @@ uv run pytest tests/test_screening_domain.py tests/test_papers_storage_contract.
 | G11.2 | Abstracts only; open-access full text and PDF extraction are not built | Screening and the brief see less than the paper says | P2 |
 | G11.3 | No downloadable files (`dataset.csv`, `dataset.jsonl`, `prisma.md`) | Export is summary-only | P2 |
 | G11.4 | Decisions are per run: a retried or repeated run re-screens every paper | Model time on a CPU-only server | Reuse a decision when masked text, criteria version, prompt version and model are all unchanged |
-| G11.5 | Relabelling and the rules editor (UI_UX_SPEC §6.8) are not built | Decisions are read-only | P2 |
+| G11.5 | ~~Relabelling and the rules editor are not built~~ | Resolved: label rules (D11.13). Briefs and answers written after a change read the labels the rules give, and the expanded row says which rules version set a label | Done |
 | G11.6 | Titles, DOIs and links are served as the paper's public bibliographic record, not masked | A member sees a paper's real title | Decide with the owner whether titles must be masked too |
 | G11.7 | The papers list pages in the application, after reading every row of the run | Slow for very large runs (thousands of papers) | Page in SQL when runs grow past P1's sizes |
 | G11.8 | ~~The migration branches from `0007`~~ | Resolved: re-chained as `0009`, after `0008` | Done |

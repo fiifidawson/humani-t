@@ -837,6 +837,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/{review_id}/label-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The review's label rules and every earlier version */
+        get: operations["read_rules_api_v1_reviews__review_id__label_rules_get"];
+        /**
+         * Apply these rules as the review's next version
+         * @description Papers are relabelled from the answers already stored; no model is called.
+         */
+        put: operations["apply_rules_api_v1_reviews__review_id__label_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{review_id}/label-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** How many papers these rules would move; changes nothing */
+        post: operations["preview_rules_api_v1_reviews__review_id__label_rules_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}/brief": {
         parameters: {
             query?: never;
@@ -1793,6 +1831,18 @@ export interface components {
             priority: components["schemas"]["Priority"];
             /** @description The name shown: Highly relevant, Relevant, … */
             tier: components["schemas"]["ScreeningTier"];
+            /**
+             * Label Set By
+             * @description Who set label, priority and tier: the model, or the review's rules.
+             * @default model
+             * @enum {string}
+             */
+            label_set_by: "model" | "rules";
+            /**
+             * Rules Version
+             * @description The rules version that set the label, when rules did.
+             */
+            rules_version?: number | null;
             /** Score */
             score: number;
             /**
@@ -2282,6 +2332,55 @@ export interface components {
              */
             event: "job.finished";
             data: components["schemas"]["JobFinishedData"];
+        };
+        /**
+         * LabelRulesIn
+         * @example {
+         *       "possibly_min_met": 1,
+         *       "unclear_counts_as": "not_met"
+         *     }
+         */
+        LabelRulesIn: {
+            /**
+             * Possibly Min Met
+             * @description Inclusion criteria met for Possibly relevant.
+             */
+            possibly_min_met: number;
+            /** @description What an unclear inclusion answer counts as; uncertain asks a person. */
+            unclear_counts_as: components["schemas"]["UnclearCountsAs"];
+        };
+        /** LabelRulesOut */
+        LabelRulesOut: {
+            /** @description The rules in force; null means the model's labels are shown. */
+            current: components["schemas"]["LabelRulesVersionOut"] | null;
+            /**
+             * Versions
+             * @description Every version, oldest first.
+             */
+            versions: components["schemas"]["LabelRulesVersionOut"][];
+        };
+        /** LabelRulesVersionOut */
+        LabelRulesVersionOut: {
+            /** Version */
+            version: number;
+            /** Possibly Min Met */
+            possibly_min_met: number;
+            unclear_counts_as: components["schemas"]["UnclearCountsAs"];
+            /**
+             * Changed By
+             * Format: uuid
+             */
+            changed_by: string;
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+            /**
+             * Papers Moved
+             * @description Papers of the newest run that changed tier.
+             */
+            papers_moved: number;
         };
         /** LoginIn */
         LoginIn: {
@@ -3027,6 +3126,41 @@ export interface components {
          * @enum {string}
          */
         Role: "owner" | "reviewer" | "viewer";
+        /** RulesAppliedOut */
+        RulesAppliedOut: {
+            /**
+             * Run Id
+             * @description The review's newest run with papers, if any.
+             */
+            run_id: string | null;
+            /** Moves */
+            moves: components["schemas"]["TierMoveOut"][];
+            /** Moved */
+            moved: number;
+            /**
+             * Untouchable
+             * @description Decisions rules cannot relabel: no per-criterion answers.
+             */
+            untouchable: number;
+            version: components["schemas"]["LabelRulesVersionOut"];
+        };
+        /** RulesPreviewOut */
+        RulesPreviewOut: {
+            /**
+             * Run Id
+             * @description The review's newest run with papers, if any.
+             */
+            run_id: string | null;
+            /** Moves */
+            moves: components["schemas"]["TierMoveOut"][];
+            /** Moved */
+            moved: number;
+            /**
+             * Untouchable
+             * @description Decisions rules cannot relabel: no per-criterion answers.
+             */
+            untouchable: number;
+        };
         /** RunIn */
         RunIn: {
             /**
@@ -3470,6 +3604,13 @@ export interface components {
              */
             questions: components["schemas"]["app__api__schemas__questions__QuestionOut"][];
         };
+        /** TierMoveOut */
+        TierMoveOut: {
+            from_tier: components["schemas"]["ScreeningTier"];
+            to_tier: components["schemas"]["ScreeningTier"];
+            /** Count */
+            count: number;
+        };
         /** TokensOut */
         TokensOut: {
             /** Prompt */
@@ -3561,6 +3702,12 @@ export interface components {
              */
             assessments: components["schemas"]["AssessmentOut"][];
         };
+        /**
+         * UnclearCountsAs
+         * @description What an `unclear` answer to an inclusion criterion counts as.
+         * @enum {string}
+         */
+        UnclearCountsAs: "met" | "not_met" | "uncertain";
         /**
          * UnmaskIn
          * @example {
@@ -5421,6 +5568,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManifestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_rules_api_v1_reviews__review_id__label_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelRulesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_rules_api_v1_reviews__review_id__label_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRulesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulesAppliedOut"];
+                };
+            };
+            /** @description Someone else applied rules at the same moment */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_rules_api_v1_reviews__review_id__label_rules_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRulesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulesPreviewOut"];
                 };
             };
             /** @description Validation Error */
