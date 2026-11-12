@@ -31,10 +31,3 @@ class PaperSearchProvider(Protocol):
         Never add, expand or reinterpret terms: a strict vocabulary stays strict.
         """
         ...
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        """Return full text, or None when the document is not openly available.
-
-        None is a normal outcome, not an error.
-        """
-        ...

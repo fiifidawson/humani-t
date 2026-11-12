@@ -10,7 +10,10 @@ from uuid import UUID
 
 from app.domain.accounts import ForbiddenError, NotFoundError
 from app.domain.projects import Action, Membership, can
+from app.domain.reviews import Review
 from app.storage.base import UnitOfWork
+
+REVIEW_NOT_FOUND = "No such review."
 
 
 async def require_member(
@@ -28,3 +31,14 @@ async def require_member(
     if not can(membership.role, action):
         raise ForbiddenError("Your role in this project does not allow this.")
     return membership
+
+
+async def require_review_member(
+    uow: UnitOfWork, user_id: UUID, review_id: UUID, action: Action
+) -> Review:
+    """The review, if the caller's membership of its project allows `action`."""
+    review = await uow.reviews.get(review_id)
+    if review is None:
+        raise NotFoundError(REVIEW_NOT_FOUND)
+    await require_member(uow, user_id, review.project_id, action, not_found=REVIEW_NOT_FOUND)
+    return review

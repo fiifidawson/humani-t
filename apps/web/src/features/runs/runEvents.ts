@@ -22,8 +22,7 @@ const STAGE_ORDER: Readonly<Record<StageId, number>> = {
 	mask: 4,
 	screen: 5,
 	export: 6,
-	index: 7,
-	answer: 8,
+	answer: 7,
 };
 
 export const PIPELINE: readonly StageId[] = (

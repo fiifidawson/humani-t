@@ -222,7 +222,6 @@ class TestStagePlan:
             "mask",
             "screen",
             "export",
-            "index",
             "answer",
         )
 
@@ -255,6 +254,10 @@ class TestStagePlan:
     def test_a_stage_this_deployment_cannot_run_is_refused(self):
         with pytest.raises(ValueError, match="stages"):
             plan_stages(["queries", "answer"], ("queries", "discover"))
+
+    def test_the_retired_index_stage_cannot_be_asked_for(self):
+        with pytest.raises(ValueError, match="unknown"):
+            plan_stages(["export", "index"], STAGES)
 
 
 def _run(**overrides: object) -> Run:
@@ -359,6 +362,15 @@ class TestRun:
     def test_stages_must_be_a_valid_plan(self):
         with pytest.raises(ValueError, match="stages"):
             _run(stages=())
+
+    def test_a_run_stored_with_the_retired_index_stage_still_loads(self):
+        run = _run(stages=("export", "index", "answer"))
+
+        assert run.stages == ("export", "index", "answer")
+
+    def test_the_retired_index_stage_keeps_its_place_in_the_order(self):
+        with pytest.raises(ValueError, match="order"):
+            _run(stages=("index", "export"))
 
     def test_timestamps_must_be_timezone_aware(self):
         with pytest.raises(ValueError, match="timezone-aware"):

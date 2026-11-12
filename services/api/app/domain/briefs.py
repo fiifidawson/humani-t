@@ -8,7 +8,7 @@ options or names a winner: the person decides.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -17,6 +17,7 @@ from uuid import UUID
 
 from app.domain.runs import JsonValue
 from app.domain.screening import Passage, PassageSourceKind
+from app.domain.timestamps import require_aware
 
 CAVEAT = (
     "This brief is an aid to a decision, not the decision. It covers only the papers and "
@@ -518,11 +519,6 @@ class AgentStep:
         )
 
 
-def _require_aware(owner: str, value: datetime) -> None:
-    if value.tzinfo is None:
-        raise ValueError(f"{owner} must be timezone-aware")
-
-
 def _check_rounds(owner: str, rounds: int, kept_round: int, max_rounds: int) -> None:
     if not 1 <= rounds <= max_rounds:
         raise ValueError(f"{owner}.rounds must be between 1 and max_rounds")
@@ -562,7 +558,7 @@ class DecisionBrief:
         _require_text("DecisionBrief.model_id", self.model_id)
         _require_text("DecisionBrief.caveat", self.caveat)
         _check_rounds("DecisionBrief", self.rounds, self.kept_round, self.max_rounds)
-        _require_aware("DecisionBrief.created_at", self.created_at)
+        require_aware("DecisionBrief", created_at=self.created_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -591,7 +587,7 @@ class BriefRecord:
         if self.version < 1:
             raise ValueError("BriefRecord.version counts from 1")
         _check_rounds("BriefRecord", self.rounds, self.kept_round, self.max_rounds)
-        _require_aware("BriefRecord.created_at", self.created_at)
+        require_aware("BriefRecord", created_at=self.created_at)
         for name in ("content_sealed", "evidence_sealed", "trace_sealed"):
             if not getattr(self, name):
                 raise ValueError(f"BriefRecord.{name} must not be empty")
@@ -695,13 +691,3 @@ def body_from_dict(data: Mapping[str, Any]) -> BriefBody:
         ),
         gaps=tuple(Gap(str(g)) for g in data["gaps"]),
     )
-
-
-def passages_by_tag(
-    evidence: Sequence[RetrievedPassage],
-) -> dict[str, tuple[RetrievedPassage, ...]]:
-    """The retrieved passages grouped by the tag a claim cites them by, in retrieval order."""
-    grouped: dict[str, list[RetrievedPassage]] = {}
-    for item in evidence:
-        grouped.setdefault(item.passage.tag, []).append(item)
-    return {tag: tuple(items) for tag, items in grouped.items()}

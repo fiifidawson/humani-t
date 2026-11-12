@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.api.dependencies import API_PREFIX, SearchProviderDep, StorageDep
+from app.api.dependencies import API_PREFIX, ProvidersDep, StorageDep
 from app.api.errors import problem
 from app.api.schemas import HealthOut, InfoOut, ReadyOut
 
@@ -20,7 +20,7 @@ API_VERSION = "0.1.0"
 
 # Sources that answer from memory rather than over the network. Used to tell a
 # reader of /info whether this process would phone anyone.
-OFFLINE_SOURCES = {"fake"}
+OFFLINE_SOURCES = {"fake", "demo"}
 
 
 @router.get("/health", summary="Liveness probe")
@@ -47,12 +47,13 @@ async def ready(storage: StorageDep) -> ReadyOut | JSONResponse:
 
 
 @info_router.get("/info", summary="What is wired into this process")
-async def info(provider: SearchProviderDep) -> InfoOut:
+async def info(providers: ProvidersDep) -> InfoOut:
     """Report which implementations are active behind the interfaces."""
+    source_ids = [source.source_id for source in providers.paper_sources]
     return InfoOut(
         name=API_NAME,
         version=API_VERSION,
         api_prefix=API_PREFIX,
-        search_provider=provider.source_id,
-        makes_network_calls=provider.source_id not in OFFLINE_SOURCES,
+        paper_sources=source_ids,
+        makes_network_calls=any(s not in OFFLINE_SOURCES for s in source_ids),
     )

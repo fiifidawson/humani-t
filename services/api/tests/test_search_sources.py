@@ -166,13 +166,6 @@ class TestEverySource:
         with pytest.raises(PaperSourceUnavailableError):
             await build(FakeHttpFetcher(garbage)).search(QUERY)
 
-    @pytest.mark.parametrize(("build", "source_id", "recording"), PROVIDERS)
-    async def test_full_text_is_not_fetched_yet(self, build, source_id, recording):
-        provider = build(FakeHttpFetcher())
-        record = PaperRecord(source_id, "x-1", "A title")
-
-        assert await provider.fetch_fulltext(record) is None
-
 
 class TestOpenAlex:
     def test_the_query_compiles_to_openalex_boolean_syntax(self):

@@ -9,26 +9,23 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 
+from app.api.access import require_review
 from app.api.dependencies import ExportsDep
 from app.api.exports import render
-from app.api.session import CurrentDep, request_id
+from app.api.session import request_id
 from app.application.accounts import Current
 from app.domain.accounts import NotFoundError
 from app.domain.exports import ExportName, content_disposition, download_filename
+from app.domain.projects import Action
 
 router = APIRouter(tags=["exports"])
 
 _NAMES = ", ".join(f"`{e.value}`" for e in ExportName)
 
 
-async def _reader(review_id: UUID, current: CurrentDep, exports: ExportsDep) -> Current:
-    await exports.authorize_review(current, review_id)
-    return current
-
-
-_Reader = Annotated[Current, Depends(_reader)]
+_Reader = Annotated[Current, require_review(Action.READ_PROJECT)]
 
 
 @router.get(

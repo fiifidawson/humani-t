@@ -21,9 +21,14 @@ from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from app.domain.accounts import AccountError
+from app.domain.timestamps import require_aware
 
 _TOTP_SECRET_BYTES = 20  # RFC 4226 §4: the length of the HMAC-SHA1 output
 _ASCII_DIGITS = frozenset("0123456789")
+# What every authenticator app assumes when it scans a QR code (RFC 6238 defaults).
+TOTP_DIGITS = 6
+TOTP_STEP = timedelta(seconds=30)
+TOTP_ALLOWED_DRIFT_STEPS = 1
 
 RECOVERY_CODE_COUNT = 10
 # Crockford base32: no I, L, O or U, so a code copied from paper is not misread.
@@ -36,39 +41,23 @@ WEBAUTHN_CHALLENGE_LIFETIME = timedelta(minutes=5)
 _CHALLENGE_BYTES = 32  # WebAuthn §13.4.3 asks for at least 16
 
 
-def _require_aware(owner: str, **values: datetime | None) -> None:
-    for name, value in values.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
-@dataclass(frozen=True, slots=True)
-class TotpPolicy:
-    """The parameters every authenticator app assumes when it scans a QR code."""
-
-    algorithm: str = "SHA1"
-    digits: int = 6
-    step: timedelta = timedelta(seconds=30)
-    allowed_drift_steps: int = 1
-
-
 def new_totp_secret() -> bytes:
     return secrets.token_bytes(_TOTP_SECRET_BYTES)
 
 
-def totp_step(at: datetime, policy: TotpPolicy = TotpPolicy()) -> int:  # noqa: B008 — frozen
-    return int(at.timestamp()) // int(policy.step.total_seconds())
+def totp_step(at: datetime) -> int:
+    return int(at.timestamp()) // int(TOTP_STEP.total_seconds())
 
 
-def _hotp(secret: bytes, counter: int, digits: int) -> str:
+def _hotp(secret: bytes, counter: int) -> str:
     digest = hmac.new(secret, struct.pack(">Q", counter), hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
     value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
-    return str(value % 10**digits).zfill(digits)
+    return str(value % 10**TOTP_DIGITS).zfill(TOTP_DIGITS)
 
 
-def totp_code(secret: bytes, at: datetime, policy: TotpPolicy = TotpPolicy()) -> str:  # noqa: B008
-    return _hotp(secret, totp_step(at, policy), policy.digits)
+def totp_code(secret: bytes, at: datetime) -> str:
+    return _hotp(secret, totp_step(at))
 
 
 def matching_totp_step(
@@ -77,21 +66,20 @@ def matching_totp_step(
     now: datetime,
     *,
     last_used_step: int | None,
-    policy: TotpPolicy = TotpPolicy(),  # noqa: B008 — frozen dataclass, safe as a default
 ) -> int | None:
     """Return the time step `code` belongs to, or `None` if it is not acceptable now.
 
     Acceptable means: within the allowed drift of `now`, and later than the last
     step ever used, so a code — or any older one — works at most once.
     """
-    if len(code) != policy.digits or not set(code) <= _ASCII_DIGITS:
+    if len(code) != TOTP_DIGITS or not set(code) <= _ASCII_DIGITS:
         return None
-    current = totp_step(now, policy)
-    drift = policy.allowed_drift_steps
+    current = totp_step(now)
+    drift = TOTP_ALLOWED_DRIFT_STEPS
     for step in range(current - drift, current + drift + 1):
         if last_used_step is not None and step <= last_used_step:
             continue
-        if hmac.compare_digest(_hotp(secret, step, policy.digits), code):
+        if hmac.compare_digest(_hotp(secret, step), code):
             return step
     return None
 
@@ -101,7 +89,6 @@ def totp_provisioning_uri(
     *,
     account_name: str,
     issuer: str = "Humani-T",
-    policy: TotpPolicy = TotpPolicy(),  # noqa: B008 — frozen dataclass, safe as a default
 ) -> str:
     """The Key URI Format that authenticator apps read from a QR code."""
     label = quote(f"{issuer}:{account_name}", safe=":")
@@ -109,9 +96,9 @@ def totp_provisioning_uri(
         {
             "secret": base64.b32encode(secret).decode().rstrip("="),
             "issuer": issuer,
-            "algorithm": policy.algorithm,
-            "digits": policy.digits,
-            "period": int(policy.step.total_seconds()),
+            "algorithm": "SHA1",
+            "digits": TOTP_DIGITS,
+            "period": int(TOTP_STEP.total_seconds()),
         },
         quote_via=quote,
     )
@@ -130,7 +117,7 @@ class TotpCredential:
     last_used_step: int | None = None
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "TotpCredential", created_at=self.created_at, confirmed_at=self.confirmed_at
         )
         if self.last_used_step is not None and self.last_used_step < 0:
@@ -176,7 +163,7 @@ class RecoveryCode:
     used_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("RecoveryCode", created_at=self.created_at, used_at=self.used_at)
+        require_aware("RecoveryCode", created_at=self.created_at, used_at=self.used_at)
 
     @property
     def is_usable(self) -> bool:
@@ -201,7 +188,7 @@ class Passkey:
     transports: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_aware("Passkey", created_at=self.created_at, last_used_at=self.last_used_at)
+        require_aware("Passkey", created_at=self.created_at, last_used_at=self.last_used_at)
         if not self.name.strip():
             raise ValueError("Passkey.name must not be blank")
         if self.sign_count < 0:
@@ -262,7 +249,7 @@ class WebAuthnChallenge:
     used_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "WebAuthnChallenge",
             created_at=self.created_at,
             expires_at=self.expires_at,

@@ -22,9 +22,6 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/health` | system | Liveness |
 | `GET` | `/api/v1/ready` | system | Readiness: can this process serve requests |
 | `GET` | `/api/v1/info` | system | Which implementations are wired in (not in production) |
-| `GET` | `/api/v1/sources` | search | Repositories this process can reach (signed in) |
-| `POST` | `/api/v1/vocabulary/compile` | vocabulary | Vocabulary to Boolean query (signed in) |
-| `POST` | `/api/v1/projects/{project_id}/search` | search | Compile, then search, inside a project (owner, reviewer) |
 | `POST` | `/api/v1/auth/login` | auth | Check the password; sets the session and CSRF cookies; `status` says what comes next |
 | `POST` | `/api/v1/auth/logout` | auth | End this session |
 | `GET` | `/api/v1/auth/session` | auth | Who is signed in |
@@ -104,128 +101,14 @@ Reports which implementations are active behind the interfaces. **Not mounted in
   "name": "humani-t API",
   "version": "0.1.0",
   "api_prefix": "/api/v1",
-  "search_provider": "fake",
-  "makes_network_calls": false
+  "paper_sources": ["openalex", "europepmc"],
+  "makes_network_calls": true
 }
 ```
+
+`paper_sources` are the sources a run searches; `demo` makes no requests.
 
 The whole design rests on implementations being swappable. This endpoint makes the current choice visible instead of buried in a config file — and `makes_network_calls` is the fastest way to confirm a deployment is not talking to anyone it should not.
-
----
-
-### `GET /api/v1/sources`
-
-Needs a signed-in user: the list describes the deployment's configuration.
-
-```json
-[
-  {
-    "source_id": "fake",
-    "live": false,
-    "description": "In-memory corpus of four papers. No network, no key, no rate limit."
-  }
-]
-```
-
-One entry today. It becomes the list a reviewer checks to know what a run covered — an unexpected entry here is the first sign a run is not reproducible.
-
----
-
-### `POST /api/v1/vocabulary/compile`
-
-Needs a signed-in user (and, like every signed-in write, the `X-CSRF-Token` header), but no project: compiling is pure and reads no project data.
-
-Shows exactly what will be searched for, before anything is searched.
-
-**Request**
-
-```json
-{
-  "origin": "llm_assisted",
-  "version": 1,
-  "concepts": [
-    {
-      "term": "chatbot",
-      "synonyms": ["conversational agent"],
-      "theme": "technology"
-    },
-    {
-      "term": "humanitarian",
-      "synonyms": ["crisis response"],
-      "theme": "setting"
-    }
-  ]
-}
-```
-
-`origin` is `llm_assisted` or `user_supplied`. The latter marks the vocabulary **strict**: used exactly as given, with no model-driven expansion.
-
-**Response**
-
-```json
-{
-  "rendered": "(\"chatbot\" OR \"conversational agent\") AND (\"humanitarian\" OR \"crisis response\")",
-  "themes": [
-    {
-      "theme": "technology",
-      "groups": [{ "concept": "chatbot", "terms": ["chatbot", "conversational agent"] }]
-    },
-    {
-      "theme": "setting",
-      "groups": [{ "concept": "humanitarian", "terms": ["humanitarian", "crisis response"] }]
-    }
-  ],
-  "term_count": 4,
-  "provenance": {
-    "vocabulary_version": 1,
-    "vocabulary_origin": "llm_assisted",
-    "is_strict": false
-  }
-}
-```
-
-`rendered` is for humans — logs, review screens, the audit trail. It is **not** what gets sent to a repository; each provider compiles the structured form into its own dialect.
-
-The endpoint is pure and deterministic: the same vocabulary always produces the same query, and no model is consulted for either origin. That is what makes a user-supplied vocabulary strict by construction rather than by discipline.
-
-Invalid input returns `422` — Pydantic checks shape, the domain checks meaning.
-
----
-
-### `POST /api/v1/projects/{project_id}/search`
-
-Compiles the vocabulary and runs it against the configured source, on behalf of a project. Owners and reviewers may search (`run.manage`); a viewer gets `403` and a non-member `404`. It is scoped to a project because results become the project's evidence and, with real sources, a search is a request leaving the deployment on the project's behalf.
-
-**Request** — the compile body plus `limit` (1–200, default 25).
-
-**Response**
-
-```json
-{
-  "source_id": "fake",
-  "query": { "rendered": "...", "themes": [], "term_count": 4, "provenance": {} },
-  "total": 2,
-  "results": [
-    {
-      "source_id": "fake",
-      "external_id": "fake-001",
-      "title": "Conversational agents for crisis response in humanitarian settings",
-      "year": 2024,
-      "doi": "10.1000/fake.001",
-      "is_open_access": true,
-      "abstract": "...",
-      "url": "https://example.org/fake-001",
-      "identity": "doi:10.1000/fake.001"
-    }
-  ]
-}
-```
-
-Two things worth noticing.
-
-**The query travels with the results.** A result set separated from the query that produced it cannot be audited, and auditability is the point of the system.
-
-**Every record carries an `identity`.** DOI when present, otherwise normalised title plus year. It is the key that collapses the same paper arriving from four sources into one record.
 
 ---
 
@@ -341,7 +224,9 @@ The stages are fake until the real ones are built: each counts through five item
 
 ### `POST /api/v1/reviews/{review_id}/runs`
 
-**Request** `{"stages": ["discover", "queries"]}`: any of `queries`, `discover`, `ingest`, `mask`, `screen`, `export`, `index`, `answer`, in any order; they run in that pipeline order. `{"stages": []}` or `{}` runs the whole pipeline, every stage in that order. Unknown or repeated stages are `422`. Owner or reviewer.
+**Request** `{"stages": ["discover", "queries"]}`: any of `queries`, `discover`, `ingest`, `mask`, `screen`, `export`, `answer`, in any order; they run in that pipeline order. `{"stages": []}` or `{}` runs the whole pipeline, every stage in that order. Unknown or repeated stages are `422`. Owner or reviewer.
+
+There is no `index` stage: it was a stand-in that did no work, because BM25 builds its index per search ([ADR-0007](adr/0007-bm25-retrieval-for-the-brief.md)). Runs stored with it still read back with it in `stages`, their events and their manifest; a new request naming it is `422`.
 
 **Response** `202` with `{"run_id": "…"}` and `Location: /api/v1/runs/{run_id}/events`. The run is queued; a worker (`python -m app.worker`) picks it up. With in-memory storage the API process works runs itself, since a separate worker cannot see its memory (`HUMANI_T_RUN_WORKER_IN_PROCESS`, refused in production). `409` while another run of the same review is queued, running or waiting. Audited as `run.started`.
 
@@ -366,11 +251,11 @@ retry: 3000
 
 id: 1
 event: stage.started
-data: {"at":"2026-11-03T09:11:00+00:00","position":1,"stage":"queries","total":2}
+data: {"at":"2026-11-03T09:11:00+00:00","position":1,"stage":"discover","total":2}
 
 id: 2
 event: stage.progress
-data: {"done":1,"item":"Item 1 of 5","stage":"queries","total":5}
+data: {"at":"2026-11-03T09:11:02+00:00","done":1,"item":"openalex · 25 found","stage":"discover","total":2}
 
 : keep-alive
 
@@ -424,7 +309,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `PaperOut`
 
-`{"paper_id", "tag", "position", "title", "year", "doi", "url", "source_id", "found_by", "is_open_access", "decision", "screening_status", "skipped_because"}`. `url` is the record's own link, else `https://doi.org/<doi>` when it has a DOI (public metadata), else `null`. `screening_status` is `screened` (it has a decision), `skipped` (the screen stage had no masked abstract to send; `skipped_because` is `no_abstract` or `not_masked`), `failed` (the privacy check stopped its text, so nothing was sent; it is tried again next run) or `not_screened` (this run has not screened it yet). `tag` is `P` and the paper's place in the run's merged list (`P1`, `P12`…); it is how the brief cites the paper and does not change when labels do. `source_id` is the source whose record was kept; `found_by` every source that returned it. `decision` is `null` until screened, else `DecisionOut`: `{"label": "include"|"exclude"|"uncertain", "priority": "high"|"medium"|"low", "tier", "score", "rationale", "criteria_matched", "exclusion_reasons", "is_unreadable", "model_id", "prompt_version", "criteria_version", "evidence_kind", "decided_at"}`. `tier` is the name shown (UI_UX_SPEC §6.8): `highly_relevant`, `relevant`, `possibly_relevant` (an inclusion by priority), `excluded`, `uncertain`. `criteria_matched` names the criteria (`I1`, `E1`…) the paper meets; an exclusion's `exclusion_reasons` are the exclusion criteria it meets, then the inclusion criteria it misses. `is_unreadable` marks the `uncertain` decision recorded when the model's answer could not be read twice. `criteria_version` is the plan version whose criteria were applied (read it with `GET …/plan/versions/{criteria_version}`); `evidence_kind` is what was read (`abstract`). `criteria` is each criterion's answer in the plan's order, `[{"id": "I1", "answer": "yes"|"partly"|"no"|"unclear", "quote": str|null}]`, for the expanded row (UI_UX_SPEC §6.8): `yes` and `partly` are exactly the criteria in `criteria_matched`, and every quote is checked to be words of the masked text the model read, or the answer is refused and asked again. Empty for decisions made before prompt version `screen-2`, and when the model gave none.
+`{"paper_id", "tag", "position", "title", "year", "doi", "url", "source_id", "found_by", "is_open_access", "decision", "screening_status", "skipped_because"}`. `url` is the record's own link, else `https://doi.org/<doi>` when it has a DOI (public metadata), else `null`. `screening_status` is `screened` (it has a decision), `skipped` (the screen stage had no masked abstract to send; `skipped_because` is `no_abstract` or `not_masked`), `failed` (the privacy check stopped its text, so nothing was sent; it is tried again next run) or `not_screened` (this run has not screened it yet). `tag` is `P` and the paper's place in the run's merged list (`P1`, `P12`…); it is how the brief cites the paper and does not change when labels do. `source_id` is the source whose record was kept; `found_by` every source that returned it. `decision` is `null` until screened, else `DecisionOut`: `{"label": "include"|"exclude"|"uncertain", "priority": "high"|"medium"|"low", "tier", "score", "rationale", "criteria_matched", "exclusion_reasons", "is_unreadable", "model_id", "prompt_version", "criteria_version", "evidence_kind", "decided_at"}`. `tier` is the name shown (UI_UX_SPEC §6.8): `highly_relevant`, `relevant`, `possibly_relevant` (an inclusion by priority), `excluded`, `uncertain`. `criteria_matched` names the criteria (`I1`, `E1`…) the paper meets; an exclusion's `exclusion_reasons` are the exclusion criteria it meets, then the inclusion criteria it misses. `is_unreadable` marks the `uncertain` decision recorded when the model's answer could not be read twice. `criteria_version` is the plan version whose criteria were applied (read it with `GET …/plan/versions/{criteria_version}`); `evidence_kind` is what was read (`abstract`). `criteria` is each criterion's answer in the plan's order, `[{"id": "I1", "answer": "yes"|"partly"|"no"|"unclear", "quote": str|null}]`, for the expanded row (UI_UX_SPEC §6.8): `yes` and `partly` are exactly the criteria in `criteria_matched`, and every quote is the masked text's own words: the model's quote is found in that text ignoring case and whitespace, with pieces joined by an ellipsis in order and of at least three words each, and the matching span is stored (pieces joined with ` … `, cut at a word and ended with `…` past 300 characters). A quote not found is refused and the paper asked again. Empty for decisions made before prompt version `screen-2`, and when the model gave none.
 
 ### `GET /api/v1/reviews/{review_id}/papers?run_id=&label=&tier=&page=`
 
@@ -448,7 +333,7 @@ What the pipeline stages put in `stage.finished`:
 
 - **discover:** `identified`, `by_source`, `failed_sources`, `after_deduplication`, `duplicates_removed`, `new_papers`; manifest `plan_version`, `vocabulary_version`, `sources`, `queries`, `limit_per_source`. One `stage.progress` per source (`"openalex · 25 found"`, `"arxiv · could not be searched"`).
 - **ingest:** `papers`, `abstracts`, `title_only`, `full_texts` (0 until P2), `open_access_not_read`, `kept`, `already_kept`, `gaps`.
-- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `model_id`, `prompt_version` (`screen-2`: with per-criterion answers and quotes), `criteria_version`, `plan_version`. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
+- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `model_id`, `prompt_version` (`screen-3`: quotes located in the text as above; `screen-2`: per-criterion answers and exact quotes), `criteria_version`, `plan_version`. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
 - **export:** `prisma` (as above), `dataset` (`papers`, `by_source`, `years`, `open_access`, `with_abstract`), `gaps`.
 
 A stage that worked from another run's discovery adds `papers_from_run` to its manifest.
@@ -492,7 +377,7 @@ The question, every answer and every change request are masked before any model 
   After a run that is done, failed or cancelled, `POST …/plan/changes` drafts the next version, and the web app starts a run from this stage when it is accepted (Wave 2, prompt-first changes).
 - `receipts` are the privacy receipts (UI_UX_SPEC §5.3.2): one per model call, with exactly the masked text the model received and the masked counts by type, never the original values. `delivered: false` means the call failed after the text may have left. `plan_version` is the version the call was drafting (`null` for clarifying questions), and `change_request_id` the change request a revision was drafted from; both are set on failed calls too, so a receipt is placed by them, never by its position. A failed call's `plan_version` may later be written by a retry, whose receipt names it as well. Receipts written before these fields existed have both `null`.
 
-`VersionOut` carries `version`, `origin` (`llm_assisted` or `user_supplied`), `is_strict`, `author` (`model` or a `person` with their id), `created_at`, `accepted_at`, `accepted_by`, `model_id` and `prompt_version` (null for a person's version), `themes` (each concept with its `term`, `synonyms` and `terms`, every term with `added_by`), `criteria` (`I1`, `E1`… with `kind` and `text`), `notes` (changes made automatically to the model's draft, such as a term dropped because it held masked text), the `change_request` that produced it, the `clarifications` it was drafted from, and `query`, the compiled Boolean query (as `POST /vocabulary/compile` returns it).
+`VersionOut` carries `version`, `origin` (`llm_assisted` or `user_supplied`), `is_strict`, `author` (`model` or a `person` with their id), `created_at`, `accepted_at`, `accepted_by`, `model_id` and `prompt_version` (null for a person's version), `themes` (each concept with its `term`, `synonyms` and `terms`, every term with `added_by`), `criteria` (`I1`, `E1`… with `kind` and `text`), `notes` (changes made automatically to the model's draft, such as a term dropped because it held masked text), the `change_request` that produced it, the `clarifications` it was drafted from, and `query`, the compiled Boolean query: `rendered` (for people, not what a source receives), `themes`, `term_count` and `provenance`.
 
 ### `POST /api/v1/reviews/{review_id}/plan`
 

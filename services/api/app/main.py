@@ -38,9 +38,7 @@ from app.api.routes import (
     questions,
     reviews,
     runs,
-    search,
     system,
-    vocabulary,
 )
 from app.api.routes.system import API_NAME, API_VERSION
 from app.domain.accounts import EmailTakenError
@@ -70,21 +68,6 @@ TAGS_METADATA = [
         "description": (
             "Projects and their members. A project is the unit of access, encryption "
             "and deletion: non-members get 404 for everything about it."
-        ),
-    },
-    {
-        "name": "vocabulary",
-        "description": (
-            "Turning curated terms into a Boolean query. Concepts sharing a theme "
-            "are OR'd; themes are AND'd. A user-supplied vocabulary is used "
-            "exactly as given."
-        ),
-    },
-    {
-        "name": "search",
-        "description": (
-            "Running a compiled query against a source. Results always travel "
-            "with the query and provenance that produced them."
         ),
     },
     {"name": "reviews", "description": "Questions inside a project, encrypted with its key."},
@@ -259,8 +242,6 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(plans.router)
     v1.include_router(masking.router)
     v1.include_router(documents.router)
-    v1.include_router(vocabulary.router)
-    v1.include_router(search.router)
     app.include_router(v1)
 
 

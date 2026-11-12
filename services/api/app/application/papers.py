@@ -16,7 +16,7 @@ from uuid import UUID
 
 from app.application.accounts import Current
 from app.application.encryption import ScopeEncryption
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
 from app.domain.discovery import (
@@ -58,7 +58,6 @@ _TEXT_PURPOSE = "paper_texts.text"
 _RATIONALE_PURPOSE = "screening_decisions.rationale"
 _ANSWERS_PURPOSE = "screening_decisions.answers"
 
-_REVIEW_NOT_FOUND = "No such review."
 _RUN_NOT_FOUND = "No such run."
 _PAPER_NOT_FOUND = "No such paper."
 _EVENTS_BATCH = 10_000
@@ -451,10 +450,6 @@ class PaperService:
         self._masked = masked
         self._log = RunLog(encryption)
 
-    async def authorize_review(self, current: Current, review_id: UUID) -> None:
-        async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
-
     async def list_papers(
         self,
         current: Current,
@@ -476,7 +471,7 @@ class PaperService:
         if page < 1:
             raise ValueError("page counts from 1")
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             run = await self._run_of(uow, review_id, run_id)
             papers = await self._store.run_papers(uow, run)
             decided = {d.paper_id: d for d in await uow.screening.list_for_run(run.id)}
@@ -507,7 +502,10 @@ class PaperService:
         self, current: Current, review_id: UUID, paper_id: UUID, *, run_id: UUID | None = None
     ) -> PaperDetail:
         async with self._storage.unit_of_work() as uow:
-            project_id = await self._review_project(uow, current, review_id)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.READ_PROJECT
+            )
+            project_id = review.project_id
             run = await self._run_of(uow, review_id, run_id)
             seen = next(
                 (p for p in await self._store.run_papers(uow, run) if p.paper_id == paper_id),
@@ -530,7 +528,7 @@ class PaperService:
         self, current: Current, review_id: UUID, *, run_id: UUID | None = None
     ) -> PrismaView:
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             run = await self._run_of(uow, review_id, run_id)
             return PrismaView(
                 run.id,
@@ -572,19 +570,6 @@ class PaperService:
             ):
                 finished.append(StageSummary(stage, float(seconds), summary))
         return assemble_manifest(run, finished)
-
-    async def _review_project(self, uow: UnitOfWork, current: Current, review_id: UUID) -> UUID:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow,
-            current.user.id,
-            review.project_id,
-            Action.READ_PROJECT,
-            not_found=_REVIEW_NOT_FOUND,
-        )
-        return review.project_id
 
     async def _run_of(self, uow: UnitOfWork, review_id: UUID, run_id: UUID | None) -> Run:
         """The named run of this review, or its newest run that has papers."""

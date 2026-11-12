@@ -68,10 +68,6 @@ class OpenAlexProvider:
             page += 1
         return tuple(records[:limit])
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        # Full text arrives with PDF retrieval and extraction (build order step 10).
-        return None
-
     async def _page(self, compiled: str, per_page: int, page: int) -> list[Mapping[str, Any]]:
         params = [
             ("search.title_and_abstract", compiled),

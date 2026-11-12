@@ -286,7 +286,6 @@ describe("the search draft card (UI_UX_SPEC §5.3.4)", () => {
 				"mask",
 				"screen",
 				"export",
-				"index",
 				"answer",
 			],
 		});

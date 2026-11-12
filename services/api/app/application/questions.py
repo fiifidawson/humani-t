@@ -28,7 +28,7 @@ from app.application.briefs import BriefSeal, passage_from_dict, passage_to_dict
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.briefs.base import Retriever
 from app.domain.accounts import NotFoundError
 from app.domain.briefs import (
@@ -63,7 +63,6 @@ QUESTION_CHANNEL = "questions:queued"
 _QUESTION_PURPOSE = "questions.question"
 _ANSWER_PURPOSE = "questions.answer"
 
-_REVIEW_NOT_FOUND = "No such review."
 _THREAD_NOT_FOUND = "No such thread."
 _QUESTION_NOT_FOUND = "No such question."
 _STILL_ANSWERING = (
@@ -201,10 +200,6 @@ class QuestionService:
         self._signals = signals
         self._clock = clock
 
-    async def authorize_review(self, current: Current, review_id: UUID, action: Action) -> None:
-        async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id, action)
-
     async def ask(
         self,
         current: Current,
@@ -219,9 +214,10 @@ class QuestionService:
         thread's last question is still being answered.
         """
         async with self._storage.unit_of_work() as uow:
-            project_id = await self._review_project(
-                uow, current, review_id, Action.ASK_QUESTIONS
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.ASK_QUESTIONS
             )
+            project_id = review.project_id
             question = normalize_question(text)
             if thread_id is not None:
                 await self._thread(uow, current, thread_id, review_id)
@@ -229,7 +225,7 @@ class QuestionService:
         masked = await self._sanitizer.mask(question, rules=rules)
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id, Action.ASK_QUESTIONS)
+            await require_review_member(uow, current.user.id, review_id, Action.ASK_QUESTIONS)
             if thread_id is None:
                 thread = Thread(uuid.uuid4(), project_id, review_id, now, current.user.id)
                 await uow.questions.add_thread(thread)
@@ -278,7 +274,7 @@ class QuestionService:
     async def threads(self, current: Current, review_id: UUID) -> list[ThreadView]:
         """The review's threads, newest first, each with its questions."""
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id, Action.READ_PROJECT)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             return [
                 await self._open_thread(uow, t)
                 for t in await uow.questions.list_threads(review_id)
@@ -325,17 +321,6 @@ class QuestionService:
             not_found=_THREAD_NOT_FOUND,
         )
         return thread
-
-    async def _review_project(
-        self, uow: UnitOfWork, current: Current, review_id: UUID, action: Action
-    ) -> UUID:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow, current.user.id, review.project_id, action, not_found=_REVIEW_NOT_FOUND
-        )
-        return review.project_id
 
 
 @dataclass(frozen=True, slots=True)

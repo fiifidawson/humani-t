@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -22,7 +22,8 @@ from app.application.accounts import Current
 from app.application.audit import SYSTEM, Actor, AuditLog
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
-from app.application.membership import require_member
+from app.application.masking import MaskingRuleService
+from app.application.membership import REVIEW_NOT_FOUND, require_review_member
 from app.application.reviews import question_context
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import EncryptionContext
@@ -194,7 +195,6 @@ _CONVERSATION_PURPOSE = "plan_conversations.body"
 _VERSION_PURPOSE = "plan_versions.body"
 _RECEIPT_PURPOSE = "plan_receipts.body"
 
-_NOT_FOUND = "No such review."
 _NO_VERSION = "No such plan version."
 _DURING_RUN = "The plan cannot change while a run is going. Wait for it, or cancel it."
 _MOVED_ON = "The draft changed while you were looking at it. Showing the latest."
@@ -212,21 +212,6 @@ _RUN_GOING = frozenset({ReviewStatus.RUNNING, ReviewStatus.WAITING})
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
-
-
-class MaskingRuleSource(Protocol):
-    """The project's "always mask this term" rules, read inside the caller's transaction."""
-
-    async def rules_for(self, uow: UnitOfWork, project_id: UUID) -> Sequence[MaskingRule]: ...
-
-
-class _NoProjectRules:
-    async def rules_for(self, uow: UnitOfWork, project_id: UUID) -> Sequence[MaskingRule]:
-        return ()
-
-
-NO_PROJECT_RULES: MaskingRuleSource = _NoProjectRules()
-"""No project rules: the sanitiser's detectors alone. For deployments without a rule store."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,7 +285,7 @@ class PlanService:
         audit: AuditLog,
         inference: GuardedInference,
         sanitizer: Sanitizer,
-        rules: MaskingRuleSource,
+        rules: MaskingRuleService,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
@@ -311,20 +296,17 @@ class PlanService:
         self._rules = rules
         self._clock = clock
 
-    async def authorize_review(self, current: Current, review_id: UUID, action: Action) -> None:
-        """Check access without acting, so the HTTP layer refuses before reading a body."""
-        async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, action)
-
     async def get(self, current: Current, review_id: UUID) -> PlanView:
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.READ_PROJECT)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.READ_PROJECT
+            )
             return await self._view(uow, review)
 
     async def version(self, current: Current, review_id: UUID, number: int) -> PlanVersionView:
         """One version, its diff against the one before, and who added each of its terms."""
         async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, Action.READ_PROJECT)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             records = [
                 r for r in await uow.plans.list_versions(review_id) if r.version <= number
             ]
@@ -339,7 +321,9 @@ class PlanService:
     ) -> PlanView:
         """Ask clarifying questions (deep), or draft at once (shallow)."""
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status is not ReviewStatus.NEW or await uow.plans.get_conversation(
                 review_id
             ):
@@ -360,7 +344,9 @@ class PlanService:
             plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, now)
             trigger = ReviewTrigger.DRAFT
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status is not ReviewStatus.NEW:
                 raise PlanConflictError("This review already has a search plan. Showing it.")
             await uow.plans.add_conversation(await self._seal_conversation(uow, conversation))
@@ -383,7 +369,9 @@ class PlanService:
         """Record answers (`None` skips); once every question is settled, draft the plan."""
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             stored = await uow.plans.get_conversation(review_id)
             if review.status is not ReviewStatus.CLARIFYING or stored is None:
                 raise PlanConflictError("This review is not waiting for answers.")
@@ -412,7 +400,9 @@ class PlanService:
         plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, self._clock())
         plan = replace(plan, clarifications=conversation.questions)
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status is not ReviewStatus.CLARIFYING:
                 raise PlanConflictError(_MOVED_ON)
             await self._add_version(uow, review, plan, None)
@@ -432,7 +422,9 @@ class PlanService:
         """Ask the model for the next version. The request is recorded before the model runs."""
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status in _RUN_GOING:
                 raise PlanConflictError(_DURING_RUN)
             latest = await self._latest(uow, review_id)
@@ -470,7 +462,9 @@ class PlanService:
             prompt_version=REVISE_PROMPT_VERSION,
         )
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             stored = await uow.plans.get_conversation(review_id)
             pending = None if stored is None else await self._open_conversation(uow, stored)
             if (
@@ -493,7 +487,9 @@ class PlanService:
     ) -> PlanView:
         """Accept the latest draft and freeze its vocabulary. The first accept wins."""
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status in _RUN_GOING:
                 raise PlanConflictError(_DURING_RUN)
             latest = await uow.plans.latest_version(review_id)
@@ -526,7 +522,9 @@ class PlanService:
         """
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.EDIT_REVIEW)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.EDIT_REVIEW
+            )
             if review.status in _RUN_GOING:
                 raise PlanConflictError(_DURING_RUN)
             concepts = parse_strict_vocabulary(content, format)
@@ -574,7 +572,7 @@ class PlanService:
         async with self._storage.unit_of_work() as uow:
             review = await uow.reviews.get(review_id)
             if review is None:
-                raise NotFoundError(_NOT_FOUND)
+                raise NotFoundError(REVIEW_NOT_FOUND)
             latest = await self._latest(uow, review_id)
             if latest is not None:
                 return latest
@@ -610,7 +608,7 @@ class PlanService:
             review = await uow.reviews.get(review_id)
             latest = await self._latest(uow, review_id)
             if review is None or latest is None:
-                raise NotFoundError(_NOT_FOUND)
+                raise NotFoundError(REVIEW_NOT_FOUND)
             if latest.is_accepted:
                 return latest
             if latest.version != version:
@@ -658,17 +656,6 @@ class PlanService:
         if record.accepted_at is not None and record.accepted_by is not None:
             plan = plan.accepted(record.accepted_by, record.accepted_at)
         return plan, _diff_from_json(body["diff"])
-
-    async def _review(
-        self, uow: UnitOfWork, current: Current, review_id: UUID, action: Action
-    ) -> Review:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_NOT_FOUND)
-        await require_member(
-            uow, current.user.id, review.project_id, action, not_found=_NOT_FOUND
-        )
-        return review
 
     async def _view(self, uow: UnitOfWork, review: Review) -> PlanView:
         stored = await uow.plans.get_conversation(review.id)

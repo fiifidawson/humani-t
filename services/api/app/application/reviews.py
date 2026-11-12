@@ -16,7 +16,11 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
-from app.application.membership import require_member
+from app.application.membership import (
+    REVIEW_NOT_FOUND,
+    require_member,
+    require_review_member,
+)
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import EncryptionContext
 from app.domain.projects import Action
@@ -25,7 +29,6 @@ from app.storage.base import StorageProvider, UnitOfWork
 
 # Table "reviews", column "question"; the row is the review.
 _QUESTION_PURPOSE = "reviews.question"
-_NOT_FOUND = "No such review."
 
 
 def _utc_now() -> datetime:
@@ -113,6 +116,11 @@ class ReviewService:
                 await self._open(uow, r) for r in await uow.reviews.list_for_project(project_id)
             ]
 
+    async def authorize(self, current: Current, review_id: UUID, action: Action) -> None:
+        """Check access without acting, so the HTTP layer refuses before reading a body."""
+        async with self._storage.unit_of_work() as uow:
+            await require_review_member(uow, current.user.id, review_id, action)
+
     async def get(self, current: Current, project_id: UUID, review_id: UUID) -> ReviewView:
         async with self._storage.unit_of_work() as uow:
             await require_member(
@@ -124,7 +132,7 @@ class ReviewService:
             )
             review = await uow.reviews.get(review_id)
             if review is None or review.project_id != project_id:
-                raise NotFoundError(_NOT_FOUND)
+                raise NotFoundError(REVIEW_NOT_FOUND)
             return await self._open(uow, review)
 
     async def _open(self, uow: UnitOfWork, review: Review) -> ReviewView:
