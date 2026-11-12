@@ -43,7 +43,7 @@ import { LabelBadge } from "./RunCards";
 import { useReview, useRunNumber } from "./reviewContext";
 
 type Schemas = components["schemas"];
-type Paper = Schemas["app__api__schemas__papers__PaperOut"];
+type Paper = Schemas["PaperOut"];
 
 type PaperLabel = NonNullable<PapersSearch["label"]>;
 

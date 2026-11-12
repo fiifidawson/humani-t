@@ -32,7 +32,7 @@ type Question = Schemas["PlanOut"]["questions"][number];
 type Receipt = Schemas["ReceiptOut"];
 type SentText = Schemas["SentTextOut"];
 type Run = Schemas["RunOut"];
-type Paper = Schemas["app__api__schemas__papers__PaperOut"];
+type Paper = Schemas["PaperOut"];
 type Author = Schemas["AuthorOut"];
 type Tier = Schemas["ScreeningTier"];
 
@@ -354,7 +354,6 @@ export class FakeReviews {
 			"mask",
 			"screen",
 			"export",
-			"index",
 			"answer",
 		],
 	): Run {

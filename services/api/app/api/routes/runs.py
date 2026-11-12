@@ -6,12 +6,13 @@ case checks again as it writes.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.api.access import require_review
 from app.api.dependencies import API_PREFIX, RunsDep
 from app.api.schemas.run_events import RunStreamEvent
 from app.api.schemas.runs import GateDecisionIn, GateResolvedOut, RunIn, RunOut, RunStartedOut
@@ -23,20 +24,12 @@ from app.domain.projects import Action
 router = APIRouter(tags=["runs"])
 
 
-def _review_access(action: Action) -> Any:
-    async def gate(review_id: UUID, current: CurrentDep, runs: RunsDep) -> Current:
-        await runs.authorize_review(current, review_id, action)
-        return current
-
-    return Depends(gate)
-
-
 async def _gate_access(gate_id: UUID, current: CurrentDep, runs: RunsDep) -> Current:
     await runs.authorize_gate(current, gate_id)
     return current
 
 
-_RunStarter = Annotated[Current, _review_access(Action.MANAGE_RUNS)]
+_RunStarter = Annotated[Current, require_review(Action.MANAGE_RUNS)]
 _GateResolver = Annotated[Current, Depends(_gate_access)]
 
 

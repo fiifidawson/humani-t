@@ -32,6 +32,7 @@ from app.domain.masking import (
     user_source,
 )
 from app.domain.screening import Passage, PassageSourceKind
+from app.domain.timestamps import require_aware
 
 MAX_FILENAME_LENGTH = 200
 MAX_REASON_LENGTH = 200
@@ -278,12 +279,6 @@ class DocumentStateError(Exception):
     """The document is not in a state that allows this. The message is safe to show."""
 
 
-def _require_aware(owner: str, **values: datetime | None) -> None:
-    for name, value in values.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 def _frozen_counts(counts: Mapping[str, int]) -> Mapping[str, int]:
     if any(n < 1 for n in counts.values()):
         raise ValueError("Document.masked_counts must be positive")
@@ -321,7 +316,7 @@ class Document:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware("Document", uploaded_at=self.uploaded_at, lease_until=self.lease_until)
+        require_aware("Document", uploaded_at=self.uploaded_at, lease_until=self.lease_until)
         if self.number < 1:
             raise ValueError("Document.number must count from 1")
         if self.size_bytes < 1:
@@ -469,7 +464,7 @@ class DocumentReview:
     decided_at: datetime
 
     def __post_init__(self) -> None:
-        _require_aware("DocumentReview", decided_at=self.decided_at)
+        require_aware("DocumentReview", decided_at=self.decided_at)
         if self.mask_version < 1:
             raise ValueError("DocumentReview.mask_version must count from 1")
 
@@ -485,7 +480,7 @@ class DocumentText:
     extracted_at: datetime
 
     def __post_init__(self) -> None:
-        _require_aware("DocumentText", extracted_at=self.extracted_at)
+        require_aware("DocumentText", extracted_at=self.extracted_at)
         if not self.raw_sealed:
             raise ValueError("DocumentText.raw_sealed must not be empty")
         _require_page_starts("DocumentText", self.page_starts)
@@ -508,7 +503,7 @@ class DocumentMask:
     masked_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("DocumentMask", masked_at=self.masked_at)
+        require_aware("DocumentMask", masked_at=self.masked_at)
         if self.version < 1:
             raise ValueError("DocumentMask.version must count from 1")
         if not self.masked_sealed or not self.detail_sealed:

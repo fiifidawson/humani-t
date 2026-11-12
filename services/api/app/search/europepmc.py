@@ -77,10 +77,6 @@ class EuropePmcProvider:
         records = (_to_record(r) for r in results if isinstance(r, dict))
         return tuple(r for r in records if r is not None)[:limit]
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        # Full text arrives with PDF retrieval and extraction (build order step 10).
-        return None
-
 
 def _to_record(result: Mapping[str, Any]) -> PaperRecord | None:
     """None for a result without a title or id: there is nothing to screen or cite."""

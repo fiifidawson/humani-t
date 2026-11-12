@@ -10,7 +10,6 @@ const EVERY_STAGE = [
 	"mask",
 	"screen",
 	"export",
-	"index",
 	"answer",
 ];
 
@@ -86,7 +85,7 @@ describe("changing the search after a run (Wave 2, prompt-first)", () => {
 
 		await waitFor(() =>
 			expect(stagesStarted(api, review.id)).toEqual([
-				["screen", "export", "index", "answer"],
+				["screen", "export", "answer"],
 			]),
 		);
 	});

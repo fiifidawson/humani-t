@@ -31,9 +31,6 @@ class DemoPaperSearchProvider:
         terms = [theme.terms[0] for theme in query.themes] or ["humanitarian response"]
         return tuple(_paper(n, terms) for n in range(1, min(limit, _PAPERS) + 1))
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
-
 
 def compile_demo_query(query: BooleanQuery) -> str:
     return query.render()

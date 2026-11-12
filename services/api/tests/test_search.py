@@ -80,16 +80,6 @@ class TestSearch:
         assert provider.calls[0].is_strict
 
 
-class TestFulltext:
-    async def test_open_access_paper_returns_text(self, provider):
-        found = await provider.search(query_for(Concept("crisis response")))
-        assert await provider.fetch_fulltext(found[0]) is not None
-
-    async def test_closed_paper_returns_none_rather_than_raising(self, provider):
-        closed = PaperRecord("fake", "fake-003", "A survey of chatbot architectures")
-        assert await provider.fetch_fulltext(closed) is None
-
-
 class TestSubstitution:
     async def test_a_custom_corpus_swaps_in_without_touching_callers(self):
         """The seam working: the caller does not know which corpus it queried."""

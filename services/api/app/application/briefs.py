@@ -23,7 +23,7 @@ from app.application.brief_loop import BriefLoop, LoopFailedError, LoopResult
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.papers import PaperStore
 from app.application.reviews import question_context
 from app.briefs.base import Retriever, SourceCatalogue
@@ -56,7 +56,6 @@ _CONTENT_PURPOSE = "decision_briefs.content"
 _EVIDENCE_PURPOSE = "decision_briefs.evidence"
 _TRACE_PURPOSE = "decision_briefs.trace"
 
-_REVIEW_NOT_FOUND = "No such review."
 _BRIEF_NOT_FOUND = "No such brief."
 _NO_BRIEF_YET = "This review has no decision brief yet."
 _NO_PASSAGE = "This citation has no passage in the brief's evidence."
@@ -367,16 +366,12 @@ class BriefService:
         self._storage = storage
         self._seal = BriefSeal(encryption)
 
-    async def authorize_review(self, current: Current, review_id: UUID) -> None:
-        async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
-
     async def for_review(
         self, current: Current, review_id: UUID, run_id: UUID | None = None
     ) -> OpenedBrief:
         """The review's latest brief, or the one `run_id` wrote."""
         async with self._storage.unit_of_work() as uow:
-            await self._review_project(uow, current, review_id)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             if run_id is None:
                 record = await uow.briefs.latest_for_review(review_id)
             else:
@@ -417,16 +412,4 @@ class BriefService:
                 for place, claim in opened.brief.body.claims()
                 if any(c.tag == tag for c in claim.citations)
             ),
-        )
-
-    async def _review_project(self, uow: UnitOfWork, current: Current, review_id: UUID) -> None:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow,
-            current.user.id,
-            review.project_id,
-            Action.READ_PROJECT,
-            not_found=_REVIEW_NOT_FOUND,
         )

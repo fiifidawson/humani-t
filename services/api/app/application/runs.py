@@ -16,7 +16,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
-from app.application.membership import require_member
+from app.application.membership import require_member, require_review_member
 from app.application.run_log import (
     QUEUE_CHANNEL,
     RunLog,
@@ -28,7 +28,7 @@ from app.application.run_log import (
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import KeyDestroyedError
 from app.domain.projects import Action, can
-from app.domain.reviews import Review, ReviewStatus, ReviewTrigger
+from app.domain.reviews import ReviewStatus, ReviewTrigger
 from app.domain.runs import (
     EventName,
     Gate,
@@ -60,7 +60,6 @@ _READ_BATCH = 500
 
 _RUN_NOT_FOUND = "No such run."
 _GATE_NOT_FOUND = "No such gate."
-_REVIEW_NOT_FOUND = "No such review."
 
 
 def _utc_now() -> datetime:
@@ -98,11 +97,6 @@ class RunService:
         self._poll_interval = poll_interval
         self._log = RunLog(encryption, clock)
 
-    async def authorize_review(self, current: Current, review_id: UUID, action: Action) -> None:
-        """Check access without acting, so the HTTP layer refuses before reading a body."""
-        async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, action)
-
     async def authorize_run(self, current: Current, run_id: UUID, action: Action) -> None:
         async with self._storage.unit_of_work() as uow:
             await self._run(uow, current, run_id, action)
@@ -124,7 +118,9 @@ class RunService:
         """
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
-            review = await self._review(uow, current, review_id, Action.MANAGE_RUNS)
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.MANAGE_RUNS
+            )
             plan = plan_stages(stages, self._available)
             if review.status in (ReviewStatus.RUNNING, ReviewStatus.WAITING):
                 raise RunConflictError(
@@ -150,7 +146,7 @@ class RunService:
     async def list_for_review(self, current: Current, review_id: UUID) -> list[Run]:
         """The review's runs, newest first."""
         async with self._storage.unit_of_work() as uow:
-            await self._review(uow, current, review_id, Action.READ_PROJECT)
+            await require_review_member(uow, current.user.id, review_id, Action.READ_PROJECT)
             return await uow.runs.list_for_review(review_id)
 
     async def cancel(
@@ -283,17 +279,6 @@ class RunService:
             and membership is not None
             and can(membership.role, Action.READ_PROJECT)
         )
-
-    async def _review(
-        self, uow: UnitOfWork, current: Current, review_id: UUID, action: Action
-    ) -> Review:
-        review = await uow.reviews.get(review_id)
-        if review is None:
-            raise NotFoundError(_REVIEW_NOT_FOUND)
-        await require_member(
-            uow, current.user.id, review.project_id, action, not_found=_REVIEW_NOT_FOUND
-        )
-        return review
 
     async def _run(
         self,

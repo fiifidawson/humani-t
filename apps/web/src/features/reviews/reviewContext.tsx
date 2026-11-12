@@ -338,6 +338,3 @@ export function stagesFrom(rerunFrom: "queries" | "screen" | null): StageId[] {
 export function stagesOf(run: Run): StageId[] {
 	return PIPELINE.filter((stage) => run.stages.includes(stage));
 }
-
-export const reviewPath = (projectId: string, reviewId: string) =>
-	`/p/${projectId}/r/${reviewId}`;

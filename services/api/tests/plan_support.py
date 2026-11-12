@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 
 from app.application.inference import GuardedInference
-from app.application.planning import NO_PROJECT_RULES, PlanService
+from app.application.planning import PlanService
 from app.domain.inference import ChatRequest
 from app.domain.masking import EntityType, MaskedText, MaskingRule, MaskSpan, apply_spans
 from app.inference.fake import FakeInferenceProvider, FakePromptGuard
@@ -254,7 +254,7 @@ def make_plan_team(
         audit=providers.audit,
         inference=GuardedInference(model.provider, guard),
         sanitizer=sanitizer,
-        rules=NO_PROJECT_RULES,
+        rules=providers.masking_rules,
         clock=harness.clock,
     )
     harness.providers = dataclasses.replace(providers, plans=plans)

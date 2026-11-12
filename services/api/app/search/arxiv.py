@@ -73,10 +73,6 @@ class ArxivProvider:
         records = (_to_record(entry) for entry in entries)
         return tuple(r for r in records if r is not None)[:limit]
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        # Full text arrives with PDF retrieval and extraction (build order step 10).
-        return None
-
 
 def _parse_feed(body: bytes) -> ET.Element:
     # Atom never needs a document type declaration. Refusing one outright rules

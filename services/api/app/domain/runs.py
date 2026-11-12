@@ -16,6 +16,7 @@ from uuid import UUID
 
 from app.domain.projects import Action
 from app.domain.reviews import InvalidTransitionError
+from app.domain.timestamps import require_aware
 
 type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -27,9 +28,12 @@ STAGES: tuple[str, ...] = (
     "mask",
     "screen",
     "export",
-    "index",
     "answer",
 )
+
+# `index` never did any work: BM25 builds its index per search (ADR 0007). Runs stored
+# with it must still load, so stored stages are checked against this order instead.
+_STORED_ORDER = ("queries", "discover", "ingest", "mask", "screen", "export", "index", "answer")
 
 # Words a non-technical user knows, for error messages.
 STAGE_LABELS: Mapping[str, str] = {
@@ -39,7 +43,6 @@ STAGE_LABELS: Mapping[str, str] = {
     "mask": "Mask",
     "screen": "Screen",
     "export": "Export",
-    "index": "Index",
     "answer": "Brief",
 }
 
@@ -82,6 +85,13 @@ def plan_stages(requested: Sequence[str], available: Collection[str]) -> tuple[s
             f"Run.stages contains stages this deployment cannot run: {', '.join(unavailable)}"
         )
     return tuple(s for s in STAGES if s in requested)
+
+
+def _is_stored_plan(stages: Sequence[str]) -> bool:
+    if any(s not in _STORED_ORDER for s in stages):
+        return False
+    positions = [_STORED_ORDER.index(s) for s in stages]
+    return positions == sorted(set(positions))
 
 
 class RunState(StrEnum):
@@ -129,12 +139,6 @@ def next_run_state(state: RunState, trigger: RunTrigger) -> RunState:
     return following
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Run:
     """One execution of some of a review's stages. Its row is also its job in the queue.
@@ -163,7 +167,7 @@ class Run:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "Run",
             created_at=self.created_at,
             queued_at=self.queued_at,
@@ -175,8 +179,8 @@ class Run:
         )
         if not self.stages:
             raise ValueError("Run.stages must name at least one stage")
-        if plan_stages(self.stages, STAGES) != self.stages:
-            raise ValueError("Run.stages must be in pipeline order")
+        if not _is_stored_plan(self.stages):
+            raise ValueError("Run.stages must be known stages, each once, in pipeline order")
         if not 0 <= self.stages_finished <= len(self.stages):
             raise ValueError("Run.stages_finished must be between 0 and the number of stages")
         if (self.lease_owner is None) != (self.lease_expires_at is None):
@@ -330,7 +334,7 @@ class RunEvent:
             raise ValueError("RunEvent.id must be 1 or more")
         if not self.payload_sealed:
             raise ValueError("RunEvent.payload_sealed must not be empty")
-        _require_aware("RunEvent", occurred_at=self.occurred_at)
+        require_aware("RunEvent", occurred_at=self.occurred_at)
 
 
 def resume_point(last_event_id: str | None, last_id: int) -> int:
@@ -454,7 +458,7 @@ class Gate:
     revisions_sealed: bytes | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("Gate", created_at=self.created_at, resolved_at=self.resolved_at)
+        require_aware("Gate", created_at=self.created_at, resolved_at=self.resolved_at)
         if self.stage not in STAGES:
             raise ValueError("Gate.stage must be a known stage")
         if not self.payload_sealed:

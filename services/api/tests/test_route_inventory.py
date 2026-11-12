@@ -53,7 +53,6 @@ PROJECT_ROUTES = frozenset(
         ("POST", f"{PROJECTS}/{{project_id}}/members"),
         ("PATCH", f"{PROJECTS}/{{project_id}}/members/{{user_id}}"),
         ("DELETE", f"{PROJECTS}/{{project_id}}/members/{{user_id}}"),
-        ("POST", f"{PROJECTS}/{{project_id}}/search"),
     }
 )
 
@@ -153,11 +152,6 @@ class TestInventory:
         scoped = {r for r in registered_routes(app) if r[1].startswith(f"{PROJECTS}/")}
 
         assert all("{project_id}" in path for _, path in scoped)
-
-    def test_the_old_unscoped_search_route_is_gone(self):
-        app = make_project_harness().app
-
-        assert ("POST", "/api/v1/search") not in registered_routes(app)
 
 
 class TestSignInIsRequired:

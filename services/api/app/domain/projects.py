@@ -13,6 +13,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from app.domain.timestamps import require_aware
+
 MAX_PROJECT_NAME_LENGTH = 200
 
 # Characters that can reorder or hide the text around them. A name such as
@@ -90,12 +92,6 @@ def normalize_project_name(name: str) -> str:
     return trimmed
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Project:
     """A project's record. A deleted project stays as a tombstone row.
@@ -114,7 +110,7 @@ class Project:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "Project",
             created_at=self.created_at,
             archived_at=self.archived_at,
@@ -155,7 +151,7 @@ class Membership:
     added_by: UUID | None
 
     def __post_init__(self) -> None:
-        _require_aware("Membership", added_at=self.added_at)
+        require_aware("Membership", added_at=self.added_at)
 
     def with_role(self, role: Role) -> Membership:
         return replace(self, role=role)

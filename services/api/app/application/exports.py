@@ -13,7 +13,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import Actor, AuditLog
 from app.application.briefs import BriefService, OpenedBrief
-from app.application.membership import require_member
+from app.application.membership import require_review_member
 from app.application.papers import PaperRow, PaperService, PrismaView
 from app.domain.accounts import NotFoundError
 from app.domain.exports import ExportName
@@ -22,7 +22,6 @@ from app.domain.projects import Action
 from app.domain.screening import ScreeningLabel
 from app.storage.base import StorageProvider
 
-_REVIEW_NOT_FOUND = "No such review."
 _RUN_NOT_FOUND = "No such run."
 
 
@@ -52,10 +51,6 @@ class ExportService:
         self._briefs = briefs
         self._audit = audit
 
-    async def authorize_review(self, current: Current, review_id: UUID) -> None:
-        """Check access without exporting, so the HTTP layer refuses before anything else."""
-        await self._project_of(current, review_id)
-
     async def export(
         self,
         current: Current,
@@ -69,15 +64,17 @@ class ExportService:
         The default run is the one the matching screen shows by default.
         """
         content = await self._gather(current, review_id, name, run_id)
-        project_id = await self._project_of(current, review_id)
         async with self._storage.unit_of_work() as uow:
+            review = await require_review_member(
+                uow, current.user.id, review_id, Action.READ_PROJECT
+            )
             await self._audit.record(
                 uow,
                 Actor(current.user.id, request_id),
                 "export.downloaded",
                 "review",
                 str(review_id),
-                scope_id=project_id,
+                scope_id=review.project_id,
                 details={"export": name.value, "run_id": str(content.run_id)},
             )
             await uow.commit()
@@ -118,17 +115,3 @@ class ExportService:
                 break
             rows.extend(page.rows)
         return tuple(rows), page.run_id
-
-    async def _project_of(self, current: Current, review_id: UUID) -> UUID:
-        async with self._storage.unit_of_work() as uow:
-            review = await uow.reviews.get(review_id)
-            if review is None:
-                raise NotFoundError(_REVIEW_NOT_FOUND)
-            await require_member(
-                uow,
-                current.user.id,
-                review.project_id,
-                Action.READ_PROJECT,
-                not_found=_REVIEW_NOT_FOUND,
-            )
-            return review.project_id

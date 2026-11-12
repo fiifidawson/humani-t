@@ -204,9 +204,6 @@ class CorpusSource:
         self.calls.append(query)
         return await self._inner.search(query, limit)
 
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
-
 
 class FailingSource:
     """A source that cannot be searched: down, refusing, or answering unreadably."""
@@ -224,9 +221,6 @@ class FailingSource:
     ) -> Sequence[PaperRecord]:
         self.calls += 1
         raise PaperSourceUnavailableError(self._source_id, "HTTP 503 from 10.0.0.7")
-
-    async def fetch_fulltext(self, record: PaperRecord) -> str | None:
-        return None
 
 
 def criteria_ids_in(request: ChatRequest) -> list[str]:

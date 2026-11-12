@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-_Stage = Literal["queries", "discover", "ingest", "mask", "screen", "export", "index", "answer"]
+_Stage = Literal["queries", "discover", "ingest", "mask", "screen", "export", "answer"]
 
 
 class StageStartedData(BaseModel):

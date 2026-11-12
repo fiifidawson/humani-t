@@ -1301,73 +1301,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/vocabulary/compile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Compile a vocabulary into a Boolean query
-         * @description Show exactly what will be searched for, before anything is searched.
-         *
-         *     Concepts in a theme are OR'd and themes are AND'd. No model is consulted, so the
-         *     same vocabulary always gives the same query.
-         */
-        post: operations["compile_endpoint_api_v1_vocabulary_compile_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search sources available in this process
-         * @description List the repositories this deployment can currently reach.
-         */
-        get: operations["sources_api_v1_sources_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/projects/{project_id}/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Compile a vocabulary and search for papers
-         * @description Run a vocabulary against the configured source.
-         *
-         *     The compiled query and its provenance come back with the results, because results
-         *     without the query that produced them cannot be audited. It searches the in-memory
-         *     fake corpus, not the sources a run uses.
-         */
-        post: operations["search_api_v1_projects__project_id__search_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1616,7 +1549,7 @@ export interface components {
              * Sources
              * @description Every cited tag, by first appearance.
              */
-            sources: components["schemas"]["app__api__schemas__briefs__SourceOut"][];
+            sources: components["schemas"]["SourceOut"][];
             quality: components["schemas"]["QualityOut"] | null;
             /**
              * Warnings
@@ -1750,28 +1683,6 @@ export interface components {
             term: string;
             change: components["schemas"]["ChangeKind"];
             by: components["schemas"]["AuthorOut"];
-        };
-        /**
-         * ConceptIn
-         * @description One research concept and the words that stand in for it.
-         */
-        ConceptIn: {
-            /**
-             * Term
-             * @description Canonical spelling.
-             */
-            term: string;
-            /**
-             * Synonyms
-             * @description Alternatives matching the same idea.
-             */
-            synonyms?: string[];
-            /**
-             * Theme
-             * @description Concepts sharing a theme are OR'd; themes are AND'd.
-             * @default general
-             */
-            theme: string;
         };
         /** ConceptOut */
         ConceptOut: {
@@ -2621,7 +2532,7 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
-            paper: components["schemas"]["app__api__schemas__papers__PaperOut"];
+            paper: components["schemas"]["PaperOut"];
             /** @description What was kept for screening, if anything. */
             text_kind: components["schemas"]["TextKind"] | null;
             /**
@@ -2629,6 +2540,58 @@ export interface components {
              * @description The kept text, masked; None until masked.
              */
             masked_text: string | null;
+        };
+        /** PaperOut */
+        PaperOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /**
+             * Tag
+             * @description How the brief cites it: P and its place in the run.
+             */
+            tag: string;
+            /** Position */
+            position: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /**
+             * Url
+             * @description Its own link, else https://doi.org/<doi>, else null.
+             */
+            url: string | null;
+            /**
+             * Source Id
+             * @description The source whose record was kept.
+             */
+            source_id: string;
+            /**
+             * Found By
+             * @description Every source that returned it in this run.
+             */
+            found_by: string[];
+            /** Is Open Access */
+            is_open_access: boolean;
+            /** @description None until it is screened. */
+            decision: components["schemas"]["DecisionOut"] | null;
+            /**
+             * Screening Status
+             * @description skipped: no masked abstract to send; failed: the privacy check stopped its text; not_screened: this run has not screened it.
+             * @default screened
+             * @enum {string}
+             */
+            screening_status: "screened" | "skipped" | "failed" | "not_screened";
+            /**
+             * Skipped Because
+             * @description Set when skipped.
+             */
+            skipped_because?: ("no_abstract" | "not_masked") | null;
         };
         /** PaperPageOut */
         PaperPageOut: {
@@ -2654,7 +2617,7 @@ export interface components {
                 [key: string]: number;
             };
             /** Papers */
-            papers: components["schemas"]["app__api__schemas__papers__PaperOut"][];
+            papers: components["schemas"]["PaperOut"][];
         };
         /** PassageOut */
         PassageOut: {
@@ -3054,7 +3017,7 @@ export interface components {
         RunIn: {
             /**
              * Stages
-             * @description Stage ids, any order; they run in pipeline order: queries, discover, ingest, mask, screen, export, index, answer. Empty or left out: the whole pipeline.
+             * @description Stage ids, any order; they run in pipeline order: queries, discover, ingest, mask, screen, export, answer. Empty or left out: the whole pipeline.
              */
             stages?: string[];
         };
@@ -3159,60 +3122,6 @@ export interface components {
          */
         ScreeningTier: "highly_relevant" | "relevant" | "possibly_relevant" | "excluded" | "uncertain";
         /**
-         * SearchIn
-         * @description A vocabulary plus how many results to return.
-         * @example {
-         *       "concepts": [
-         *         {
-         *           "synonyms": [
-         *             "conversational agent",
-         *             "dialogue system"
-         *           ],
-         *           "term": "chatbot",
-         *           "theme": "technology"
-         *         },
-         *         {
-         *           "synonyms": [
-         *             "crisis response"
-         *           ],
-         *           "term": "humanitarian",
-         *           "theme": "setting"
-         *         }
-         *       ],
-         *       "limit": 25,
-         *       "origin": "llm_assisted"
-         *     }
-         */
-        SearchIn: {
-            /** Concepts */
-            concepts: components["schemas"]["ConceptIn"][];
-            /** @default llm_assisted */
-            origin: components["schemas"]["VocabularyOrigin"];
-            /**
-             * Version
-             * @default 1
-             */
-            version: number;
-            /**
-             * Limit
-             * @default 25
-             */
-            limit: number;
-        };
-        /**
-         * SearchOut
-         * @description Results, plus the query and provenance that produced them.
-         */
-        SearchOut: {
-            /** Source Id */
-            source_id: string;
-            query: components["schemas"]["CompiledQueryOut"];
-            /** Total */
-            total: number;
-            /** Results */
-            results: components["schemas"]["app__api__schemas__PaperOut"][];
-        };
-        /**
          * SentTextKind
          * @enum {string}
          */
@@ -3297,6 +3206,35 @@ export interface components {
              */
             rationale: string | null;
         };
+        /** SourceOut */
+        SourceOut: {
+            /** Tag */
+            tag: string;
+            /** @description Null if no passage has this tag. */
+            source_kind: components["schemas"]["PassageSourceKind"] | null;
+            /** Paper Id */
+            paper_id: string | null;
+            /**
+             * Has Passage
+             * @description False only for a citation the checks flagged.
+             */
+            has_passage: boolean;
+            /** Title */
+            title: string | null;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /** Url */
+            url: string | null;
+            /** Screening Label */
+            screening_label: string | null;
+            /**
+             * Citations
+             * @description How many times the brief cites this tag.
+             */
+            citations: number;
+        };
         /** SpanOut */
         SpanOut: {
             /**
@@ -3335,7 +3273,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "index" | "answer";
+            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "answer";
             /** Seconds */
             seconds: number;
             /**
@@ -3366,7 +3304,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "index" | "answer";
+            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "answer";
             /** Done */
             done: number;
             /** Total */
@@ -3404,7 +3342,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "index" | "answer";
+            stage: "queries" | "discover" | "ingest" | "mask" | "screen" | "export" | "answer";
             /**
              * Position
              * @description This stage's place within this run, from 1.
@@ -3763,44 +3701,6 @@ export interface components {
             rendered: string;
         };
         /**
-         * VocabularyIn
-         * @description A vocabulary as submitted over HTTP.
-         * @example {
-         *       "concepts": [
-         *         {
-         *           "synonyms": [
-         *             "conversational agent",
-         *             "dialogue system"
-         *           ],
-         *           "term": "chatbot",
-         *           "theme": "technology"
-         *         },
-         *         {
-         *           "synonyms": [
-         *             "crisis response"
-         *           ],
-         *           "term": "humanitarian",
-         *           "theme": "setting"
-         *         }
-         *       ],
-         *       "origin": "llm_assisted"
-         *     }
-         */
-        VocabularyIn: {
-            /** Concepts */
-            concepts: components["schemas"]["ConceptIn"][];
-            /**
-             * @description user_supplied marks the vocabulary STRICT: it is used exactly as given, with no model-driven expansion.
-             * @default llm_assisted
-             */
-            origin: components["schemas"]["VocabularyOrigin"];
-            /**
-             * Version
-             * @default 1
-             */
-            version: number;
-        };
-        /**
          * VocabularyOrigin
          * @description Where the terms came from.
          *
@@ -3830,126 +3730,6 @@ export interface components {
             options: {
                 [key: string]: unknown;
             };
-        };
-        /** PaperOut */
-        app__api__schemas__PaperOut: {
-            /** Source Id */
-            source_id: string;
-            /** External Id */
-            external_id: string;
-            /** Title */
-            title: string;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /**
-             * Is Open Access
-             * @default false
-             */
-            is_open_access: boolean;
-            /** Abstract */
-            abstract?: string | null;
-            /** Url */
-            url?: string | null;
-            /**
-             * Identity
-             * @description Dedup key: DOI, else normalised title + year.
-             */
-            identity: string;
-        };
-        /** SourceOut */
-        app__api__schemas__SourceOut: {
-            /** Source Id */
-            source_id: string;
-            /**
-             * Live
-             * @description False for in-memory sources that make no requests.
-             */
-            live: boolean;
-            /** Description */
-            description: string;
-        };
-        /** SourceOut */
-        app__api__schemas__briefs__SourceOut: {
-            /** Tag */
-            tag: string;
-            /** @description Null if no passage has this tag. */
-            source_kind: components["schemas"]["PassageSourceKind"] | null;
-            /** Paper Id */
-            paper_id: string | null;
-            /**
-             * Has Passage
-             * @description False only for a citation the checks flagged.
-             */
-            has_passage: boolean;
-            /** Title */
-            title: string | null;
-            /** Year */
-            year: number | null;
-            /** Doi */
-            doi: string | null;
-            /** Url */
-            url: string | null;
-            /** Screening Label */
-            screening_label: string | null;
-            /**
-             * Citations
-             * @description How many times the brief cites this tag.
-             */
-            citations: number;
-        };
-        /** PaperOut */
-        app__api__schemas__papers__PaperOut: {
-            /**
-             * Paper Id
-             * Format: uuid
-             */
-            paper_id: string;
-            /**
-             * Tag
-             * @description How the brief cites it: P and its place in the run.
-             */
-            tag: string;
-            /** Position */
-            position: number;
-            /** Title */
-            title: string;
-            /** Year */
-            year: number | null;
-            /** Doi */
-            doi: string | null;
-            /**
-             * Url
-             * @description Its own link, else https://doi.org/<doi>, else null.
-             */
-            url: string | null;
-            /**
-             * Source Id
-             * @description The source whose record was kept.
-             */
-            source_id: string;
-            /**
-             * Found By
-             * @description Every source that returned it in this run.
-             */
-            found_by: string[];
-            /** Is Open Access */
-            is_open_access: boolean;
-            /** @description None until it is screened. */
-            decision: components["schemas"]["DecisionOut"] | null;
-            /**
-             * Screening Status
-             * @description skipped: no masked abstract to send; failed: the privacy check stopped its text; not_screened: this run has not screened it.
-             * @default screened
-             * @enum {string}
-             */
-            screening_status: "screened" | "skipped" | "failed" | "not_screened";
-            /**
-             * Skipped Because
-             * @description Set when skipped.
-             */
-            skipped_because?: ("no_abstract" | "not_masked") | null;
         };
         /** QuestionOut */
         app__api__schemas__plans__QuestionOut: {
@@ -6693,94 +6473,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    compile_endpoint_api_v1_vocabulary_compile_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VocabularyIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CompiledQueryOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    sources_api_v1_sources_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__api__schemas__SourceOut"][];
-                };
-            };
-        };
-    };
-    search_api_v1_projects__project_id__search_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchOut"];
-                };
             };
             /** @description Validation Error */
             422: {

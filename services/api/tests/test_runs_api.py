@@ -8,6 +8,7 @@ do not name their project, so it is resolved from the review, run or gate first.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import uuid
 from uuid import UUID
 
@@ -860,3 +861,54 @@ def test_an_unknown_review_is_404(rt):
     )
 
     assert response.status_code == 404
+
+
+class TestARunStoredWithTheRetiredIndexStage:
+    """`index` was a stand-in that never did any work. Runs stored with it still read back."""
+
+    @pytest.fixture
+    def old_run(self, rt) -> str:
+        run_id = rt.start_run(["export", "answer"])
+        _restage(rt, run_id, ("export", "index", "answer"))
+        run_until_idle(rt.worker(simple_stages("export", "index", "answer")))
+        return run_id
+
+    def test_it_is_listed_with_the_stages_it_ran(self, rt, old_run):
+        listed = rt.owner.get(f"/api/v1/reviews/{rt.review_id}/runs").json()
+
+        assert (listed[0]["stages"], listed[0]["outcome"]) == (
+            ["export", "index", "answer"],
+            "done",
+        )
+
+    def test_its_events_still_stream(self, rt, old_run):
+        _, events, _ = parse_sse(rt.stream(old_run).text)
+
+        assert "index" in {e.data.get("stage") for e in events}
+        assert events[-1].name == "job.finished"
+
+    def test_its_manifest_is_complete(self, rt, old_run):
+        body = rt.owner.get(f"/api/v1/runs/{old_run}/manifest").json()
+
+        assert body["stages"] == ["export", "index", "answer"]
+        assert body["is_complete"] is True
+
+    def test_a_new_run_may_not_ask_for_it(self, rt):
+        response = send(
+            rt.owner, "POST", f"/api/v1/reviews/{rt.review_id}/runs", {"stages": ["index"]}
+        )
+
+        assert response.status_code == 422
+
+
+def _restage(rt: RunTeam, run_id: str, stages: tuple[str, ...]) -> None:
+    """Rewrite a queued run's stages as a run stored before a stage was retired."""
+
+    async def write() -> None:
+        async with rt.harness.providers.storage.unit_of_work() as uow:
+            run = await uow.runs.lock(UUID(run_id))
+            assert run is not None
+            await uow.runs.save(dataclasses.replace(run, stages=stages))
+            await uow.commit()
+
+    asyncio.run(write())

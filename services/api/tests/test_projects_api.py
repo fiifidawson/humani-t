@@ -31,20 +31,11 @@ from tests.project_support import (
     make_team,
     project_events,
     send,
-    signed_in,
     stored_memberships,
     stored_name_ciphertext,
     verify_audit,
 )
 from tests.support import AuthHarness, csrf_headers
-
-VOCABULARY = {
-    "origin": "llm_assisted",
-    "concepts": [
-        {"term": "chatbot", "synonyms": ["conversational agent"], "theme": "technology"},
-        {"term": "humanitarian", "synonyms": ["crisis response"], "theme": "setting"},
-    ],
-}
 
 PROJECT_FIELDS = {"id", "name", "role", "created_at", "archived_at"}
 MEMBER_FIELDS = {"user_id", "display_name", "role", "added_at"}
@@ -684,47 +675,3 @@ class TestAuditTrail:
         assert "project.deleted" not in actions
         assert "project.renamed" not in actions
         assert team.owner.get(team.path()).json()["name"] == PROJECT_NAME
-
-
-class TestVocabularyAndSearch:
-    """The pre-project endpoints now sit behind sign-in; search runs inside a project."""
-
-    def test_compiling_a_vocabulary_needs_a_signed_in_user_but_no_project(self, harness):
-        anonymous = harness.browser().post("/api/v1/vocabulary/compile", json=VOCABULARY)
-        member_of_nothing = signed_in(harness, OUTSIDER_EMAIL)
-
-        response = send(member_of_nothing, "POST", "/api/v1/vocabulary/compile", VOCABULARY)
-
-        assert anonymous.status_code == 401
-        assert response.status_code == 200
-        assert response.json()["term_count"] == 4
-
-    def test_listing_sources_needs_a_signed_in_user(self, harness):
-        assert harness.browser().get("/api/v1/sources").status_code == 401
-        assert signed_in(harness, OUTSIDER_EMAIL).get("/api/v1/sources").status_code == 200
-
-    @pytest.mark.parametrize("role", ["owner", "reviewer"])
-    def test_owners_and_reviewers_search_within_their_project(self, team, role):
-        response = send(
-            team.browser_for(role), "POST", team.path("/search"), {**VOCABULARY, "limit": 10}
-        )
-
-        assert response.status_code == 200
-        assert response.json()["source_id"] == "fake"
-        assert response.json()["query"]["term_count"] == 4
-        assert response.json()["total"] == len(response.json()["results"])
-
-    def test_a_viewer_may_not_start_a_search(self, team):
-        response = send(team.viewer, "POST", team.path("/search"), VOCABULARY)
-
-        assert response.status_code == 403
-
-    def test_a_non_member_cannot_search_in_the_project(self, team):
-        assert send(team.outsider, "POST", team.path("/search"), VOCABULARY).status_code == 404
-
-    def test_the_unscoped_search_route_no_longer_exists(self, harness):
-        response = send(
-            signed_in(harness, OUTSIDER_EMAIL), "POST", "/api/v1/search", VOCABULARY
-        )
-
-        assert response.status_code == 404

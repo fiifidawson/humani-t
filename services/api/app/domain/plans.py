@@ -19,6 +19,7 @@ from uuid import UUID
 
 from app.domain.reviews import InvalidTransitionError
 from app.domain.runs import JsonValue
+from app.domain.timestamps import require_aware
 from app.domain.vocabulary import DEFAULT_THEME, Concept, Vocabulary, VocabularyOrigin
 
 MAX_CRITERION_LENGTH = 500
@@ -34,12 +35,6 @@ _TEXT_CONTROLS_ALLOWED = frozenset("\n\t")
 
 class PlanConflictError(InvalidTransitionError):
     """The plan changed, or is not in a state that allows this. Shown to the user as a 409."""
-
-
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
 
 
 def _has_hidden_characters(text: str, allowed: frozenset[str]) -> bool:
@@ -144,7 +139,7 @@ class ClarifyingQuestion:
             raise ValueError("ClarifyingQuestion.text must not be blank")
         if self.answer is not None and self.is_skipped:
             raise ValueError("ClarifyingQuestion is answered or skipped, not both")
-        _require_aware("ClarifyingQuestion", answered_at=self.answered_at)
+        require_aware("ClarifyingQuestion", answered_at=self.answered_at)
 
     @property
     def is_settled(self) -> bool:
@@ -174,7 +169,7 @@ class ChangeRequest:
             "text",
             _clean_text("ChangeRequest.text", self.text, MAX_CHANGE_REQUEST_LENGTH),
         )
-        _require_aware("ChangeRequest", requested_at=self.requested_at)
+        require_aware("ChangeRequest", requested_at=self.requested_at)
         if self.based_on_version < 1:
             raise ValueError("ChangeRequest.based_on_version starts at 1")
 
@@ -198,7 +193,7 @@ class PlanConversation:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware("PlanConversation", created_at=self.created_at)
+        require_aware("PlanConversation", created_at=self.created_at)
         ids = [q.id for q in self.questions]
         if len(set(ids)) != len(ids):
             raise ValueError("PlanConversation.questions must have distinct ids")
@@ -260,7 +255,7 @@ class ReviewPlan:
     accepted_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("ReviewPlan", created_at=self.created_at, accepted_at=self.accepted_at)
+        require_aware("ReviewPlan", created_at=self.created_at, accepted_at=self.accepted_at)
         if self.version < 1:
             raise ValueError("ReviewPlan.version starts at 1")
         if self.vocabulary.version != self.version:
@@ -723,7 +718,7 @@ class PrivacyReceipt:
     change_request_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("PrivacyReceipt", created_at=self.created_at)
+        require_aware("PrivacyReceipt", created_at=self.created_at)
         _require_receipt_links("PrivacyReceipt", self.plan_version)
 
     @property
@@ -744,7 +739,7 @@ class StoredConversation:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware("StoredConversation", created_at=self.created_at)
+        require_aware("StoredConversation", created_at=self.created_at)
         if not self.body_sealed:
             raise ValueError("StoredConversation.body_sealed must not be empty")
 
@@ -764,7 +759,7 @@ class StoredPlanVersion:
     accepted_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "StoredPlanVersion", created_at=self.created_at, accepted_at=self.accepted_at
         )
         if self.version < 1:
@@ -797,7 +792,7 @@ class StoredReceipt:
     change_request_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("StoredReceipt", created_at=self.created_at)
+        require_aware("StoredReceipt", created_at=self.created_at)
         if not self.body_sealed:
             raise ValueError("StoredReceipt.body_sealed must not be empty")
         _require_receipt_links("StoredReceipt", self.plan_version)

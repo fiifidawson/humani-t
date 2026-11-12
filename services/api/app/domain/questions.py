@@ -15,6 +15,7 @@ from uuid import UUID
 
 from app.domain.briefs import Claim, Problem, check_claims
 from app.domain.runs import RunConflictError
+from app.domain.timestamps import require_aware
 
 MAX_QUESTION_LENGTH = 2000
 MAX_ANSWER_CLAIMS = 6
@@ -50,12 +51,6 @@ def normalize_question(text: str) -> str:
     return cleaned
 
 
-def _require_aware(owner: str, **timestamps: datetime | None) -> None:
-    for name, value in timestamps.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True, slots=True)
 class Thread:
     """A line of questioning about one review, started by one member."""
@@ -67,7 +62,7 @@ class Thread:
     created_by: UUID
 
     def __post_init__(self) -> None:
-        _require_aware("Thread", created_at=self.created_at)
+        require_aware("Thread", created_at=self.created_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +92,7 @@ class QuestionRecord:
     version: int = 0
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "QuestionRecord",
             asked_at=self.asked_at,
             lease_expires_at=self.lease_expires_at,

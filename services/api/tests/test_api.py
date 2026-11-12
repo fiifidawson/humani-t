@@ -1,61 +1,16 @@
-"""The HTTP boundary: compilation, search, and the provider switch.
-
-Compiling and listing sources need a signed-in user; searching happens inside a
-project (M10). The `member` fixture is that user, in a browser that sends its
-CSRF token on every request as the web app does.
-"""
+"""The HTTP boundary: system routes and the OpenAPI document."""
 
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_search_provider
-from app.api.routes.search import SOURCE_DESCRIPTIONS
-from app.domain.paper import PaperRecord
 from app.main import app
-from app.search.fake import FakePaperSearchProvider
-from app.settings import PAPER_SOURCE_IDS
-from tests.project_support import (
-    OWNER_EMAIL,
-    PASSWORD,
-    create_project,
-    make_project_harness,
-    signed_in,
-)
-from tests.support import AuthHarness, csrf_headers
-
-VOCABULARY = {
-    "origin": "llm_assisted",
-    "concepts": [
-        {"term": "chatbot", "synonyms": ["conversational agent"], "theme": "technology"},
-        {"term": "humanitarian", "synonyms": ["crisis response"], "theme": "setting"},
-    ],
-}
 
 
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
-
-
-@pytest.fixture
-def harness() -> AuthHarness:
-    harness = make_project_harness()
-    harness.create_user(OWNER_EMAIL, PASSWORD)
-    return harness
-
-
-@pytest.fixture
-def member(harness: AuthHarness) -> TestClient:
-    browser = signed_in(harness, OWNER_EMAIL)
-    browser.headers.update(csrf_headers(browser))
-    return browser
-
-
-@pytest.fixture
-def search_url(member: TestClient) -> str:
-    return f"/api/v1/projects/{create_project(member)['id']}/search"
 
 
 class TestSystem:
@@ -64,151 +19,12 @@ class TestSystem:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
-    def test_info_reports_the_active_provider(self, client):
+    def test_info_reports_the_configured_paper_sources(self, client):
         body = client.get("/api/v1/info").json()
 
-        assert body["search_provider"] == "fake"
+        assert body["paper_sources"] == []
         assert body["makes_network_calls"] is False
         assert body["api_prefix"] == "/api/v1"
-
-    def test_sources_lists_what_is_reachable(self, member):
-        body = member.get("/api/v1/sources").json()
-
-        assert [s["source_id"] for s in body] == ["fake"]
-        assert body[0]["live"] is False
-
-
-class TestSourceDescriptions:
-    """What the sources list tells a reviewer matches docs/dependencies.md §4."""
-
-    def test_every_source_that_can_be_configured_is_described(self):
-        assert set(SOURCE_DESCRIPTIONS) == {"fake", *PAPER_SOURCE_IDS}
-
-    def test_google_scholar_and_the_retired_openalex_polite_pool_are_not_mentioned(self):
-        described = " ".join(SOURCE_DESCRIPTIONS.values()).lower()
-
-        for retired in ("scholar", "mailto", "polite"):
-            assert retired not in described
-
-    def test_openalex_says_an_api_key_raises_its_limits(self):
-        assert "api key" in SOURCE_DESCRIPTIONS["openalex"].lower()
-
-
-class TestCompile:
-    def test_renders_or_within_theme_and_and_across_themes(self, member):
-        body = member.post("/api/v1/vocabulary/compile", json=VOCABULARY).json()
-
-        assert body["rendered"] == (
-            '("chatbot" OR "conversational agent") AND ("humanitarian" OR "crisis response")'
-        )
-        assert body["term_count"] == 4
-
-    def test_provenance_is_returned(self, member):
-        body = member.post(
-            "/api/v1/vocabulary/compile",
-            json={**VOCABULARY, "origin": "user_supplied", "version": 3},
-        ).json()
-
-        assert body["provenance"] == {
-            "vocabulary_version": 3,
-            "vocabulary_origin": "user_supplied",
-            "is_strict": True,
-        }
-
-    def test_structure_groups_terms_under_their_concept(self, member):
-        body = member.post("/api/v1/vocabulary/compile", json=VOCABULARY).json()
-
-        technology = body["themes"][0]
-        assert technology["theme"] == "technology"
-        assert technology["groups"][0] == {
-            "concept": "chatbot",
-            "terms": ["chatbot", "conversational agent"],
-        }
-
-    def test_empty_concepts_is_rejected(self, member):
-        response = member.post(
-            "/api/v1/vocabulary/compile", json={"concepts": [], "origin": "llm_assisted"}
-        )
-        assert response.status_code == 422
-
-    def test_blank_term_is_rejected(self, member):
-        response = member.post(
-            "/api/v1/vocabulary/compile",
-            json={"concepts": [{"term": "   "}], "origin": "llm_assisted"},
-        )
-        assert response.status_code == 422
-
-
-class TestSearch:
-    def test_returns_results_with_the_query_that_produced_them(self, member, search_url):
-        body = member.post(search_url, json={**VOCABULARY, "limit": 25}).json()
-
-        assert body["source_id"] == "fake"
-        assert body["total"] == 2
-        assert "chatbot" in body["query"]["rendered"]
-        assert body["query"]["provenance"]["is_strict"] is False
-
-    def test_and_across_themes_excludes_single_theme_matches(self, member, search_url):
-        body = member.post(search_url, json=VOCABULARY).json()
-        ids = {r["external_id"] for r in body["results"]}
-
-        assert ids == {"fake-001", "fake-002"}
-
-    def test_every_result_carries_a_dedup_identity(self, member, search_url):
-        body = member.post(search_url, json=VOCABULARY).json()
-
-        assert all(r["identity"].startswith("doi:") for r in body["results"])
-
-    def test_limit_is_respected(self, member, search_url):
-        body = member.post(search_url, json={**VOCABULARY, "limit": 1}).json()
-        assert body["total"] == 1
-
-    def test_limit_is_bounded(self, member, search_url):
-        assert member.post(search_url, json={**VOCABULARY, "limit": 0}).status_code == 422
-        assert member.post(search_url, json={**VOCABULARY, "limit": 999}).status_code == 422
-
-    def test_no_match_returns_empty_not_error(self, member, search_url):
-        body = member.post(
-            search_url,
-            json={"concepts": [{"term": "quantum chromodynamics"}]},
-        ).json()
-
-        assert body["total"] == 0
-        assert body["results"] == []
-
-
-class TestProviderSwap:
-    """The claim the architecture makes, tested.
-
-    Overriding the provider changes what the endpoint returns without touching
-    the route, the service, the schemas or the domain.
-    """
-
-    def test_swapping_the_provider_changes_only_the_data(self, harness, member, search_url):
-        custom = FakePaperSearchProvider(
-            corpus=(
-                PaperRecord(
-                    source_id="fake",
-                    external_id="swap-1",
-                    title="Chatbot ethics in humanitarian triage",
-                    year=2025,
-                    doi="10.1/swap",
-                ),
-            )
-        )
-        harness.app.dependency_overrides[get_search_provider] = lambda: custom
-        try:
-            body = member.post(search_url, json=VOCABULARY).json()
-        finally:
-            harness.app.dependency_overrides.clear()
-
-        assert [r["external_id"] for r in body["results"]] == ["swap-1"]
-
-    def test_original_provider_is_restored_after_the_override(
-        self, harness, member, search_url
-    ):
-        body = member.post(search_url, json=VOCABULARY).json()
-        assert {r["external_id"] for r in body["results"]} == {"fake-001", "fake-002"}
 
 
 class TestOpenAPI:
@@ -219,15 +35,12 @@ class TestOpenAPI:
             "/api/v1/health",
             "/api/v1/ready",
             "/api/v1/info",
-            "/api/v1/sources",
-            "/api/v1/vocabulary/compile",
             "/api/v1/projects",
             "/api/v1/projects/{project_id}",
             "/api/v1/projects/{project_id}/archive",
             "/api/v1/projects/{project_id}/unarchive",
             "/api/v1/projects/{project_id}/members",
             "/api/v1/projects/{project_id}/members/{user_id}",
-            "/api/v1/projects/{project_id}/search",
             "/api/v1/projects/{project_id}/reviews",
             "/api/v1/projects/{project_id}/reviews/{review_id}",
             "/api/v1/reviews/{review_id}/runs",
@@ -292,9 +105,9 @@ class TestOpenAPI:
     def test_request_bodies_carry_a_worked_example(self, client):
         """Swagger's 'Try it out' should prefill something that actually works."""
         schema = client.get("/openapi.json").json()
-        example = schema["components"]["schemas"]["VocabularyIn"]["example"]
+        example = schema["components"]["schemas"]["MaskingRuleIn"]["example"]
 
-        assert example["concepts"][0]["term"] == "chatbot"
+        assert example["term"] == "Kofi Mensah"
 
     def test_endpoints_are_grouped_by_tag(self, client):
         schema = client.get("/openapi.json").json()
@@ -315,6 +128,4 @@ class TestOpenAPI:
             "papers",
             "masking",
             "documents",
-            "vocabulary",
-            "search",
         }

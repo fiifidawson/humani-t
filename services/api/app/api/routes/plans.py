@@ -12,8 +12,9 @@ from contextlib import contextmanager
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.api.access import require_review
 from app.api.dependencies import PlansDep
 from app.api.schemas.plans import (
     AcceptIn,
@@ -24,7 +25,7 @@ from app.api.schemas.plans import (
     PlanVersionOut,
     VocabularyUploadIn,
 )
-from app.api.session import CurrentDep, request_id
+from app.api.session import request_id
 from app.application.accounts import Current
 from app.domain.inference import InvalidStructuredOutputError, PromptRefusedError
 from app.domain.projects import Action
@@ -36,16 +37,8 @@ _CONFLICT: dict[int | str, dict[str, Any]] = {
 }
 
 
-def _review_access(action: Action) -> Any:
-    async def gate(review_id: UUID, current: CurrentDep, plans: PlansDep) -> Current:
-        await plans.authorize_review(current, review_id, action)
-        return current
-
-    return Depends(gate)
-
-
-_Reader = Annotated[Current, _review_access(Action.READ_PROJECT)]
-_Editor = Annotated[Current, _review_access(Action.EDIT_REVIEW)]
+_Reader = Annotated[Current, require_review(Action.READ_PROJECT)]
+_Editor = Annotated[Current, require_review(Action.EDIT_REVIEW)]
 
 
 @contextmanager

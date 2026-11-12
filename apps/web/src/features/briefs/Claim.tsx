@@ -12,7 +12,7 @@ import { STRENGTHS, type Strength } from "./words";
 
 type Schemas = components["schemas"];
 export type Claim = Schemas["ClaimOut"];
-export type BriefSource = Schemas["app__api__schemas__briefs__SourceOut"];
+export type BriefSource = Schemas["SourceOut"];
 /** What a chip needs of a source: a brief's sources and an answer's both give it. */
 export type ChipSource = Pick<
 	BriefSource,
