@@ -6,6 +6,7 @@ password factor alone and opt out of MFA in the fixture below; MFA is in `test_m
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -549,6 +550,22 @@ class TestPasswordReset:
 
         assert "password was changed" in harness.outbox[-1].subject.lower()  # type: ignore[attr-defined]
 
+    async def test_a_request_never_waits_for_the_mail_server(self, harness):
+        """Waiting only when the account exists would let a caller time which emails do."""
+        release = harness.email.hold()
+
+        await asyncio.wait_for(
+            harness.providers.accounts.request_password_reset(USER_EMAIL), timeout=1
+        )
+
+        assert harness.outbox == []
+        release.set()
+        for _ in range(20):
+            if harness.outbox:
+                break
+            await asyncio.sleep(0)
+        assert harness.outbox[-1].to == USER_EMAIL  # type: ignore[attr-defined]
+
 
 class TestThrottling:
     """Throttling, not lockout: an attacker cannot lock a real user out for long."""
@@ -584,6 +601,60 @@ class TestThrottling:
         response = login(harness.browser(), "nobody@example.org", "wrong-password-entirely")
 
         assert response.status_code == 429
+
+    def _reauthenticate(self, browser: TestClient, password: str):
+        return browser.post(
+            "/api/v1/auth/reauthenticate",
+            json={"password": password},
+            headers=csrf_headers(browser),
+        )
+
+    def test_repeated_wrong_passwords_at_reauthentication_are_throttled(self, harness):
+        """A stolen session must not become a way to guess the password."""
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+        for _ in range(10):
+            self._reauthenticate(browser, "wrong-password-entirely")
+
+        response = self._reauthenticate(browser, USER_PASSWORD)
+
+        assert response.status_code == 429
+        assert int(response.headers["retry-after"]) > 0
+
+    def test_failed_sign_ins_count_against_reauthentication(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+        for _ in range(10):
+            login(harness.browser(), USER_EMAIL, "wrong-password-entirely")
+
+        assert self._reauthenticate(browser, USER_PASSWORD).status_code == 429
+
+    def test_a_confirmed_password_clears_the_count(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+        for _ in range(9):
+            self._reauthenticate(browser, "wrong-password-entirely")
+        assert self._reauthenticate(browser, USER_PASSWORD).status_code == 204
+        for _ in range(9):
+            self._reauthenticate(browser, "wrong-password-entirely")
+
+        assert self._reauthenticate(browser, USER_PASSWORD).status_code == 204
+
+    def test_repeated_wrong_current_passwords_at_password_change_are_throttled(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+
+        def change(current: str):
+            return browser.post(
+                "/api/v1/account/password",
+                json={"current_password": current, "new_password": NEW_PASSWORD},
+                headers=csrf_headers(browser),
+            )
+
+        for _ in range(10):
+            change("wrong-password-entirely")
+
+        assert change(USER_PASSWORD).status_code == 429
 
     def test_reset_requests_are_throttled_per_email(self, harness):
         for _ in range(5):

@@ -3125,7 +3125,7 @@ export interface components {
          * SentTextKind
          * @enum {string}
          */
-        SentTextKind: "question" | "answer" | "change_request";
+        SentTextKind: "question" | "answer" | "change_request" | "current_plan";
         /** SentTextOut */
         SentTextOut: {
             kind: components["schemas"]["SentTextKind"];

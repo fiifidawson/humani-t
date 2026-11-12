@@ -68,6 +68,8 @@ from app.domain.plans import (
     first_stage_to_redo,
     number_criteria,
     parse_strict_vocabulary,
+    plan_text_fields,
+    refuse_rule_terms,
     revision_from_gate,
     term_authors,
 )
@@ -80,7 +82,7 @@ from app.storage.base import StorageProvider, UnitOfWork
 
 CLARIFY_PROMPT_VERSION = "plan.clarify@2"
 DRAFT_PROMPT_VERSION = "plan.draft@2"
-REVISE_PROMPT_VERSION = "plan.revise@2"
+REVISE_PROMPT_VERSION = "plan.revise@3"
 
 # Told only not to copy a placeholder, a model given "households in [LOCATION_1]"
 # builds a term from it or guesses the place. The code can drop the first, not the second.
@@ -266,13 +268,16 @@ class _ReceiptLinks:
 
 @dataclass(frozen=True, slots=True)
 class _Masked:
+    """What one call sends of the review's text, in the order the message holds it."""
+
     question: SentText
     answers: tuple[tuple[ClarifyingQuestion, SentText], ...] = ()
+    current_plan: SentText | None = None
     change: SentText | None = None
 
     @property
     def items(self) -> tuple[SentText, ...]:
-        extra = () if self.change is None else (self.change,)
+        extra = tuple(s for s in (self.current_plan, self.change) if s is not None)
         return (self.question, *(sent for _, sent in self.answers), *extra)
 
 
@@ -336,11 +341,15 @@ class PlanService:
         )
         plan = None
         if mode is PlanMode.DEEP:
-            result = await self._ask(review, ModelCallPurpose.CLARIFY, masked, None, current)
+            result = await self._ask(
+                review, ModelCallPurpose.CLARIFY, masked, rules, None, current
+            )
             conversation = replace(conversation, questions=_questions_from(result.output))
             trigger = ReviewTrigger.CLARIFY
         else:
-            result = await self._ask(review, ModelCallPurpose.DRAFT, masked, None, current)
+            result = await self._ask(
+                review, ModelCallPurpose.DRAFT, masked, rules, None, current
+            )
             plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, now)
             trigger = ReviewTrigger.DRAFT
         async with self._storage.unit_of_work() as uow:
@@ -396,7 +405,7 @@ class PlanService:
         masked = _Masked(
             await self._mask(SentTextKind.QUESTION, question, rules), tuple(answered)
         )
-        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, None, current)
+        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, rules, None, current)
         plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, self._clock())
         plan = replace(plan, clarifications=conversation.questions)
         async with self._storage.unit_of_work() as uow:
@@ -434,6 +443,10 @@ class PlanService:
                 raise PlanConflictError(_MOVED_ON)
             if latest.vocabulary.is_strict:
                 raise PlanConflictError(_STRICT)
+            refuse_rule_terms(
+                plan_text_fields(latest.vocabulary.concepts, latest.criteria),
+                await self._rules.rules_for(uow, review.project_id),
+            )
             change = ChangeRequest(uuid.uuid4(), text, current.user.id, now, based_on_version)
             conversation, version = await self._conversation(uow, review, current, now)
             await self._put_conversation(uow, conversation.with_pending_change(change), version)
@@ -444,10 +457,11 @@ class PlanService:
             await uow.commit()
         masked = _Masked(
             await self._mask(SentTextKind.QUESTION, question, rules),
+            current_plan=SentText(SentTextKind.CURRENT_PLAN, _plan_json(latest)),
             change=await self._mask(SentTextKind.CHANGE_REQUEST, change.text, rules),
         )
         result = await self._ask(
-            review, ModelCallPurpose.REVISE, masked, latest, current, change.id
+            review, ModelCallPurpose.REVISE, masked, rules, latest, current, change.id
         )
         concepts, criteria, notes = _draft_from(result.output)
         plan = latest.followed_by(
@@ -531,6 +545,10 @@ class PlanService:
             latest = await self._latest(uow, review_id)
             kept = () if latest is None else latest.criteria
             chosen = kept if criteria is None else number_criteria(criteria)
+            refuse_rule_terms(
+                plan_text_fields(concepts, chosen),
+                await self._rules.rules_for(uow, review.project_id),
+            )
             fields: dict[str, Any] = {
                 "concepts": concepts,
                 "criteria": chosen,
@@ -578,7 +596,7 @@ class PlanService:
                 return latest
             question, rules = await self._question_and_rules(uow, review)
         masked = _Masked(await self._mask(SentTextKind.QUESTION, question, rules))
-        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, None, None)
+        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, rules, None, None)
         now = self._clock()
         plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, now)
         async with self._storage.unit_of_work() as uow:
@@ -708,20 +726,24 @@ class PlanService:
         review: Review,
         purpose: ModelCallPurpose,
         masked: _Masked,
+        rules: Sequence[MaskingRule],
         current_plan: ReviewPlan | None,
         current: Current | None,
         change_request_id: UUID | None = None,
     ) -> ChatResult:
         """Call the model with masked text only, and store a receipt of what it received.
 
-        The receipt names the version being drafted (the one after `current_plan`;
-        none for clarifying questions) and the change request behind a revision.
+        The guard also refuses the project's always-masked terms: the model's own text in
+        the message (its questions, the current plan) was never masked for them. The
+        receipt names the version being drafted (the one after `current_plan`; none for
+        clarifying questions) and the change request behind a revision.
         """
         system, schema, prompt_version = _PROMPTS[purpose]
+        inference = self._inference.with_rules(rules)
         request = ChatRequest(
             messages=(
                 ChatMessage(ChatRole.SYSTEM, system),
-                ChatMessage(ChatRole.USER, _user_message(masked, current_plan)),
+                ChatMessage(ChatRole.USER, _user_message(masked)),
             ),
             output_schema=schema,
         )
@@ -734,7 +756,7 @@ class PlanService:
         # once. Each attempt sent the text, so each leaves its own receipt.
         for attempt in (1, 2):
             try:
-                result = await self._inference.chat(request)
+                result = await inference.chat(request)
             except PromptRefusedError:
                 raise
             except InferenceError as exc:
@@ -925,16 +947,20 @@ def _to_drafting(status: ReviewStatus) -> tuple[ReviewTrigger, ...]:
     return (ReviewTrigger.DRAFT,)
 
 
-def _user_message(masked: _Masked, current_plan: ReviewPlan | None) -> str:
+def _user_message(masked: _Masked) -> str:
     lines = [f"Question: {masked.question.sent}"]
     if masked.answers:
         lines.append("Answers to clarifying questions:")
         lines += [f"- {q.text} {sent.sent}" for q, sent in masked.answers]
-    if current_plan is not None:
-        lines.append("Current plan (JSON): " + json.dumps(_draft_json(current_plan)))
+    if masked.current_plan is not None:
+        lines.append(f"Current plan (JSON): {masked.current_plan.sent}")
     if masked.change is not None:
         lines.append(f"Change request: {masked.change.sent}")
     return "\n".join(lines)
+
+
+def _plan_json(plan: ReviewPlan) -> str:
+    return json.dumps(_draft_json(plan))
 
 
 def _draft_json(plan: ReviewPlan) -> dict[str, Any]:

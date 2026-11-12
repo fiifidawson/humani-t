@@ -138,6 +138,17 @@ print(asyncio.run(prompt_guard().inspect(masked)))
 | T10.3.4 | In pgAdmin, `SELECT term_sealed FROM masking_rules` | bytes, no readable name | sealed at rest | check `_TERM_PURPOSE` sealing |
 | T10.3.5 | In pgAdmin, `SELECT action, target_id FROM audit_events ORDER BY sequence DESC LIMIT 3` | `masking_rule.listed`, `masking_rule.created`, ids only | audited without values | check the `record` calls |
 
+### T10.4 A masked term cannot be written into a plan
+
+Uses the project and the `Kofi Mensah` rule from T10.3, and a review of that project.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T10.4.1 | As owner, `PUT /api/v1/reviews/{review_id}/plan/vocabulary` with `{"format": "text", "content": "cash transfers", "criteria": [{"kind": "exclusion", "text": "Reports written by Kofi Mensah"}]}` | `422`, `"Criterion E1 holds a term this project always masks. Remove it or reword it."`; the name is not in the response | criteria are checked when written | check `refuse_rule_terms` in `upload_vocabulary` |
+| T10.4.2 | Same with `"content": "[setting]\ncamps; Kofi Mensah clinic"` and no `criteria` | `422` naming `Concept 1` | search terms are checked too | as above |
+| T10.4.3 | Upload `"content": "cash transfers"` with no criteria, start a run with the `queries` stage, and approve its `vocabulary` gate with `"revisions": {"criteria": [{"kind": "inclusion", "text": "Clinics run by Kofi Mensah"}]}` | `422` naming `revisions.criteria[0].text`; the run still waits at the gate | gate edits are checked | check `RunService.resolve_gate` |
+| T10.4.4 | Needs a model server. In a new review, `POST …/plan` with `{"mode": "shallow"}`; pick a word from one of the drafted criteria (say `E1`), add it as a masking rule, then `POST …/plan/changes` with any request | `422` naming that criterion; no new receipt | a rule added later stops the plan reaching the model | check `request_changes` |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -145,6 +156,7 @@ print(asyncio.run(prompt_guard().inspect(masked)))
 | T10.1 | ☐ | |
 | T10.2 | ☐ | |
 | T10.3 | ☐ | |
+| T10.4 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 

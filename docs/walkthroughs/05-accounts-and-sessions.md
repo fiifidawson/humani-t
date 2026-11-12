@@ -398,6 +398,7 @@ From here on, the admin password is the one you set in T5.8.3.
 | T5.9.6 | Send T5.9.5 again | `400` | Single use |
 | T5.9.7 | Optional, slow: request a reset, wait 31 minutes, confirm | `400` | 30-minute expiry |
 | T5.9.8 | Sign in as admin with the password from T5.9.5 | `200` | The reset really changed the password |
+| T5.9.9 | From `services\api`, `docker compose -f ..\..\compose.dev.yaml pause mailpit`. Send `POST {{base}}/auth/password-reset` for the admin, then for `nobody@example.org`, and compare Postman's response times. Then `docker compose -f ..\..\compose.dev.yaml unpause mailpit` | both `202`, both about as fast, though the mail server is not answering; after unpausing, the admin's reset email arrives, or the API window shows an `email_delivery_failed` warning if the send timed out | The email is sent off the request path, so timing does not reveal which emails have accounts |
 
 - **If it fails:** a different body in T5.9.2 reveals which emails have accounts; a `204` in T5.9.4 or T5.9.6 means links are not single-use.
 
@@ -411,6 +412,8 @@ Start right after a successful admin sign-in (it resets the account's count).
 | T5.10.2 | Immediately sign in with the **correct** password | `429` | The throttle must not confirm a correct guess |
 | T5.10.3 | Wait the `Retry-After` seconds (up to 15 minutes), sign in correctly | `200` | Throttling, not lockout |
 | T5.10.4 | Runner: 6 iterations of `POST {{base}}/auth/password-reset` `{"email":"nobody2@example.org"}` | 1–5 → `202`; 6 → `429` with `Retry-After`; no emails | Per-email limit, applied identically to unknown addresses |
+| T5.10.4a | Sign in as admin. Runner: 11 iterations of `POST {{base}}/auth/reauthenticate` `{"password":"wrong-password-entirely"}` with the CSRF header, then once with the correct password | 1–10 → `403`; 11 → `429` with `Retry-After`; the correct password → `429` too | Step-up shares the sign-in limit, so a stolen session cannot guess the password |
+| T5.10.4b | After the `Retry-After`, sign in again and do the same with `POST {{base}}/account/password` `{"current_password":"wrong-password-entirely","new_password":"<any long password>"}` | 1–10 → `403`; 11 → `429` | A password change counts the same way |
 | T5.10.5 | Optional: more than 15 minutes after T5.9, the same 6 iterations for `admin@example.org` | 1–5 → `202`, 6 → `429`; Mailpit shows 5 new reset emails | The limit counts real accounts the same way |
 | T5.10.6 | With the API started with `--no-proxy-headers` (the development command, Set up): `POST {{base}}/auth/login` with a wrong password and the header `X-Forwarded-For: 198.51.100.9`. Then from `services\api`: `docker compose -f ..\..\compose.dev.yaml exec valkey sh -c 'REDISCLI_AUTH=$(cat /run/secrets/valkey_password) valkey-cli --scan --pattern ratelimit:login:client:*'` | `401`; the client key is `ratelimit:login:client:127.0.0.1`, never `…:198.51.100.9` | A client cannot choose the address its throttle counts (D5.6) |
 

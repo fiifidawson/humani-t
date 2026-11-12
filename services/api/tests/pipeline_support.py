@@ -356,6 +356,7 @@ class Pipeline:
                 plans=self.plans,
                 inference=inference,
                 masked=self.masked,
+                rules=providers.masking_rules,
                 audit=providers.audit,
                 concurrency=self.concurrency,
                 clock=clock,

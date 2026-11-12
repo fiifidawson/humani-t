@@ -20,6 +20,7 @@ import structlog
 
 from app.application.audit import SYSTEM, AuditLog
 from app.application.inference import GuardedInference
+from app.application.masking import MaskingRuleService
 from app.application.papers import PaperStore
 from app.application.pipeline import (
     accepted_plan_or_fail,
@@ -37,7 +38,14 @@ from app.domain.inference import (
     InvalidStructuredOutputError,
     PromptRefusedError,
 )
-from app.domain.plans import CriterionKind, PlanSource, ReviewPlan
+from app.domain.masking import MaskingRule
+from app.domain.plans import (
+    CriterionKind,
+    PlanSource,
+    ReviewPlan,
+    plan_text_fields,
+    refuse_rule_terms,
+)
 from app.domain.runs import JsonValue, Run
 from app.domain.screening import (
     MAX_QUOTE_LENGTH,
@@ -215,6 +223,7 @@ class ScreenStage:
         plans: PlanSource[UnitOfWork],
         inference: GuardedInference,
         masked: MaskedTextSource[UnitOfWork],
+        rules: MaskingRuleService,
         audit: AuditLog,
         concurrency: int = DEFAULT_CONCURRENCY,
         clock: Callable[[], datetime] = _utc_now,
@@ -226,6 +235,7 @@ class ScreenStage:
         self._plans = plans
         self._inference = inference
         self._masked = masked
+        self._rules = rules
         self._audit = audit
         self._concurrency = concurrency
         self._clock = clock
@@ -241,10 +251,13 @@ class ScreenStage:
             papers = await self._store.run_papers(uow, run)
             decided = {d.paper_id for d in await uow.screening.list_for_run(run.id)}
             work, skipped = await self._work(uow, run, papers, decided)
+            rules = await self._rules.rules_for(uow, run.project_id)
         if not work and not decided and skipped["not_masked"]:
             raise StageFailedError(NOTHING_MASKED)
+        _refuse_masked_criteria(plan, rules)
         tally = _Tally(done=len(decided), total=len(decided) + len(work))
-        await self._screen_all(context, run, plan, work, tally)
+        inference = self._inference.with_rules(rules)
+        await self._screen_all(context, run, plan, work, tally, inference)
         async with self._storage.unit_of_work() as uow:
             decisions = await uow.screening.list_for_run(run.id)
         tiers: dict[str, JsonValue] = {
@@ -295,6 +308,7 @@ class ScreenStage:
         plan: ReviewPlan,
         work: Sequence[_Work],
         tally: _Tally,
+        inference: GuardedInference,
     ) -> None:
         """Screen with at most `concurrency` calls in flight.
 
@@ -311,7 +325,9 @@ class ScreenStage:
                     return
                 try:
                     await context.raise_if_cancelled()
-                    await self._screen_one(context, run, plan, item, tally, reporting)
+                    await self._screen_one(
+                        context, run, plan, item, tally, reporting, inference
+                    )
                 except BaseException:
                     stop.set()
                     raise
@@ -329,10 +345,11 @@ class ScreenStage:
         item: _Work,
         tally: _Tally,
         reporting: asyncio.Lock,
+        inference: GuardedInference,
     ) -> None:
         request = screening_request(plan, item.masked_text)
         try:
-            decision = await self._decide(run, plan, item, request)
+            decision = await self._decide(run, plan, item, request, inference)
         except PromptRefusedError as exc:
             _log.warning(
                 "screening_prompt_refused",
@@ -379,12 +396,17 @@ class ScreenStage:
             )
 
     async def _decide(
-        self, run: Run, plan: ReviewPlan, item: _Work, request: ChatRequest
+        self,
+        run: Run,
+        plan: ReviewPlan,
+        item: _Work,
+        request: ChatRequest,
+        inference: GuardedInference,
     ) -> ScreeningDecision:
         paper = item.paper
         for attempt in (1, 2):
             try:
-                result = await self._inference.chat(request)
+                result = await inference.chat(request)
             except InvalidStructuredOutputError as exc:
                 _refused(run, paper, attempt, exc)
                 continue
@@ -444,6 +466,15 @@ class ScreenStage:
             decided_at=self._clock(),
             criterion_answers=answers,
         )
+
+
+def _refuse_masked_criteria(plan: ReviewPlan, rules: Sequence[MaskingRule]) -> None:
+    # A rule added after the plan was accepted. The guard would refuse every
+    # paper; one plain failure naming the criterion says why.
+    try:
+        refuse_rule_terms(plan_text_fields((), plan.criteria), rules)
+    except ValueError as exc:
+        raise StageFailedError(f"{exc} Change the plan, then run again.") from exc
 
 
 def _refused(run: Run, paper: RunPaper, attempt: int, error: Exception) -> None:
