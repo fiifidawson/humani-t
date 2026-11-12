@@ -316,6 +316,71 @@ describe("the screening summary (UI_UX_SPEC §5.3.7)", () => {
 			within(card).getByRole("link", { name: "Open papers" }),
 		).toBeInTheDocument();
 	});
+
+	it("warns in words when papers failed, and links to them", async () => {
+		const { api, path, project, review, run } = runningReview();
+		api.reviews.addPaper(review, run, {
+			title: "Cash in Mali",
+			tier: "highly_relevant",
+		});
+		api.reviews.addPaper(review, run, {
+			title: "Only a title",
+			tier: null,
+			status: "skipped",
+		});
+		api.reviews.addPaper(review, run, {
+			title: "Stopped by the privacy check",
+			tier: null,
+			status: "failed",
+		});
+		const { user, router } = renderApp(path);
+		const source = await stream(run.id);
+
+		send(source, started("screen", 5), finished("screen", 120, { papers: 3 }));
+
+		const card = await screen.findByRole("article", {
+			name: "Screening · 3 papers",
+		});
+		await waitFor(() => expect(card).toHaveTextContent("1 Skipped"));
+		expect(card).toHaveTextContent(
+			"1 paper failed the privacy check and wasn't screened.",
+		);
+		await user.click(
+			within(card).getByRole("link", { name: "Show the failed papers" }),
+		);
+
+		await waitFor(() =>
+			expect(currentPath(router)).toBe(
+				`/p/${project.id}/r/${review.id}/papers`,
+			),
+		);
+		const canvas = await screen.findByRole("region", {
+			name: "Papers · run 1",
+		});
+		await waitFor(() =>
+			expect(
+				within(canvas).getByRole("button", { name: "Failed 1" }),
+			).toHaveAttribute("aria-pressed", "true"),
+		);
+	});
+
+	it("has no failed line when nothing failed", async () => {
+		const { api, path, review, run } = runningReview();
+		api.reviews.addPaper(review, run, {
+			title: "Cash in Mali",
+			tier: "highly_relevant",
+		});
+		renderApp(path);
+		const source = await stream(run.id);
+
+		send(source, started("screen", 5), finished("screen", 120, { papers: 1 }));
+
+		const card = await screen.findByRole("article", {
+			name: "Screening · 1 paper",
+		});
+		await waitFor(() => expect(card).toHaveTextContent("1 Highly relevant"));
+		expect(card).not.toHaveTextContent("failed");
+	});
 });
 
 describe("the run canvas (UI_UX_SPEC §6.7)", () => {

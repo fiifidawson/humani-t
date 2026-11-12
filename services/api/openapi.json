@@ -6531,6 +6531,12 @@
             ],
             "title": "Skipped Because",
             "description": "Set when skipped."
+          },
+          "is_cited_in_brief": {
+            "type": "boolean",
+            "title": "Is Cited In Brief",
+            "description": "Whether the brief this run wrote cites it, by `tag`.",
+            "default": false
           }
         },
         "type": "object",

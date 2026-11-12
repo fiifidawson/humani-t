@@ -12,7 +12,7 @@ from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Self, cast
+from typing import Any, Protocol, Self, cast
 from uuid import UUID
 
 from app.domain.runs import JsonValue
@@ -275,6 +275,14 @@ class BriefBody:
             for citation in claim.citations:
                 seen.setdefault(citation.tag, None)
         return tuple(seen)
+
+
+class BriefCitations[UnitOfWorkT](Protocol):
+    """Where the screening table reads which papers a run's brief cites."""
+
+    async def cited_tags(self, uow: UnitOfWorkT, run_id: UUID) -> frozenset[str]:
+        """Every tag the brief written by `run_id` cites; empty when it wrote none."""
+        ...
 
 
 def _option_key(name: str) -> str:

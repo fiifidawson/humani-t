@@ -2592,6 +2592,12 @@ export interface components {
              * @description Set when skipped.
              */
             skipped_because?: ("no_abstract" | "not_masked") | null;
+            /**
+             * Is Cited In Brief
+             * @description Whether the brief this run wrote cites it, by `tag`.
+             * @default false
+             */
+            is_cited_in_brief: boolean;
         };
         /** PaperPageOut */
         PaperPageOut: {

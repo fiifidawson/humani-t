@@ -17,7 +17,12 @@ from fastapi import Depends, Request
 
 from app.application.accounts import AccountService
 from app.application.audit import AuditLog
-from app.application.briefs import AnswerStage, BriefService, ScreenedSources
+from app.application.briefs import (
+    AnswerStage,
+    BriefService,
+    ScreenedSources,
+    StoredBriefCitations,
+)
 from app.application.documents import (
     DocumentEvidence,
     DocumentProcessor,
@@ -537,6 +542,7 @@ def build_providers(
             store=pipeline.store,
             masked=pipeline.masked,
             encryption=encryption,
+            citations=StoredBriefCitations(encryption),
         ),
         plans=plans,
         masking_rules=masking_rules,
