@@ -24,6 +24,7 @@ from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService, mask_as_chosen
 from app.application.membership import require_member, require_review_member
+from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperStore
 from app.application.reviews import question_context
 from app.briefs.base import Retriever, SourceCatalogue
@@ -44,6 +45,7 @@ from app.domain.briefs import (
     body_to_dict,
 )
 from app.domain.encryption import EncryptionContext
+from app.domain.model_instructions import InstructionsKind, SentInstructions
 from app.domain.projects import Action
 from app.domain.runs import JsonValue
 from app.domain.screening import EvidenceSource, Passage
@@ -67,13 +69,18 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True, slots=True)
 class OpenedBrief:
-    """A brief in the clear, with the evidence the Writer saw and the loop's trace."""
+    """A brief in the clear, with the evidence the Writer saw and the loop's trace.
+
+    `instructions` are the project's writing instructions as the Writer received them;
+    `None` when it had none, as for every brief written before they existed.
+    """
 
     brief: DecisionBrief
     evidence: tuple[RetrievedPassage, ...]
     sources: Mapping[UUID, SourceDetails]
     steps: tuple[AgentStep, ...]
     manifest: Mapping[str, JsonValue]
+    instructions: SentInstructions | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +178,7 @@ class BriefSeal:
             sources={UUID(k): SourceDetails(**v) for k, v in evidence["sources"].items()},
             steps=tuple(AgentStep.from_payload(s) for s in trace["steps"]),
             manifest=trace["manifest"],
+            instructions=instructions_from_dict(trace.get("instructions")),
         )
 
 
@@ -186,6 +194,14 @@ class StoredBriefCitations:
             return frozenset()
         content = await self._seal.open(uow, record, _CONTENT_PURPOSE)
         return frozenset(body_from_dict(content["body"]).cited_tags())
+
+
+def instructions_to_dict(sent: SentInstructions | None) -> dict[str, JsonValue] | None:
+    return None if sent is None else {"version": sent.version, "text": sent.text}
+
+
+def instructions_from_dict(data: Mapping[str, Any] | None) -> SentInstructions | None:
+    return None if data is None else SentInstructions(int(data["version"]), str(data["text"]))
 
 
 def passage_to_dict(item: RetrievedPassage) -> dict[str, JsonValue]:
@@ -254,6 +270,7 @@ class AnswerStage:
         catalogue: SourceCatalogue,
         sanitizer: Sanitizer,
         rules: MaskingRuleService,
+        instructions: ModelInstructionsService,
         max_rounds: int = 3,
         clock: Callable[[], datetime] = _utc_now,
         timer: Callable[[], float] = time.monotonic,
@@ -268,6 +285,7 @@ class AnswerStage:
         self._catalogue = catalogue
         self._sanitizer = sanitizer
         self._rules = rules
+        self._instructions = instructions
         self._clock = clock
         self._timer = timer
         # Built once so a bad setting fails at start-up, not at the first run.
@@ -279,7 +297,8 @@ class AnswerStage:
             if stored is not None:
                 return _summary(await self._seal.open_brief(uow, stored))
             review = await uow.reviews.get(context.review_id)
-            if review is None:
+            run = await uow.runs.get(context.run_id)
+            if review is None or run is None:
                 raise StageFailedError("This run's review no longer exists.")
             question = await self._encryption.decrypt(
                 uow, question_context(review.project_id, review.id), review.question_sealed
@@ -288,7 +307,9 @@ class AnswerStage:
             passages = await self._evidence.included_passages(
                 uow, context.review_id, context.run_id
             )
+            in_force = await self._instructions.in_force(uow, run.project_id, run.created_at)
         masked = await mask_as_chosen(self._sanitizer, question.decode(), privacy)
+        sent = await self._instructions.as_sent(in_force, InstructionsKind.WRITING, privacy)
         loop = BriefLoop(
             self._inference.for_project(privacy),
             self._retriever,
@@ -301,7 +322,7 @@ class AnswerStage:
             await context.raise_if_cancelled()
 
         try:
-            result = await loop.run(masked.masked, passages, report)
+            result = await loop.run(masked.masked, passages, report, sent)
         except LoopFailedError as exc:
             raise StageFailedError(str(exc)) from exc
         result = replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
@@ -332,6 +353,7 @@ class AnswerStage:
             trace = {
                 "steps": [s.to_payload() for s in result.steps],
                 "manifest": result.manifest,
+                "instructions": instructions_to_dict(result.instructions),
             }
             record = BriefRecord(
                 id=brief_id,

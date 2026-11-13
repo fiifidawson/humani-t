@@ -64,6 +64,7 @@ class TestOpenAPI:
             "/api/v1/questions/{question_id}",
             "/api/v1/projects/{project_id}/masking-rules",
             "/api/v1/projects/{project_id}/masking-rules/{rule_id}",
+            "/api/v1/projects/{project_id}/model-instructions",
             "/api/v1/projects/{project_id}/documents",
             "/api/v1/projects/{project_id}/documents/{document_id}",
             "/api/v1/projects/{project_id}/documents/{document_id}/masked",

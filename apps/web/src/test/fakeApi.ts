@@ -17,6 +17,7 @@ import {
 	problem,
 	text,
 } from "./fakeHttp";
+import { FakeInstructions } from "./fakeInstructions";
 import { FakeReviews } from "./fakeReviews";
 
 const API = "*/api/v1";
@@ -126,6 +127,18 @@ export class FakeApi {
 		roleIn: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
 		userId: () => this.session?.userId ?? null,
+	});
+	/** A project's instructions to the model (fakeInstructions.ts). */
+	readonly instructions = new FakeInstructions({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		user: () => {
+			const user = this.users.find((u) => u.id === this.session?.userId);
+			return user === undefined
+				? null
+				: { id: user.id, display_name: user.display_name };
+		},
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -1096,6 +1109,7 @@ export class FakeApi {
 
 			...this.reviews.handlers(),
 			...this.documents.handlers(),
+			...this.instructions.handlers(),
 		];
 	}
 }

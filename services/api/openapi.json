@@ -3306,6 +3306,104 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/model-instructions": {
+      "get": {
+        "tags": [
+          "model instructions"
+        ],
+        "summary": "The project's instructions to the model and every earlier version",
+        "operationId": "read_instructions_api_v1_projects__project_id__model_instructions_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelInstructionsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "model instructions"
+        ],
+        "summary": "Save these instructions as the project's next version",
+        "description": "Refuses a term the project always masks, naming the field and never the term.",
+        "operationId": "save_instructions_api_v1_projects__project_id__model_instructions_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelInstructionsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelInstructionsVersionOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Someone saved another version since it was read"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/documents": {
       "post": {
         "tags": [
@@ -5984,6 +6082,25 @@
         "type": "object",
         "title": "HealthOut"
       },
+      "InstructionsSentOut": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The project's writing instructions as the Writer got them."
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "text"
+        ],
+        "title": "InstructionsSentOut"
+      },
       "InvitationIn": {
         "properties": {
           "email": {
@@ -6287,6 +6404,14 @@
             "type": "array",
             "title": "Plan Versions"
           },
+          "instructions_versions": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Instructions Versions",
+            "description": "The project's instruction versions the model calls carried."
+          },
           "sources": {
             "items": {
               "type": "string"
@@ -6361,6 +6486,7 @@
           "vocabulary_versions",
           "criteria_versions",
           "plan_versions",
+          "instructions_versions",
           "sources",
           "queries",
           "model_ids",
@@ -6686,6 +6812,111 @@
           "revise"
         ],
         "title": "ModelCallPurpose"
+      },
+      "ModelInstructionsIn": {
+        "properties": {
+          "screening": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Screening",
+            "description": "How to judge papers; blank for none."
+          },
+          "writing": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Writing",
+            "description": "How to write briefs and answers; blank for none."
+          },
+          "based_on_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Based On Version",
+            "description": "The version being edited; null if the project has none yet."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "screening",
+          "writing",
+          "based_on_version"
+        ],
+        "title": "ModelInstructionsIn",
+        "example": {
+          "screening": "Treat studies in refugee camps as displaced settings.",
+          "writing": "Write for a field manager: short sentences, no jargon."
+        }
+      },
+      "ModelInstructionsOut": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelInstructionsVersionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The instructions in force; null means none were ever saved."
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInstructionsVersionOut"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "Every version, oldest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "current",
+          "versions"
+        ],
+        "title": "ModelInstructionsOut"
+      },
+      "ModelInstructionsVersionOut": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "screening": {
+            "type": "string",
+            "title": "Screening",
+            "description": "As typed; masked only when sent to a model."
+          },
+          "writing": {
+            "type": "string",
+            "title": "Writing",
+            "description": "As typed; masked only when sent to a model."
+          },
+          "saved_by": {
+            "$ref": "#/components/schemas/UserRefOut"
+          },
+          "saved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Saved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "screening",
+          "writing",
+          "saved_by",
+          "saved_at"
+        ],
+        "title": "ModelInstructionsVersionOut"
       },
       "OptionOut": {
         "properties": {
@@ -9269,6 +9500,17 @@
             ],
             "title": "Is Masked",
             "description": "Whether the brief's text was masked (ADR 0014); null for a brief written before this was recorded."
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstructionsSentOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Masked where masking applies; null when the Writer had none."
           }
         },
         "type": "object",
@@ -9282,7 +9524,8 @@
           "steps",
           "totals",
           "manifest",
-          "is_masked"
+          "is_masked",
+          "instructions"
         ],
         "title": "TraceOut"
       },

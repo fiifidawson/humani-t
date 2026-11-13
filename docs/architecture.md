@@ -321,6 +321,11 @@ Review          a question, a Vocabulary, and a set of Criteria
                 written once, outlives the document
   MaskSpan      a masked range of a Document's raw text: type and source
   MaskingRule   a project-wide term that is always masked
+  ModelInstructions  a project's own two texts for the model: how to judge
+                papers (screening) and how to write (the brief's and answers'
+                Writer); one ModelInstructionsVersion per save, sealed,
+                never rewritten; added after a built-in prompt, never in
+                its place (ADR 0015)
   PaperMask     a paper's masked text and spans, sealed, with the detectors
                 and rules they were made with; the raw text is kept apart
   Criterion     an inclusion/exclusion rule
@@ -400,6 +405,8 @@ Passage         a masked excerpt the brief may cite, tagged by the paper's place
 ```
 
 The UI's labels (Highly relevant, Relevant, Possibly relevant, Excluded, Uncertain) are a `ScreeningTier` derived from label and priority, not stored. Under a review's `LabelRules`, the label and priority shown are computed on read from a decision's answers and the latest version; the decision itself never changes ([ADR 0013](adr/0013-label-rules-applied-on-read.md)). As §3.8 says, there is no `ScreeningProvider` seam: screening is a use case (the `screen` stage) that calls the model through `GuardedInference` with a versioned prompt, because a second seam in front of the model would be a place to skip the guard.
+
+**A project's instructions to the model** ([ADR 0015](adr/0015-project-instructions-are-added-not-replacing.md)) are person-typed, so they are refused on save if they hold a term the project always masks, and masked as a question is before each call (`SentInstructions` is the text as sent). A run uses the version saved last at or before it was started, records it in its manifest (`instructions_version`), and the brief's trace keeps the text as sent. Screening decisions do not repeat it: every decision of a run shares the run's version (ADR 0006).
 
 Conversations may still exist: the agentic loop produces a transcript, and a user may ask follow-up questions. But they are an *artefact of* a Review, not the organising entity.
 

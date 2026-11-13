@@ -20,6 +20,7 @@ import { Loading } from "../../ui/Loading";
 import { Canvas, CanvasHeading } from "../reviews/Canvas";
 import { duration, plural } from "../reviews/format";
 import { useLiveRun } from "../reviews/liveRun";
+import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
 import {
 	ROLES,
@@ -217,7 +218,30 @@ const MANIFEST_NAMES: Readonly<Record<string, string>> = {
 	prompt_versions: "Prompt versions",
 	retriever: "Retriever",
 	max_rounds: "Round limit",
+	instructions_version: "Instructions version",
 };
+
+/** The project's writing instructions as the Writer got them (ADR 0015). */
+function InstructionsUsed({ trace }: { trace: Trace }) {
+	const id = useId();
+	const sent = trace.instructions;
+	return (
+		<Box as="section" aria-labelledby={id}>
+			<CanvasHeading id={id}>Instructions from the project team</CanvasHeading>
+			{sent === null ? (
+				<Text>None. The Writer had only the built-in instructions.</Text>
+			) : (
+				<Stack gap="1">
+					<Text color="fg.muted">
+						Version {sent.version}, as the Writer received them, masked where
+						masking applies.
+					</Text>
+					<MaskedText text={sent.text} />
+				</Stack>
+			)}
+		</Box>
+	);
+}
 
 function TraceView({ trace }: { trace: Trace }) {
 	const id = useId();
@@ -256,6 +280,7 @@ function TraceView({ trace }: { trace: Trace }) {
 				{NUMBER.format(trace.totals.prompt_tokens)} tokens in,{" "}
 				{NUMBER.format(trace.totals.completion_tokens)} out
 			</Text>
+			<InstructionsUsed trace={trace} />
 			<CanvasHeading id={`${id}-used`}>What this used</CanvasHeading>
 			<chakra.ul aria-labelledby={`${id}-used`} pl="5">
 				{trace.is_masked === null ? null : (

@@ -354,6 +354,11 @@ class TotalsOut(BaseModel):
     completion_tokens: int
 
 
+class InstructionsSentOut(BaseModel):
+    version: int
+    text: str = Field(description="The project's writing instructions as the Writer got them.")
+
+
 class TraceOut(BaseModel):
     brief_id: UUID
     model_id: str
@@ -369,6 +374,9 @@ class TraceOut(BaseModel):
             "Whether the brief's text was masked (ADR 0014); null for a brief written "
             "before this was recorded."
         )
+    )
+    instructions: InstructionsSentOut | None = Field(
+        description="Masked where masking applies; null when the Writer had none."
     )
 
     @classmethod
@@ -389,6 +397,11 @@ class TraceOut(BaseModel):
             ),
             manifest={k: v for k, v in opened.manifest.items() if k != "is_masked"},
             is_masked=_is_masked(opened.manifest),
+            instructions=None
+            if opened.instructions is None
+            else InstructionsSentOut(
+                version=opened.instructions.version, text=opened.instructions.text
+            ),
         )
 
 

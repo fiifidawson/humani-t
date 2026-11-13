@@ -25,11 +25,17 @@ from app.application.accounts import Current
 from app.application.answer_loop import AnswerLoop, AnswerResult, Turn
 from app.application.audit import AuditLog
 from app.application.brief_loop import LoopFailedError
-from app.application.briefs import BriefSeal, passage_from_dict, passage_to_dict
+from app.application.briefs import (
+    BriefSeal,
+    instructions_to_dict,
+    passage_from_dict,
+    passage_to_dict,
+)
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService, mask_as_chosen
 from app.application.membership import require_member, require_review_member
+from app.application.model_instructions import ModelInstructionsService
 from app.briefs.base import Retriever
 from app.domain.accounts import NotFoundError
 from app.domain.briefs import (
@@ -41,6 +47,7 @@ from app.domain.briefs import (
 )
 from app.domain.encryption import EncryptionContext
 from app.domain.errors import ConcurrentUpdateError, StorageUnavailableError
+from app.domain.model_instructions import InstructionsKind
 from app.domain.projects import Action
 from app.domain.questions import (
     CONTEXT_TURNS,
@@ -168,6 +175,7 @@ def _answer_to_dict(result: AnswerResult, run_id: UUID | None) -> dict[str, Any]
         else result.stopped_because.value,
         "warnings": [w.to_payload() for w in result.warnings],
         "manifest": result.manifest,
+        "instructions": instructions_to_dict(result.instructions),
     }
 
 
@@ -355,6 +363,7 @@ class QuestionWorker:
         retriever: Retriever,
         evidence: EvidenceSource[UnitOfWork],
         rules: MaskingRuleService,
+        instructions: ModelInstructionsService,
         worker_id: str,
         signals: Signals | None = None,
         max_rounds: int = 2,
@@ -370,6 +379,7 @@ class QuestionWorker:
         self._retriever = retriever
         self._evidence = evidence
         self._rules = rules
+        self._instructions = instructions
         self._worker_id = worker_id
         self._signals = signals
         self._max_rounds = max_rounds
@@ -419,9 +429,14 @@ class QuestionWorker:
         async with self._storage.unit_of_work() as uow:
             privacy = await self._rules.privacy_for(uow, record.project_id)
             work = await self._gather(uow, record, is_masked=privacy.is_masked)
+            # Fixed by when it was asked, as a run's by when it started: a retry reads the same.
+            in_force = await self._instructions.in_force(
+                uow, record.project_id, record.asked_at
+            )
         if work is None:
             await self._finish(record, error=_MASKED_SINCE)
             return
+        sent = await self._instructions.as_sent(in_force, InstructionsKind.WRITING, privacy)
         loop = AnswerLoop(
             self._inference.for_project(privacy),
             self._retriever,
@@ -432,7 +447,7 @@ class QuestionWorker:
         async def keep_lease(step: AgentStep) -> None:
             await self._renew(record)
 
-        result = await loop.run(work.question, work.earlier, work.corpus, keep_lease)
+        result = await loop.run(work.question, work.earlier, work.corpus, keep_lease, sent)
         result = replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
         await self._finish(record, result=result, run_id=work.run_id)
 

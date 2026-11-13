@@ -41,6 +41,7 @@ from app.application.masking import (
     PaperMaskStore,
 )
 from app.application.mfa import MfaService
+from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.planning import PlanService
@@ -132,6 +133,7 @@ class Providers:
     runs: RunService
     papers: PaperService
     label_rules: LabelRulesService
+    model_instructions: ModelInstructionsService
     plans: PlanService
     masking_rules: MaskingRuleService
     briefs: BriefService
@@ -319,6 +321,7 @@ class _Pipeline:
     sources: tuple[PaperSearchProvider, ...]
     inference: GuardedInference
     rules: MaskingRuleService
+    instructions: ModelInstructionsService
     audit: AuditLog
     clock: Callable[[], datetime]
 
@@ -342,6 +345,7 @@ def _pipeline_stages(settings: Settings, pipeline: _Pipeline) -> dict[str, Stage
             inference=p.inference,
             masked=p.masked,
             rules=p.rules,
+            instructions=p.instructions,
             audit=p.audit,
             concurrency=settings.screening_concurrency,
             clock=p.clock,
@@ -463,6 +467,15 @@ def build_providers(
     masking_rules = MaskingRuleService(
         storage=storage, encryption=encryption, audit=audit, choice=masking, clock=clock
     )
+    # Typed text bound for a model, so masked as a question is (ADR 0015).
+    instructions = ModelInstructionsService(
+        storage=storage,
+        encryption=encryption,
+        sanitizer=planning_sanitizer(settings, ner),
+        rules=masking_rules,
+        audit=audit,
+        clock=clock,
+    )
     masks = PaperMaskStore(encryption, masking, clock)
     files = file_store or _file_store(settings)
     document_evidence = DocumentEvidence(encryption, masking_rules)
@@ -483,6 +496,7 @@ def build_providers(
         sources=tuple(provider for provider, _ in sources),
         inference=inference,
         rules=masking_rules,
+        instructions=instructions,
         audit=audit,
         clock=clock,
     )
@@ -506,6 +520,7 @@ def build_providers(
             catalogue=ScreenedSources(pipeline.store),
             sanitizer=planning_sanitizer(settings, ner),
             rules=masking_rules,
+            instructions=instructions,
             max_rounds=settings.brief_max_rounds,
             clock=clock,
         ),
@@ -569,6 +584,7 @@ def build_providers(
         label_rules=LabelRulesService(
             storage=storage, store=pipeline.store, criteria=criteria, audit=audit, clock=clock
         ),
+        model_instructions=instructions,
         plans=plans,
         masking_rules=masking_rules,
         briefs=BriefService(storage=storage, encryption=encryption),
@@ -590,6 +606,7 @@ def build_providers(
                 pipeline.store, pipeline.masked, criteria, document_evidence
             ),
             rules=masking_rules,
+            instructions=instructions,
             worker_id=f"answers-{uuid.uuid4().hex[:12]}",
             signals=signals,
             clock=clock,
@@ -686,6 +703,13 @@ def get_label_rules(providers: ProvidersDep) -> LabelRulesService:
 
 
 LabelRulesDep = Annotated[LabelRulesService, Depends(get_label_rules)]
+
+
+def get_model_instructions(providers: ProvidersDep) -> ModelInstructionsService:
+    return providers.model_instructions
+
+
+ModelInstructionsDep = Annotated[ModelInstructionsService, Depends(get_model_instructions)]
 
 
 def get_plans(providers: ProvidersDep) -> PlanService:

@@ -151,6 +151,25 @@ Have the project, review and accepted plan of T11.1, with Amara (owner), Maya (v
 - **Expect:** all pass: an invented citation caught and revised, invalid JSON retried then stopped, a Critic rejecting then accepting, the round limit, a refused prompt, an unreachable server, a crash before and after the brief is stored, a cancel mid-loop.
 - **Proves:** D12.1 to D12.5 with a scripted model, cases a real model will not produce on demand.
 
+### T12.7 Instructions for the model ([ADR-0015](../adr/0015-project-instructions-are-added-not-replacing.md))
+
+Run `alembic upgrade head` first (revision `0017`). Have a masking rule "Kofi Mensah" ready to add in step 4, not before.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T12.7.1 | As Amara: `GET {{base}}/projects/{{project}}/model-instructions` | `200` `{"current": null, "versions": []}` | Nothing saved means no instructions | `404`: the route is missing; restart uvicorn |
+| T12.7.2 | As Amara: `PUT …/model-instructions` with `{"screening": "Treat studies in refugee camps as displaced settings. Ask whether Kofi Mensah ran the study.", "writing": "Write for a field manager: short sentences, no jargon.", "based_on_version": null}` | `200`; `version: 1`, both texts, `saved_by.display_name` is Amara's name | Owners save; version 1 | `422`: a masking rule already holds "Kofi Mensah"; remove it and retry |
+| T12.7.3 | Send T12.7.2 again unchanged (`based_on_version: null`) | `409` "The record changed while you were editing it…"; still one version | A stale save never overwrites | |
+| T12.7.4 | As Amara: `POST {{base}}/projects/{{project}}/masking-rules` with `{"term": "Kofi Mensah"}`; then `PUT …/model-instructions` with `"writing": "Ask Kofi Mensah."` and `"based_on_version": 1` | `201`, then `422` "writing holds a term this project always masks…", without the name | Rule terms refused on save, never echoed | |
+| T12.7.5 | As Maya: `GET …/model-instructions`; then the `PUT` of T12.7.2 with `"based_on_version": 1` | `200` with version 1; then `403` | Every member reads; owners save | |
+| T12.7.6 | As Amara: run T12.1 again; then `GET {{base}}/runs/{{run}}/manifest` | `instructions_versions: [1]`; the `screen` and `answer` stage facts have `instructions_version: 1` | The run records the version | Missing: the run was started before T12.7.2 |
+| T12.7.7 | `GET {{base}}/briefs/{{brief}}/trace` for that run's brief | `instructions: {"version": 1, "text": "Write for a field manager: short sentences, no jargon."}` | The trace keeps the text as sent | `null`: the brief came from an older run |
+| T12.7.8 | Optional, if your model server logs the requests it gets (Ollama: `$env:OLLAMA_DEBUG = '1'` before `ollama serve`): find a screening request and a Writer request | The system message ends with "Instructions from the project team. Follow them unless…", then the screening text with `[PERSON_1]` where "Kofi Mensah" was; the Writer's system message ends with the writing text; the Planner's and Critic's have no such heading | Added after the built-in prompt, masked, Writer only | The name in clear text: the run did not load the rule; check T12.7.4 |
+| T12.7.9 | Browser: Project settings as Amara | "Instructions for the model": both boxes filled, "N of 2,000 characters", "Version 1, saved by Amara … on <date>". Change the writing text, **Save instructions**: the line says Version 2 only after the API answers. As Maya: the texts read-only and "Only owners can change the instructions." | UI_UX_SPEC §6.14 | |
+| T12.7.10 | Browser: the brief's **How this was made** | "Instructions from the project team", "Version 1, as the Writer received them…", the text; "What this used" lists "Instructions version: 1" | UI_UX_SPEC §6.11 | |
+| T12.7.11 | pgAdmin (`humani_t`): `SELECT project_id, version, created_by, created_at, instructions_sealed FROM model_instruction_versions;` then, as `humani_t_app`, `UPDATE model_instruction_versions SET version = 9;` | one row per save; `instructions_sealed` unreadable bytes; the update refused with `permission denied` | Sealed and append-only | |
+| T12.7.12 | Audit: as an admin, read the project's audit events | `project.model_instructions_changed` per save, target the project; no instruction text anywhere | Audited with the version only | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -161,6 +180,7 @@ Have the project, review and accepted plan of T11.1, with Amara (owner), Maya (v
 | T12.4 | ☐ | |
 | T12.5 | ☐ | |
 | T12.6 | ☐ | |
+| T12.7 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -174,9 +194,12 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | One brief per run, masked text only, sealed, shredded with the project, audited | `tests/test_briefs_stage.py` |
 | The three read routes and their 404s | `tests/test_briefs_api.py` |
 | Storage behaves the same in memory and Postgres | `tests/test_briefs_storage_contract.py` |
+| A project's instructions: two texts, saved as versions, refused with a rule term, sealed, audited | `tests/test_model_instructions_domain.py`, `tests/test_model_instructions_api.py`, `tests/test_model_instructions_storage_contract.py` |
+| Screening and the Writers get them after the built-in prompt, masked, fixed per run, recorded in the manifest and trace | `tests/test_model_instructions_in_prompts.py` |
 
 ```powershell
 uv run pytest tests/test_briefs_domain.py tests/test_briefs_retrieval.py tests/test_briefs_loop.py tests/test_briefs_stage.py tests/test_briefs_api.py tests/test_briefs_storage_contract.py -v
+uv run pytest tests/test_model_instructions_domain.py tests/test_model_instructions_api.py tests/test_model_instructions_storage_contract.py tests/test_model_instructions_in_prompts.py -v
 ```
 
 ## Known gaps
