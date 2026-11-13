@@ -67,6 +67,11 @@ class RunManifest:
         return self._versions("plan_version")
 
     @property
+    def instructions_versions(self) -> tuple[int, ...]:
+        """The project's instruction versions its calls carried; empty when none did."""
+        return self._versions("instructions_version")
+
+    @property
     def sources(self) -> tuple[str, ...]:
         """Every source any stage named, in the order first named."""
         seen: dict[str, None] = {}

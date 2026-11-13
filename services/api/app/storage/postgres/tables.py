@@ -544,3 +544,14 @@ label_rule_versions = Table(
     ),
     CheckConstraint("papers_moved >= 0", name="papers_moved_is_a_count"),
 )
+
+model_instruction_versions = Table(
+    "model_instruction_versions",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("instructions_sealed", LargeBinary, nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version >= 1", name="version_counts_from_one"),
+)

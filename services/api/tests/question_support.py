@@ -160,6 +160,7 @@ def make_ask_team(
         retriever=Bm25Retriever(),
         evidence=FakeEvidenceSource(passages),
         rules=providers.masking_rules,
+        instructions=providers.model_instructions,
         worker_id=worker_id,
         clock=rt.clock,
     )

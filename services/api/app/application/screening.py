@@ -3,7 +3,8 @@
 Every call goes through `GuardedInference`, and a paper with no masked text is skipped.
 Each decision is stored as it is made, with the model, prompt and plan version it used,
 so a retry redoes only unfinished papers. A bad answer is asked again once, then marked
-`uncertain` for a person to check.
+`uncertain` for a person to check. The project's screening instructions follow the
+built-in prompt, as they stood when the run was started.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import structlog
 from app.application.audit import SYSTEM, AuditLog
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService
+from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperStore
 from app.application.pipeline import (
     accepted_plan_or_fail,
@@ -39,6 +41,7 @@ from app.domain.inference import (
     PromptRefusedError,
 )
 from app.domain.masking import MaskingRule
+from app.domain.model_instructions import InstructionsKind, SentInstructions, with_instructions
 from app.domain.plans import (
     CriterionKind,
     PlanSource,
@@ -175,7 +178,11 @@ def screening_schema(criterion_ids: Sequence[str]) -> dict[str, Any]:
     }
 
 
-def screening_request(plan: ReviewPlan, masked_text: str) -> ChatRequest:
+def screening_request(
+    plan: ReviewPlan, masked_text: str, instructions: str = ""
+) -> ChatRequest:
+    """The call for one paper; the project's `instructions` follow the built-in prompt."""
+
     def listed(kind: CriterionKind) -> str:
         lines = [f"{c.id}: {c.text}" for c in plan.criteria if c.kind is kind]
         return "\n".join(lines) or "(none)"
@@ -185,7 +192,7 @@ def screening_request(plan: ReviewPlan, masked_text: str) -> ChatRequest:
     )
     return ChatRequest(
         messages=(
-            ChatMessage(ChatRole.SYSTEM, system),
+            ChatMessage(ChatRole.SYSTEM, with_instructions(system, instructions)),
             ChatMessage(ChatRole.USER, masked_text),
         ),
         output_schema=screening_schema([c.id for c in plan.criteria]),
@@ -197,6 +204,18 @@ def one_line(text: str, limit: int) -> str:
     """The first line of `text`, its whitespace collapsed, cut to `limit` characters."""
     first = _WHITESPACE.sub(" ", text.strip().splitlines()[0] if text.strip() else "").strip()
     return first if len(first) <= limit else f"{first[: limit - 1].rstrip()}…"
+
+
+@dataclass(frozen=True, slots=True)
+class _Screening:
+    """What every call of one execution shares: the plan and the instructions as sent."""
+
+    plan: ReviewPlan
+    instructions: SentInstructions | None
+
+    def request(self, masked_text: str) -> ChatRequest:
+        text = "" if self.instructions is None else self.instructions.text
+        return screening_request(self.plan, masked_text, text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,6 +243,7 @@ class ScreenStage:
         inference: GuardedInference,
         masked: MaskedTextSource[UnitOfWork],
         rules: MaskingRuleService,
+        instructions: ModelInstructionsService,
         audit: AuditLog,
         concurrency: int = DEFAULT_CONCURRENCY,
         clock: Callable[[], datetime] = _utc_now,
@@ -236,6 +256,7 @@ class ScreenStage:
         self._inference = inference
         self._masked = masked
         self._rules = rules
+        self._instructions = instructions
         self._audit = audit
         self._concurrency = concurrency
         self._clock = clock
@@ -252,12 +273,15 @@ class ScreenStage:
             decided = {d.paper_id for d in await uow.screening.list_for_run(run.id)}
             work, skipped = await self._work(uow, run, papers, decided)
             privacy = await self._rules.privacy_for(uow, run.project_id)
+            in_force = await self._instructions.in_force(uow, run.project_id, run.created_at)
         if not work and not decided and skipped["not_masked"]:
             raise StageFailedError(NOTHING_MASKED)
         _refuse_masked_criteria(plan, privacy.rules)
+        sent = await self._instructions.as_sent(in_force, InstructionsKind.SCREENING, privacy)
+        screening = _Screening(plan, sent)
         tally = _Tally(done=len(decided), total=len(decided) + len(work))
         inference = self._inference.for_project(privacy)
-        await self._screen_all(context, run, plan, work, tally, inference)
+        await self._screen_all(context, run, screening, work, tally, inference)
         async with self._storage.unit_of_work() as uow:
             decisions = await uow.screening.list_for_run(run.id)
         tiers: dict[str, JsonValue] = {
@@ -276,6 +300,7 @@ class ScreenStage:
                 "prompt_version": SCREEN_PROMPT_VERSION,
                 "criteria_version": plan.version,
                 "plan_version": plan.version,
+                **({} if sent is None else {"instructions_version": sent.version}),
                 **adoption_facts(paper_set),
             },
         }
@@ -306,7 +331,7 @@ class ScreenStage:
         self,
         context: StageContext,
         run: Run,
-        plan: ReviewPlan,
+        screening: _Screening,
         work: Sequence[_Work],
         tally: _Tally,
         inference: GuardedInference,
@@ -327,7 +352,7 @@ class ScreenStage:
                 try:
                     await context.raise_if_cancelled()
                     await self._screen_one(
-                        context, run, plan, item, tally, reporting, inference
+                        context, run, screening, item, tally, reporting, inference
                     )
                 except BaseException:
                     stop.set()
@@ -342,15 +367,15 @@ class ScreenStage:
         self,
         context: StageContext,
         run: Run,
-        plan: ReviewPlan,
+        screening: _Screening,
         item: _Work,
         tally: _Tally,
         reporting: asyncio.Lock,
         inference: GuardedInference,
     ) -> None:
-        request = screening_request(plan, item.masked_text)
+        request = screening.request(item.masked_text)
         try:
-            decision = await self._decide(run, plan, item, request, inference)
+            decision = await self._decide(run, screening.plan, item, request, inference)
         except PromptRefusedError as exc:
             _log.warning(
                 "screening_prompt_refused",

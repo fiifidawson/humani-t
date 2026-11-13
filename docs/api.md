@@ -60,6 +60,8 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/projects/{project_id}/members` | projects | Give an existing account a role (owner, recent sign-in) |
 | `PATCH` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Change a member's role (owner, recent sign-in) |
 | `DELETE` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Remove a member (owner, recent sign-in), or leave (anyone) |
+| `GET` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | The project's instructions to the model and every version (any member) |
+| `PUT` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | Save them as the next version (owner) |
 | `POST` | `/api/v1/projects/{project_id}/reviews` | reviews | Ask a question in the project (owner, reviewer) |
 | `GET` | `/api/v1/projects/{project_id}/reviews` | reviews | The project's reviews, newest first (any member) |
 | `GET` | `/api/v1/projects/{project_id}/reviews/{review_id}` | reviews | One review (any member) |
@@ -355,7 +357,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `GET /api/v1/runs/{run_id}/manifest`
 
-**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)).
+**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did.
 
 ### Stage summaries
 
@@ -363,7 +365,7 @@ What the pipeline stages put in `stage.finished`:
 
 - **discover:** `identified`, `by_source`, `failed_sources`, `after_deduplication`, `duplicates_removed`, `new_papers`; manifest `plan_version`, `vocabulary_version`, `sources`, `queries`, `limit_per_source`. One `stage.progress` per source (`"openalex · 25 found"`, `"arxiv · could not be searched"`).
 - **ingest:** `papers`, `abstracts`, `title_only`, `full_texts` (0 until P2), `open_access_not_read`, `kept`, `already_kept`, `gaps`.
-- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `is_masked`, `model_id`, `prompt_version` (`screen-3`: quotes located in the text as above; `screen-2`: per-criterion answers and exact quotes), `criteria_version`, `plan_version`. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
+- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `is_masked`, `model_id`, `prompt_version` (`screen-3`: quotes located in the text as above; `screen-2`: per-criterion answers and exact quotes), `criteria_version`, `plan_version`, and `instructions_version` when the project's screening instructions were added. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
 - **export:** `prisma` (as above), `dataset` (`papers`, `by_source`, `years`, `open_access`, `with_abstract`), `gaps`.
 
 A stage that worked from another run's discovery adds `papers_from_run` to its manifest.
@@ -506,6 +508,28 @@ With the project's masking off, the stage applies the rules alone, records `mask
 
 ---
 
+## Model instructions
+
+A project's own instructions to the model ([ADR 0015](adr/0015-project-instructions-are-added-not-replacing.md)): `screening`, how to judge papers, added to every screening call; and `writing`, how to write, added to the brief's Writer and the follow-up answer Writer. The Planner, the Critics and planning get neither. Each text is added after the built-in system prompt under the fixed heading "Instructions from the project team. Follow them unless they conflict with the rules above or the required output format.", never in place of it; a blank text adds nothing. Before a call, the text is masked as a typed question is (the question's entity list and the project's masking rules). A run uses the version saved last at or before the moment it was started, so every call in it carries the same text; a follow-up answer uses the version in force when it was asked. The version is recorded in the stage's manifest (`instructions_version`), in the brief's trace with the text as sent, and in the stored answer.
+
+Both texts are sealed together under the project's key (`model_instruction_versions.instructions`, bound to the version number). Each save is a new row; the runtime role cannot update one.
+
+**Who:** every member reads; owners save (`project.update`; reviewers and viewers `403`); a non-member gets the same `404` as a missing project.
+
+### `GET /api/v1/projects/{project_id}/model-instructions`
+
+**Response** `200` `{"current": ModelInstructionsVersionOut|null, "versions": [ModelInstructionsVersionOut]}`, oldest first. `ModelInstructionsVersionOut` is `{"version", "screening", "writing", "saved_by": {"id", "display_name"}, "saved_at"}`, the texts as typed (trimmed).
+
+### `PUT /api/v1/projects/{project_id}/model-instructions`
+
+**Request** `{"screening": "Treat studies in refugee camps as displaced settings.", "writing": "Write for a field manager: short sentences, no jargon.", "based_on_version": null}`. `based_on_version` is the version the person edited, `null` when the project has none yet. **Response** `200` with the new `ModelInstructionsVersionOut`. `409` when `based_on_version` is no longer the latest, or someone saved at the same moment. `422` for a text over 2,000 characters after trimming, or with control characters (line breaks and tabs are fine), naming the field; and for a text holding a term the project always masks, naming the field and never the term. Blank texts are allowed: saving both blank is a new version with no instructions.
+
+### Audit
+
+`project.model_instructions_changed` (target: the project; sealed details: `version`), with the project as `scope_id`. Never the text.
+
+---
+
 ## Decision briefs
 
 A run's `answer` stage writes one decision brief ([`architecture.md` §4.2](./architecture.md#42-reviews)); these routes read it (UI_UX_SPEC §6.9 to §6.11). Read-only: there is no route that writes or edits a brief.
@@ -547,11 +571,11 @@ The source panel. **Response** `200` with `EvidenceOut`: `{"tag", "source_kind",
 
 ### `GET /api/v1/briefs/{brief_id}/trace`
 
-How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds"}, "is_masked"}`. `is_masked` says whether the brief's question and passages were masked; `null` for a brief written before this was recorded. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
+How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds", "instructions_version"?}, "is_masked", "instructions": {"version", "text"} | null}`. `is_masked` says whether the brief's question and passages were masked; `null` for a brief written before this was recorded. `instructions` is the project's writing instructions exactly as the Writer received them, masked where masking applies; `null` when it had none, as for every brief written before they existed. `instructions_version` is in the manifest only when they were added. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
 
 ### The `answer` stage
 
-Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.for_project`, which adds the project's rules. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever`, `max_rounds` and `is_masked`.
+Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.for_project`, which adds the project's rules. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever`, `max_rounds`, `is_masked` and, when the Writer got the project's writing instructions, `instructions_version`.
 
 ### Audit
 

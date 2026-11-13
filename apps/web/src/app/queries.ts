@@ -51,6 +51,8 @@ export const keys = {
 		["raw-text", projectId, "document", documentId] as const,
 	maskingRules: (projectId: string) =>
 		["raw-text", projectId, "masking-rules"] as const,
+	modelInstructions: (projectId: string) =>
+		["projects", "one", projectId, "model-instructions"] as const,
 	threads: (reviewId: string) => ["reviews", reviewId, "threads"] as const,
 	thread: (threadId: string) => ["threads", threadId] as const,
 	question: (questionId: string) => ["questions", questionId] as const,

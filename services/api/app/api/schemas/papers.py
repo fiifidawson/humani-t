@@ -237,6 +237,9 @@ class ManifestOut(BaseModel):
     vocabulary_versions: list[int]
     criteria_versions: list[int]
     plan_versions: list[int]
+    instructions_versions: list[int] = Field(
+        description="The project's instruction versions the model calls carried."
+    )
     sources: list[str]
     queries: dict[str, str]
     model_ids: list[str]
@@ -264,6 +267,7 @@ class ManifestOut(BaseModel):
             vocabulary_versions=list(manifest.vocabulary_versions),
             criteria_versions=list(manifest.criteria_versions),
             plan_versions=list(manifest.plan_versions),
+            instructions_versions=list(manifest.instructions_versions),
             sources=list(manifest.sources),
             queries=dict(manifest.queries),
             model_ids=list(manifest.model_ids),

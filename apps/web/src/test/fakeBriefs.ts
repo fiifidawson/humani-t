@@ -377,5 +377,6 @@ export function exampleTrace(briefId: string): Trace {
 			retriever: "bm25",
 			max_rounds: 3,
 		},
+		instructions: null,
 	};
 }
