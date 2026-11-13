@@ -21,10 +21,18 @@ from httpx2 import Response
 from app.application.inference import GuardedInference
 from app.application.planning import PlanService
 from app.domain.inference import ChatRequest
-from app.domain.masking import EntityType, MaskedText, MaskingRule, MaskSpan, apply_spans
+from app.domain.masking import (
+    EntityType,
+    MaskedText,
+    MaskingPolicy,
+    MaskingRule,
+    MaskSpan,
+    apply_spans,
+)
 from app.inference.fake import FakeInferenceProvider, FakePromptGuard
 from tests.project_support import send
 from tests.run_support import RunTeam, make_run_team
+from tests.support import MASKED_BY_DEPLOYMENT
 
 # What the fake sanitiser recognises. The run specs' question names Marib.
 SENSITIVE: Mapping[str, EntityType] = {
@@ -241,8 +249,9 @@ def make_plan_team(
     *,
     drafts: list[dict[str, Any]] | None = None,
     refusal: str | None = None,
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
 ) -> PlanTeam:
-    rt = make_run_team()
+    rt = make_run_team(masking_policy)
     model = ScriptedPlanner() if drafts is None else ScriptedPlanner(drafts=drafts)
     sanitizer = FakeSanitizer()
     guard = FakePromptGuard(refusal)

@@ -1,8 +1,9 @@
 """Follow-up questions in threads: asking, reading back, and answering in the background.
 
-Only the masked question is stored; the raw one never is and never leaves. Answering can
-take minutes on a local model, so questions are queued like runs and the browser polls.
-A thread answers one question at a time, so a follow-up always sees the answer before it.
+Only the question as sent is stored: masked, or with the project's masking off its rule
+terms alone (ADR 0014). Answering can take minutes on a local model, so questions are
+queued like runs and the browser polls. A thread answers one question at a time, so a
+follow-up always sees the answer before it.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -27,7 +28,7 @@ from app.application.brief_loop import LoopFailedError
 from app.application.briefs import BriefSeal, passage_from_dict, passage_to_dict
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
-from app.application.masking import MaskingRuleService
+from app.application.masking import MaskingRuleService, mask_as_chosen
 from app.application.membership import require_member, require_review_member
 from app.briefs.base import Retriever
 from app.domain.accounts import NotFoundError
@@ -70,6 +71,9 @@ _STILL_ANSWERING = (
 )
 _ASKED_AT_ONCE = "Someone asked in this thread at the same moment. Ask again."
 _UNEXPECTED = "The answer stopped because of an unexpected error. Ask again."
+_MASKED_SINCE = (
+    "This question was asked while masking was off, and masking is on now. Ask it again."
+)
 _RECOVERY_BATCH = 10
 
 _log = structlog.get_logger(__name__)
@@ -100,6 +104,8 @@ class QuestionView:
     question: str
     masked: Mapping[str, int]
     answer: AnswerView | None
+    # False when the project's masking was off as it was asked.
+    is_masked: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +150,9 @@ class _QuestionSeal:
                     )
                 )
             )
-        return QuestionView(record, asked["text"], asked["masked"], answer)
+        # Questions asked before masking became a choice were all masked.
+        is_masked = bool(asked.get("is_masked", True))
+        return QuestionView(record, asked["text"], asked["masked"], answer, is_masked)
 
 
 def _answer_to_dict(result: AnswerResult, run_id: UUID | None) -> dict[str, Any]:
@@ -221,8 +229,8 @@ class QuestionService:
             question = normalize_question(text)
             if thread_id is not None:
                 await self._thread(uow, current, thread_id, review_id)
-            rules = await self._rules.rules_for(uow, project_id)
-        masked = await self._sanitizer.mask(question, rules=rules)
+            privacy = await self._rules.privacy_for(uow, project_id)
+        masked = await mask_as_chosen(self._sanitizer, question, privacy)
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
             await require_review_member(uow, current.user.id, review_id, Action.ASK_QUESTIONS)
@@ -241,7 +249,11 @@ class QuestionService:
                 project_id,
                 question_id,
                 _QUESTION_PURPOSE,
-                {"text": masked.masked, "masked": dict(masked.counts)},
+                {
+                    "text": masked.masked,
+                    "masked": dict(masked.counts),
+                    "is_masked": privacy.is_masked,
+                },
             )
             record = QuestionRecord(
                 id=question_id,
@@ -269,7 +281,7 @@ class QuestionService:
             )
             await uow.commit()
         await self._signals.publish(QUESTION_CHANNEL)
-        return QuestionView(record, masked.masked, dict(masked.counts), None)
+        return QuestionView(record, masked.masked, dict(masked.counts), None, privacy.is_masked)
 
     async def threads(self, current: Current, review_id: UUID) -> list[ThreadView]:
         """The review's threads, newest first, each with its questions."""
@@ -405,10 +417,13 @@ class QuestionWorker:
 
     async def _answer(self, record: QuestionRecord) -> None:
         async with self._storage.unit_of_work() as uow:
-            work = await self._gather(uow, record)
-            rules = await self._rules.rules_for(uow, record.project_id)
+            privacy = await self._rules.privacy_for(uow, record.project_id)
+            work = await self._gather(uow, record, is_masked=privacy.is_masked)
+        if work is None:
+            await self._finish(record, error=_MASKED_SINCE)
+            return
         loop = AnswerLoop(
-            self._inference.with_rules(rules),
+            self._inference.for_project(privacy),
             self._retriever,
             max_rounds=self._max_rounds,
             timer=self._timer,
@@ -418,28 +433,39 @@ class QuestionWorker:
             await self._renew(record)
 
         result = await loop.run(work.question, work.earlier, work.corpus, keep_lease)
+        result = replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
         await self._finish(record, result=result, run_id=work.run_id)
 
-    async def _gather(self, uow: UnitOfWork, record: QuestionRecord) -> _Work:
+    async def _gather(
+        self, uow: UnitOfWork, record: QuestionRecord, *, is_masked: bool
+    ) -> _Work | None:
+        """What the model will read; `None` if the question itself was sent unmasked.
+
+        Once masking is on again, earlier turns and brief passages kept with it off are
+        left out rather than sent (ADR 0014).
+        """
         opened = await self._seal.open(uow, record)
+        if is_masked and not opened.is_masked:
+            return None
         earlier: list[Turn] = []
         for previous in await uow.questions.list_for_thread(record.thread_id):
             if previous.position >= record.position or previous.answer_sealed is None:
                 continue
             seen = await self._seal.open(uow, previous)
-            if seen.answer is not None:
+            if seen.answer is not None and (seen.is_masked or not is_masked):
                 earlier.append(Turn(seen.question, _answer_text(seen.answer.answer)))
-        run_id, corpus = await self._corpus(uow, record)
+        run_id, corpus = await self._corpus(uow, record, is_masked=is_masked)
         return _Work(opened.question, tuple(earlier[-CONTEXT_TURNS:]), run_id, corpus)
 
     async def _corpus(
-        self, uow: UnitOfWork, record: QuestionRecord
+        self, uow: UnitOfWork, record: QuestionRecord, *, is_masked: bool
     ) -> tuple[UUID | None, tuple[Passage, ...]]:
         brief = await uow.briefs.latest_for_review(record.review_id)
         cited: tuple[Passage, ...] = ()
         if brief is not None:
             opened = await self._briefs.open_brief(uow, brief)
-            cited = tuple(r.passage for r in opened.evidence)
+            if opened.manifest.get("is_masked", True) or not is_masked:
+                cited = tuple(r.passage for r in opened.evidence)
             candidates = [brief.run_id]
         else:
             candidates = [r.id for r in await uow.runs.list_for_review(record.review_id)]

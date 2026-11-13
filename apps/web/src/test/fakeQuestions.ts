@@ -154,6 +154,7 @@ export class FakeQuestions {
 			asked_at: askedAt,
 			question_sent: sent,
 			masked: counts,
+			is_masked: true,
 			answered_at: null,
 			model_id: null,
 			error: null,

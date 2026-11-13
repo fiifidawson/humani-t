@@ -5,6 +5,7 @@ No field ranks the options or totals a score, because the brief never does.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -363,6 +364,12 @@ class TraceOut(BaseModel):
     steps: list[AgentStepOut]
     totals: TotalsOut
     manifest: dict[str, Any] = Field(description="Model id and prompt version per role.")
+    is_masked: bool | None = Field(
+        description=(
+            "Whether the brief's text was masked (ADR 0014); null for a brief written "
+            "before this was recorded."
+        )
+    )
 
     @classmethod
     def from_domain(cls, opened: OpenedBrief) -> TraceOut:
@@ -380,5 +387,11 @@ class TraceOut(BaseModel):
                 prompt_tokens=sum(s.prompt_tokens or 0 for s in steps),
                 completion_tokens=sum(s.completion_tokens or 0 for s in steps),
             ),
-            manifest=dict(opened.manifest),
+            manifest={k: v for k, v in opened.manifest.items() if k != "is_masked"},
+            is_masked=_is_masked(opened.manifest),
         )
+
+
+def _is_masked(manifest: Mapping[str, Any]) -> bool | None:
+    value = manifest.get("is_masked")
+    return value if isinstance(value, bool) else None

@@ -370,6 +370,7 @@ export function exampleTrace(briefId: string): Trace {
 			},
 		],
 		totals: { calls: 9, prompt_tokens: 61200, completion_tokens: 8900 },
+		is_masked: true,
 		manifest: {
 			model_ids: { writer: "qwen3.5:9b" },
 			prompt_versions: { "answer.writer": "brief.writer@2" },

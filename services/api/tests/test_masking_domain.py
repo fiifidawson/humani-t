@@ -16,19 +16,24 @@ from hypothesis import strategies as st
 
 from app.domain.masking import (
     DOCUMENT_ENTITY_TYPES,
+    MASKING_OFF_SOURCE,
     PAPER_ENTITY_TYPES,
     PLACEHOLDER,
     QUESTION_ENTITY_TYPES,
     STRUCTURED_ENTITY_TYPES,
     EntityType,
     MaskedText,
+    MaskingPolicy,
     MaskingRule,
     MaskingRuleRecord,
     MaskSpan,
     apply_spans,
     detector_source,
     holds_placeholder,
+    is_masking_applied,
+    is_unmasked_fingerprint,
     leak_reason,
+    mask_rules_only,
     masking_fingerprint,
     normalize_masking_term,
     rule_source,
@@ -430,3 +435,65 @@ class TestHoldsPlaceholder:
     @given(st.sampled_from(list(EntityType)), st.integers(min_value=1, max_value=999))
     def test_every_placeholder_masking_writes_is_found(self, kind, number):
         assert holds_placeholder(f"[{kind.value}_{number}]")
+
+
+LOCAL = MaskingPolicy(is_model_hosted=False)
+HOSTED = MaskingPolicy(is_model_hosted=True)
+HOSTED_ALLOWED = MaskingPolicy(is_model_hosted=True, allows_unmasked_hosted=True)
+
+
+class TestMaskingChoice:
+    """ADR 0014: the owner's switch, and the operator's policy that can overrule it."""
+
+    @pytest.mark.parametrize("policy", [LOCAL, HOSTED, HOSTED_ALLOWED])
+    def test_a_project_switched_on_is_masked_whatever_the_model(self, policy):
+        assert is_masking_applied(is_masking_on=True, policy=policy)
+
+    def test_with_a_local_model_the_owners_switch_decides(self):
+        assert not is_masking_applied(is_masking_on=False, policy=LOCAL)
+
+    def test_a_hosted_model_masks_a_project_switched_off_unless_the_operator_allows_it(self):
+        assert is_masking_applied(is_masking_on=False, policy=HOSTED)
+        assert not is_masking_applied(is_masking_on=False, policy=HOSTED_ALLOWED)
+
+    @given(is_masking_on=st.booleans())
+    def test_a_hosted_model_the_operator_has_not_allowed_is_always_masked(self, is_masking_on):
+        assert is_masking_applied(is_masking_on=is_masking_on, policy=HOSTED)
+
+    @given(is_masking_on=st.booleans(), is_hosted=st.booleans(), is_allowed=st.booleans())
+    def test_only_a_project_switched_off_is_ever_unmasked(
+        self, is_masking_on, is_hosted, is_allowed
+    ):
+        policy = MaskingPolicy(is_model_hosted=is_hosted, allows_unmasked_hosted=is_allowed)
+
+        if not is_masking_applied(is_masking_on=is_masking_on, policy=policy):
+            assert not is_masking_on
+
+    def test_new_projects_start_masked_only_with_a_hosted_model(self):
+        assert HOSTED.starts_masked
+        assert HOSTED_ALLOWED.starts_masked
+        assert not LOCAL.starts_masked
+
+    def test_masking_can_be_turned_off_unless_the_deployment_requires_it(self):
+        assert LOCAL.can_turn_masking_off
+        assert HOSTED_ALLOWED.can_turn_masking_off
+        assert not HOSTED.can_turn_masking_off
+
+
+class TestMaskingOff:
+    def test_only_the_projects_rule_terms_are_masked(self):
+        text = "Dr Amina Yusuf (amina@example.org) led the Marib survey."
+
+        result = mask_rules_only(text, [rule("Amina Yusuf")])
+
+        assert result.masked == "Dr [PERSON_1] (amina@example.org) led the Marib survey."
+        assert dict(result.counts) == {"PERSON": 1}
+
+    def test_without_rules_the_text_is_sent_as_written(self):
+        text = "Contact amina@example.org in Marib."
+
+        assert mask_rules_only(text, []).masked == text
+
+    def test_a_masking_made_with_masking_off_says_so(self):
+        assert is_unmasked_fingerprint(masking_fingerprint([MASKING_OFF_SOURCE], []))
+        assert not is_unmasked_fingerprint(masking_fingerprint([PATTERNS], [rule("Aden")]))

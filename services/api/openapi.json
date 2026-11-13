@@ -1123,6 +1123,66 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/masking": {
+      "put": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Switch masking on or off for the project",
+        "description": "Owners only. The project's own masking rules apply either way (ADR 0014).",
+        "operationId": "set_project_masking_api_v1_projects__project_id__masking_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectMaskingIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Turning it off needs a recent sign-in; reauthenticate first"
+          },
+          "409": {
+            "description": "The deployment requires masking: it stays on"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/archive": {
       "post": {
         "tags": [
@@ -6263,6 +6323,23 @@
             "title": "Papers From Runs",
             "description": "Runs whose discovery this run reused."
           },
+          "masking": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "on",
+                  "off",
+                  "mixed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masking",
+            "description": "Whether the run's text was masked, as its stages recorded it (ADR 0014): mixed when the switch changed during the run; null when no stage recorded it."
+          },
           "stage_facts": {
             "items": {
               "$ref": "#/components/schemas/StageFactsOut"
@@ -6289,6 +6366,7 @@
           "model_ids",
           "prompt_versions",
           "papers_from_runs",
+          "masking",
           "stage_facts"
         ],
         "title": "ManifestOut"
@@ -7334,6 +7412,20 @@
         ],
         "title": "ProjectIn"
       },
+      "ProjectMaskingIn": {
+        "properties": {
+          "is_masking_on": {
+            "type": "boolean",
+            "title": "Is Masking On"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_masking_on"
+        ],
+        "title": "ProjectMaskingIn"
+      },
       "ProjectOut": {
         "properties": {
           "id": {
@@ -7369,6 +7461,21 @@
           "status": {
             "$ref": "#/components/schemas/ProjectStatus",
             "description": "UI_UX_SPEC §11.1: derived from the newest review and its latest run."
+          },
+          "is_masking_on": {
+            "type": "boolean",
+            "title": "Is Masking On",
+            "description": "The owner's switch, as stored (ADR 0014)."
+          },
+          "is_masking_effective": {
+            "type": "boolean",
+            "title": "Is Masking Effective",
+            "description": "Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking."
+          },
+          "can_turn_masking_off": {
+            "type": "boolean",
+            "title": "Can Turn Masking Off",
+            "description": "false while the deployment requires masking for every project."
           }
         },
         "type": "object",
@@ -7378,7 +7485,10 @@
           "role",
           "created_at",
           "archived_at",
-          "status"
+          "status",
+          "is_masking_on",
+          "is_masking_effective",
+          "can_turn_masking_off"
         ],
         "title": "ProjectOut"
       },
@@ -7617,6 +7727,11 @@
             ],
             "title": "Change Request Id",
             "description": "The change request a revision was drafted from."
+          },
+          "is_masked": {
+            "type": "boolean",
+            "title": "Is Masked",
+            "description": "false when the project's masking was off: the text was sent as written, apart from the project's own masking rules."
           }
         },
         "type": "object",
@@ -7629,7 +7744,8 @@
           "prompt_version",
           "delivered",
           "masked_total",
-          "items"
+          "items",
+          "is_masked"
         ],
         "title": "ReceiptOut"
       },
@@ -8212,7 +8328,7 @@
           "sent": {
             "type": "string",
             "title": "Sent",
-            "description": "Exactly what the model received: masked."
+            "description": "Exactly what the model received; see `is_masked`."
           },
           "counts": {
             "additionalProperties": {
@@ -9141,6 +9257,18 @@
             "type": "object",
             "title": "Manifest",
             "description": "Model id and prompt version per role."
+          },
+          "is_masked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Masked",
+            "description": "Whether the brief's text was masked (ADR 0014); null for a brief written before this was recorded."
           }
         },
         "type": "object",
@@ -9153,7 +9281,8 @@
           "stopped_because",
           "steps",
           "totals",
-          "manifest"
+          "manifest",
+          "is_masked"
         ],
         "title": "TraceOut"
       },
@@ -9705,7 +9834,7 @@
           "question_sent": {
             "type": "string",
             "title": "Question Sent",
-            "description": "The question as the model will see it: masked."
+            "description": "The question as the model will see it."
           },
           "masked": {
             "additionalProperties": {
@@ -9714,6 +9843,11 @@
             "type": "object",
             "title": "Masked",
             "description": "What was masked, by type. Never the values."
+          },
+          "is_masked": {
+            "type": "boolean",
+            "title": "Is Masked",
+            "description": "false when the project's masking was off: the question was sent as written, apart from the project's own masking rules."
           },
           "answered_at": {
             "anyOf": [
@@ -9772,6 +9906,7 @@
           "asked_at",
           "question_sent",
           "masked",
+          "is_masked",
           "answered_at",
           "model_id",
           "error",

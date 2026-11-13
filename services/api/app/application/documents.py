@@ -3,7 +3,9 @@
 `DocumentService` serves the routes; `DocumentProcessor` is the worker that scans,
 extracts and masks; `DocumentEvidence` feeds approved masked passages to the brief. No
 database connection is held across file I/O, scanning, extraction or masking. Raw text
-goes only to the owner's review screen; a model sees only approved masked passages.
+goes only to the owner's review screen; a model sees only approved masked passages,
+unless the project's masking is off (ADR 0014): then every ready document, as written
+apart from the project's rule terms.
 """
 
 from __future__ import annotations
@@ -231,6 +233,10 @@ class ReviewView:
     exemptions: tuple[MaskExemption, ...]
     raw_page_starts: tuple[int, ...]
     regions: tuple[MaskedRegion, ...]
+
+
+# Scanned and read: what a document needs before use when there is no masking to review.
+_READY = frozenset({DocumentStatus.AWAITING_REVIEW, DocumentStatus.APPROVED})
 
 
 def _usage(documents: Sequence[Document]) -> DocumentUsage:
@@ -1000,13 +1006,19 @@ class DocumentEvidence:
     """`DocumentPassageSource`: the masked passages of the project's approved documents.
 
     A document counts only while it is approved and its current masking is the
-    version its last approval names; anything else, a model never sees.
+    version its last approval names; anything else, a model never sees. With the
+    project's masking off, there is nothing to review: every scanned and read document
+    counts, as written apart from the project's rule terms.
     """
 
-    def __init__(self, encryption: ScopeEncryption) -> None:
+    def __init__(self, encryption: ScopeEncryption, rules: MaskingRuleService) -> None:
         self._seal = DocumentSeal(encryption)
+        self._rules = rules
 
     async def approved_passages(self, uow: UnitOfWork, project_id: UUID) -> tuple[Passage, ...]:
+        privacy = await self._rules.privacy_for(uow, project_id)
+        if not privacy.is_masked:
+            return await self._unmasked_passages(uow, project_id, privacy.rules)
         passages: list[Passage] = []
         for document in await uow.documents.list_for_project(project_id):
             if document.status is not DocumentStatus.APPROVED:
@@ -1025,4 +1037,19 @@ class DocumentEvidence:
             text = await self._seal.open_masked(uow, mask)
             detail = await self._seal.open_detail(uow, mask)
             passages.extend(document_passages(document, text, detail.masked_page_starts))
+        return tuple(passages)
+
+    async def _unmasked_passages(
+        self, uow: UnitOfWork, project_id: UUID, rules: Sequence[MaskingRule]
+    ) -> tuple[Passage, ...]:
+        passages: list[Passage] = []
+        for document in await uow.documents.list_for_project(project_id):
+            if document.status not in _READY:
+                continue
+            text = await uow.documents.get_text(document.id)
+            if text is None:
+                continue
+            raw = await self._seal.open_raw(uow, text)
+            sent, page_starts = remask(raw, rule_spans(raw, rules), text.page_starts)
+            passages.extend(document_passages(document, sent.masked, page_starts))
         return tuple(passages)

@@ -149,6 +149,20 @@ class TestProjects:
         assert stored.archived_at == NOW
         assert stored.version == project.version + 1
 
+    async def test_the_masking_switch_is_kept_and_new_projects_start_with_it_on(self, storage):
+        (creator,) = await _users(storage, 1)
+        project = await _stored_project(storage, (creator, Role.OWNER))
+        assert project.is_masking_on is True
+
+        async with storage.unit_of_work() as uow:
+            await uow.projects.save(project.with_masking(is_on=False))
+            await uow.commit()
+        async with storage.unit_of_work() as uow:
+            stored = await uow.projects.get(project.id)
+
+        assert stored is not None
+        assert stored.is_masking_on is False
+
     async def test_a_stale_copy_cannot_overwrite_a_newer_one(self, storage):
         """One owner renames while another, holding an older copy, archives."""
         (creator,) = await _users(storage, 1)

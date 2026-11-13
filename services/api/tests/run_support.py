@@ -24,11 +24,12 @@ from app.application.accounts import Current
 from app.application.run_worker import RunWorker
 from app.application.runs import RunService
 from app.domain.encryption import EncryptionContext
+from app.domain.masking import MaskingPolicy
 from app.domain.runs import JsonValue, Run
 from app.runs.base import Stage, StageContext, StageFailedError
 from app.runs.fake import FakeStage
 from tests.project_support import PROJECTS, Team, make_team, send
-from tests.support import AuthHarness, FakeClock, TrackingStorage
+from tests.support import MASKED_BY_DEPLOYMENT, AuthHarness, FakeClock, TrackingStorage
 
 # Realistic and sensitive on purpose: a question names a population, a place
 # and a crisis. It must never appear in an event, a log or an audit row.
@@ -322,8 +323,8 @@ def add_rule(rt: RunTeam, term: str, entity_type: str = "PERSON") -> None:
     assert response.status_code == 201, response.text
 
 
-def make_run_team() -> RunTeam:
-    team = make_team()
+def make_run_team(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> RunTeam:
+    team = make_team(masking_policy)
     signals = use_test_signals(team.harness)
     review = create_review(team.owner, team.project_id)
     return RunTeam(team, signals, review["id"])

@@ -134,6 +134,34 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		);
 	});
 
+	it("says when masking was off for the run, as the owner chose", async () => {
+		const api = fakeApi();
+		api.signInAs(api.addUser({ hasTotp: true }));
+		const project = api.addProject("Cash vs vouchers, Gao", "owner");
+		const review = api.reviews.add(project.id, "Cash or vouchers in camps?");
+		api.reviews.startPlan(review, "shallow");
+		api.reviews.accept(review);
+		api.reviews.addBrief(review, api.reviews.addRun(review, "done"));
+		const entry = api.reviews.briefs[0];
+		if (entry !== undefined) {
+			entry.trace.is_masked = false;
+		}
+		const { canvas } = await openTrace(`/p/${project.id}/r/${review.id}`);
+
+		const used = within(canvas).getByRole("list", { name: "What this used" });
+		expect(used).toHaveTextContent(
+			"Masking: off for this run (the owner's choice)",
+		);
+	});
+
+	it("says masking was on when it was", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		const used = within(canvas).getByRole("list", { name: "What this used" });
+		expect(used).toHaveTextContent("Masking: on");
+	});
+
 	it("shows the steps live while the brief is still being written", async () => {
 		const { path, run } = briefed(false, "running");
 		renderApp(`${path}/trace`);

@@ -70,6 +70,7 @@ def _to_receipt(row: Row[Any]) -> StoredReceipt:
         body_sealed=row.body_sealed,
         plan_version=row.plan_version,
         change_request_id=row.change_request_id,
+        is_masked=row.is_masked,
     )
 
 
@@ -231,6 +232,7 @@ class PostgresPlanRepository:
                 body_sealed=receipt.body_sealed,
                 plan_version=receipt.plan_version,
                 change_request_id=receipt.change_request_id,
+                is_masked=receipt.is_masked,
             )
         )
 
