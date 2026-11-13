@@ -251,12 +251,12 @@ class ScreenStage:
             papers = await self._store.run_papers(uow, run)
             decided = {d.paper_id for d in await uow.screening.list_for_run(run.id)}
             work, skipped = await self._work(uow, run, papers, decided)
-            rules = await self._rules.rules_for(uow, run.project_id)
+            privacy = await self._rules.privacy_for(uow, run.project_id)
         if not work and not decided and skipped["not_masked"]:
             raise StageFailedError(NOTHING_MASKED)
-        _refuse_masked_criteria(plan, rules)
+        _refuse_masked_criteria(plan, privacy.rules)
         tally = _Tally(done=len(decided), total=len(decided) + len(work))
-        inference = self._inference.with_rules(rules)
+        inference = self._inference.for_project(privacy)
         await self._screen_all(context, run, plan, work, tally, inference)
         async with self._storage.unit_of_work() as uow:
             decisions = await uow.screening.list_for_run(run.id)
@@ -271,6 +271,7 @@ class ScreenStage:
             "skipped": dict[str, JsonValue](skipped),
             "failed": tally.failed,
             "manifest": {
+                "is_masked": privacy.is_masked,
                 "model_id": self._inference.model_id,
                 "prompt_version": SCREEN_PROMPT_VERSION,
                 "criteria_version": plan.version,

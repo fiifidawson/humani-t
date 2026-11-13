@@ -1,6 +1,6 @@
 """Request and response models for follow-up questions and threads.
 
-Responses show the question as it was sent: masked.
+Responses show the question as it was sent: masked, unless the project's masking was off.
 """
 
 from __future__ import annotations
@@ -87,8 +87,14 @@ class QuestionOut(BaseModel):
     status: QuestionStatus = Field(description="pending, answering, answered or failed.")
     asked_by: UUID
     asked_at: datetime
-    question_sent: str = Field(description="The question as the model will see it: masked.")
+    question_sent: str = Field(description="The question as the model will see it.")
     masked: dict[str, int] = Field(description="What was masked, by type. Never the values.")
+    is_masked: bool = Field(
+        description=(
+            "false when the project's masking was off: the question was sent as written, "
+            "apart from the project's own masking rules."
+        )
+    )
     answered_at: datetime | None
     model_id: str | None
     error: str | None = Field(description="Why it failed, in plain words.")
@@ -107,6 +113,7 @@ class QuestionOut(BaseModel):
             asked_at=record.asked_at,
             question_sent=view.question,
             masked=dict(view.masked),
+            is_masked=view.is_masked,
             answered_at=record.answered_at,
             model_id=record.model_id,
             error=record.error,

@@ -12,7 +12,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -22,7 +22,7 @@ from app.application.audit import SYSTEM, AuditLog
 from app.application.brief_loop import BriefLoop, LoopFailedError, LoopResult
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
-from app.application.masking import MaskingRuleService
+from app.application.masking import MaskingRuleService, mask_as_chosen
 from app.application.membership import require_member, require_review_member
 from app.application.papers import PaperStore
 from app.application.reviews import question_context
@@ -284,13 +284,13 @@ class AnswerStage:
             question = await self._encryption.decrypt(
                 uow, question_context(review.project_id, review.id), review.question_sealed
             )
-            rules = await self._rules.rules_for(uow, review.project_id)
+            privacy = await self._rules.privacy_for(uow, review.project_id)
             passages = await self._evidence.included_passages(
                 uow, context.review_id, context.run_id
             )
-        masked = await self._sanitizer.mask(question.decode(), rules=rules)
+        masked = await mask_as_chosen(self._sanitizer, question.decode(), privacy)
         loop = BriefLoop(
-            self._inference.with_rules(rules),
+            self._inference.for_project(privacy),
             self._retriever,
             max_rounds=self._max_rounds,
             timer=self._timer,
@@ -304,6 +304,7 @@ class AnswerStage:
             result = await loop.run(masked.masked, passages, report)
         except LoopFailedError as exc:
             raise StageFailedError(str(exc)) from exc
+        result = replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
         return await self._store(context, masked.masked, result)
 
     async def _store(

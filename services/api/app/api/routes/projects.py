@@ -20,6 +20,7 @@ from app.api.schemas.projects import (
     MemberOut,
     MemberRoleIn,
     ProjectIn,
+    ProjectMaskingIn,
     ProjectOut,
     ProjectRenameIn,
 )
@@ -83,6 +84,28 @@ async def rename_project(
     projects: ProjectsDep,
 ) -> ProjectOut:
     return await _named(projects.rename(current, project_id, payload.name, request_id(request)))
+
+
+@router.put(
+    "/{project_id}/masking",
+    summary="Switch masking on or off for the project",
+    responses={
+        401: {"description": "Turning it off needs a recent sign-in; reauthenticate first"},
+        409: {"description": "The deployment requires masking: it stays on"},
+    },
+)
+async def set_project_masking(
+    project_id: UUID,
+    payload: ProjectMaskingIn,
+    request: Request,
+    current: _Updater,
+    projects: ProjectsDep,
+) -> ProjectOut:
+    """Owners only. The project's own masking rules apply either way (ADR 0014)."""
+    view = await projects.set_masking(
+        current, project_id, is_on=payload.is_masking_on, request_id=request_id(request)
+    )
+    return ProjectOut.from_view(view)
 
 
 @router.post("/{project_id}/archive", summary="Hide a project from the default list")

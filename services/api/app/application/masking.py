@@ -1,8 +1,8 @@
-"""Masking use cases: project rules, the papers' mask store, and the `mask` stage.
+"""Masking use cases: whether a project masks, its rules, the papers' mask store, the stage.
 
 Finding spans belongs in `app/privacy/` and the masking rules in `domain/masking.py`.
-Raw text is read only through `IngestedTextSource`, and only masked text leaves
-`PaperMaskStore`.
+Raw text is read only through `IngestedTextSource`, and only text masked as the project
+now chooses leaves `PaperMaskStore`.
 """
 
 from __future__ import annotations
@@ -23,14 +23,20 @@ from app.domain.accounts import NotFoundError
 from app.domain.discovery import IngestedTextSource
 from app.domain.encryption import EncryptionContext
 from app.domain.masking import (
+    MASKING_OFF_SOURCE,
     MAX_MASKING_RULES_PER_PROJECT,
     DocumentAwaitingReview,
     DuplicateMaskingRuleError,
     EntityType,
     MaskedText,
+    MaskingPolicy,
     MaskingRule,
     MaskingRuleRecord,
     PaperMask,
+    ProjectPrivacy,
+    is_masking_applied,
+    is_unmasked_fingerprint,
+    mask_rules_only,
     masking_fingerprint,
     normalize_masking_term,
     spans_to_json,
@@ -62,6 +68,31 @@ def _term_context(project_id: UUID, rule_id: UUID) -> EncryptionContext:
     return EncryptionContext(project_id, _TERM_PURPOSE, str(rule_id))
 
 
+class MaskingChoice:
+    """Whether a project's text is masked right now: its owner's switch under the policy.
+
+    Asked each time text is about to leave (ADR 0014). A project that cannot be read
+    counts as switched on, so a lookup that fails never unmasks anything.
+    """
+
+    def __init__(self, policy: MaskingPolicy) -> None:
+        self._policy = policy
+
+    async def is_masked(self, uow: UnitOfWork, project_id: UUID) -> bool:
+        project = await uow.projects.get(project_id)
+        is_on = project is None or project.is_masking_on
+        return is_masking_applied(is_masking_on=is_on, policy=self._policy)
+
+
+async def mask_as_chosen(
+    sanitizer: Sanitizer, text: str, privacy: ProjectPrivacy
+) -> MaskedText:
+    """Mask with the sanitiser's detectors, or with the project's rules alone when off."""
+    if privacy.is_masked:
+        return await sanitizer.mask(text, rules=privacy.rules)
+    return mask_rules_only(text, privacy.rules)
+
+
 class MaskingRuleService:
     """Owner-only "always mask this term" rules, and the source that masking reads them from.
 
@@ -75,11 +106,13 @@ class MaskingRuleService:
         storage: StorageProvider,
         encryption: ScopeEncryption,
         audit: AuditLog,
+        choice: MaskingChoice,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
         self._encryption = encryption
         self._audit = audit
+        self._choice = choice
         self._clock = clock
 
     async def rules_for(self, uow: UnitOfWork, project_id: UUID) -> Sequence[MaskingRule]:
@@ -88,6 +121,13 @@ class MaskingRuleService:
             MaskingRule(record.id, await self._term(uow, record), record.entity_type)
             for record in await uow.masking_rules.list_for_project(project_id)
         ]
+
+    async def privacy_for(self, uow: UnitOfWork, project_id: UUID) -> ProjectPrivacy:
+        """The project's rules and whether to mask, decided now, in the caller's transaction."""
+        return ProjectPrivacy(
+            tuple(await self.rules_for(uow, project_id)),
+            await self._choice.is_masked(uow, project_id),
+        )
 
     async def list(
         self, current: Current, project_id: UUID, request_id: str | None = None
@@ -199,16 +239,30 @@ class PaperMaskStore:
     paper routes read masked text here, and nothing here can return raw text.
     """
 
-    def __init__(self, encryption: ScopeEncryption, clock: Callable[[], datetime] = _utc_now):
+    def __init__(
+        self,
+        encryption: ScopeEncryption,
+        choice: MaskingChoice,
+        clock: Callable[[], datetime] = _utc_now,
+    ) -> None:
         self._encryption = encryption
+        self._choice = choice
         self._clock = clock
 
     async def masked_text(
         self, uow: UnitOfWork, project_id: UUID, paper_id: UUID
     ) -> str | None:
-        """The paper's masked text, or `None` if it has not been masked yet."""
+        """The paper's masked text, or `None` if it is not masked as the project now needs.
+
+        Text kept with masking off is withheld once masking applies again, until the
+        mask stage masks it.
+        """
         mask = await uow.paper_masks.get(paper_id)
         if mask is None or mask.project_id != project_id:
+            return None
+        if is_unmasked_fingerprint(mask.masked_with) and await self._choice.is_masked(
+            uow, project_id
+        ):
             return None
         context = EncryptionContext(project_id, _MASKED_PURPOSE, str(paper_id))
         return (await self._encryption.decrypt(uow, context, mask.masked_sealed)).decode()
@@ -258,6 +312,7 @@ class MaskStage:
 
     A paper already masked with the same detectors and rules is skipped, so a rerun redoes
     nothing. Documents waiting for review stop the run at the privacy_review gate first.
+    With the project's masking off, only the rules apply and there is no gate (ADR 0014).
     """
 
     def __init__(
@@ -282,11 +337,15 @@ class MaskStage:
         self._documents = documents
 
     async def run(self, context: StageContext) -> Mapping[str, JsonValue]:
-        await self._review_documents(context)
         async with self._storage.unit_of_work() as uow:
-            rules = list(await self._rules.rules_for(uow, context.project_id))
+            privacy = await self._rules.privacy_for(uow, context.project_id)
+        if privacy.is_masked:
+            await self._review_documents(context)
+        async with self._storage.unit_of_work() as uow:
             texts = await self._texts.texts_for_run(uow, context.project_id, context.run_id)
-        fingerprint = masking_fingerprint(self._detector_sources, rules)
+        rules = privacy.rules
+        detectors = self._detector_sources if privacy.is_masked else (MASKING_OFF_SOURCE,)
+        fingerprint = masking_fingerprint(detectors, rules)
         masked_items: Counter[str] = Counter()
         masked = 0
         for done, text in enumerate(texts, start=1):
@@ -296,7 +355,7 @@ class MaskStage:
             if previous != fingerprint:
                 # Detection runs outside any transaction: a slow model must not
                 # hold a database connection.
-                result = await self._sanitizer.mask(text.text, rules=rules)
+                result = await mask_as_chosen(self._sanitizer, text.text, privacy)
                 async with self._storage.unit_of_work() as uow:
                     if await self._masks.save(
                         uow,
@@ -316,8 +375,9 @@ class MaskStage:
             "skipped": len(texts) - masked,
             "masked_items": dict(sorted(masked_items.items())),
             "manifest": {
-                "detectors": list(self._detector_sources),
-                "entity_types": list(self._entity_types),
+                "is_masked": privacy.is_masked,
+                "detectors": list(detectors),
+                "entity_types": [*self._entity_types] if privacy.is_masked else [],
                 "masking_rules": len(rules),
             },
         }

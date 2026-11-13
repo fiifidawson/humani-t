@@ -24,7 +24,7 @@ from app.application.questions import QuestionService, QuestionWorker
 from app.briefs.bm25 import Bm25Retriever
 from app.briefs.fake import FakeEvidenceSource
 from app.domain.inference import ChatRequest
-from app.domain.masking import QUESTION_ENTITY_TYPES, EntityType
+from app.domain.masking import QUESTION_ENTITY_TYPES, EntityType, MaskingPolicy
 from app.domain.questions import QuestionRecord
 from app.domain.screening import Passage
 from app.inference.fake import FakeInferenceProvider, FakePromptGuard
@@ -33,6 +33,7 @@ from app.privacy.sanitizer import DetectorSanitizer
 from tests.brief_support import CORPUS, SENSITIVE_PLACE, claim, critic_answer, write_brief
 from tests.project_support import send
 from tests.run_support import RunTeam, make_run_team
+from tests.support import MASKED_BY_DEPLOYMENT
 
 QUESTION = f"Do cash transfers raise food prices in small markets near {SENSITIVE_PLACE}?"
 
@@ -129,8 +130,9 @@ def make_ask_team(
     with_brief: bool = True,
     model: Callable[[AnswerScript], Any] | None = None,
     worker_id: str = "answers-a",
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
 ) -> AskTeam:
-    rt = make_run_team()
+    rt = make_run_team(masking_policy)
     if with_brief:
         write_brief(rt)
     providers = rt.harness.providers

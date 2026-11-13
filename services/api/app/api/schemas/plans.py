@@ -236,7 +236,7 @@ class VersionSummaryOut(BaseModel):
 class SentTextOut(BaseModel):
     kind: SentTextKind
     ref: str | None = Field(description="The clarifying question an answer belongs to.")
-    sent: str = Field(description="Exactly what the model received: masked.")
+    sent: str = Field(description="Exactly what the model received; see `is_masked`.")
     counts: dict[str, int] = Field(description="Masked items by type. Never the values.")
 
 
@@ -262,6 +262,12 @@ class ReceiptOut(BaseModel):
     change_request_id: UUID | None = Field(
         default=None, description="The change request a revision was drafted from."
     )
+    is_masked: bool = Field(
+        description=(
+            "false when the project's masking was off: the text was sent as written, "
+            "apart from the project's own masking rules."
+        )
+    )
 
     @classmethod
     def from_domain(cls, receipt: PrivacyReceipt) -> ReceiptOut:
@@ -280,6 +286,7 @@ class ReceiptOut(BaseModel):
             ],
             plan_version=receipt.plan_version,
             change_request_id=receipt.change_request_id,
+            is_masked=receipt.is_masked,
         )
 
 

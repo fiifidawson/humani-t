@@ -405,6 +405,7 @@ class TestScreen:
         }
         assert summary["failed"] == 0
         assert summary["manifest"] == {
+            "is_masked": True,
             "model_id": "llama3.1:8b",
             "prompt_version": summary["manifest"]["prompt_version"],
             "criteria_version": 3,

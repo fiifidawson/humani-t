@@ -35,6 +35,7 @@ from app.application.inference import GuardedInference
 from app.application.label_rules import LabelRulesService, PlanCriteria
 from app.application.masking import (
     DocumentsAwaitingReview,
+    MaskingChoice,
     MaskingRuleService,
     MaskStage,
     PaperMaskStore,
@@ -60,6 +61,7 @@ from app.domain.masking import (
     DOCUMENT_ENTITY_TYPES,
     PAPER_ENTITY_TYPES,
     QUESTION_ENTITY_TYPES,
+    MaskingPolicy,
 )
 from app.domain.mfa import MfaPolicy
 from app.domain.plans import PlanSource
@@ -122,6 +124,7 @@ class Providers:
     mfa: MfaService
     paper_sources: tuple[PaperSearchProvider, ...]
     inference: GuardedInference
+    masking: MaskingChoice
     http_clients: tuple[HttpFetcher, ...]
     signals: Signals
     stages: Mapping[str, Stage]
@@ -271,6 +274,14 @@ def prompt_guard() -> PromptGuard:
     author and place names that papers legitimately contain.
     """
     return LeakCheckPromptGuard((PatternDetector(),))
+
+
+def operator_masking_policy(settings: Settings) -> MaskingPolicy:
+    """The operator's side of each project's masking switch (ADR 0014)."""
+    return MaskingPolicy(
+        is_model_hosted=settings.is_inference_hosted,
+        allows_unmasked_hosted=settings.allow_unmasked_hosted_inference,
+    )
 
 
 def ner_detectors(settings: Settings) -> tuple[Detector, ...]:
@@ -429,11 +440,13 @@ def build_providers(
     file_store: FileStore | None = None,
     malware_scanner: MalwareScanner | None = None,
     document_extractor: DocumentExtractor | None = None,
+    masking_policy: MaskingPolicy | None = None,
 ) -> Providers:
     """Turn configuration into implementations: the one place that does.
 
     The keyword arguments are for tests. MFA is required unless `mfa_policy` says
-    otherwise, and that is not an operator setting.
+    otherwise, and that is not an operator setting. `masking_policy` defaults to the
+    one the settings give.
     """
     storage = storage or _storage(settings)
     email = email or _email(settings)
@@ -445,12 +458,14 @@ def build_providers(
     inference, inference_client = _inference(settings)
     signals = _signals(settings)
     ner = ner_detectors(settings)
+    policy = masking_policy or operator_masking_policy(settings)
+    masking = MaskingChoice(policy)
     masking_rules = MaskingRuleService(
-        storage=storage, encryption=encryption, audit=audit, clock=clock
+        storage=storage, encryption=encryption, audit=audit, choice=masking, clock=clock
     )
-    masks = PaperMaskStore(encryption, clock)
+    masks = PaperMaskStore(encryption, masking, clock)
     files = file_store or _file_store(settings)
-    document_evidence = DocumentEvidence(encryption)
+    document_evidence = DocumentEvidence(encryption, masking_rules)
     plans = PlanService(
         storage=storage,
         encryption=encryption,
@@ -522,7 +537,7 @@ def build_providers(
         email=email,
         rate_limiter=limiter,
         projects=ProjectService(
-            storage=storage, encryption=encryption, audit=audit, clock=clock
+            storage=storage, encryption=encryption, audit=audit, masking=policy, clock=clock
         ),
         mfa=MfaService(
             storage=storage,
@@ -535,6 +550,7 @@ def build_providers(
         ),
         paper_sources=tuple(provider for provider, _ in sources),
         inference=inference,
+        masking=masking,
         http_clients=tuple(
             client for client in (*(c for _, c in sources), inference_client) if client
         ),

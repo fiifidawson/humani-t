@@ -37,6 +37,7 @@ class TestOpenAPI:
             "/api/v1/info",
             "/api/v1/projects",
             "/api/v1/projects/{project_id}",
+            "/api/v1/projects/{project_id}/masking",
             "/api/v1/projects/{project_id}/archive",
             "/api/v1/projects/{project_id}/unarchive",
             "/api/v1/projects/{project_id}/members",

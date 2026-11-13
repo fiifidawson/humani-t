@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Sequence
 
 from app.domain.inference import ChatRequest, ChatResult, PromptRefusedError, PromptVerdict
-from app.domain.masking import EntityType, MaskingRule, leak_reason, rule_spans
+from app.domain.masking import EntityType, MaskingRule, ProjectPrivacy, leak_reason, rule_spans
 from app.inference.base import InferenceProvider, PromptGuard
 
 
@@ -30,6 +30,16 @@ class GuardedInference:
             return self
         return GuardedInference(self._provider, _ProjectRuleGuard(self._guard, rules))
 
+    def for_project(self, privacy: ProjectPrivacy) -> GuardedInference:
+        """The guard as the project's masking choice needs it, its rules always included.
+
+        With masking off the identifier patterns are not checked: the owner chose to send
+        the text as written (ADR 0014). The rule terms are refused either way.
+        """
+        if privacy.is_masked:
+            return self.with_rules(privacy.rules)
+        return GuardedInference(self._provider, _ProjectRuleGuard(_NoPatterns(), privacy.rules))
+
     @property
     def model_id(self) -> str:
         return self._provider.model_id
@@ -44,6 +54,11 @@ class GuardedInference:
         if not verdict.is_allowed:
             raise PromptRefusedError(verdict.reason)
         return await self._provider.chat(request)
+
+
+class _NoPatterns:
+    async def inspect(self, request: ChatRequest) -> PromptVerdict:
+        return PromptVerdict.allow()
 
 
 class _ProjectRuleGuard:
