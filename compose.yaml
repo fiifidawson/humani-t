@@ -60,8 +60,9 @@ x-app-environment: &app-environment
   # tcp://clamav:3310 and the malware-scan profile, or `none` (ADR 0012).
   HUMANI_T_MALWARE_SCANNER: ${HUMANI_T_MALWARE_SCANNER:-}
   HUMANI_T_CLAMD_ADDRESS: ${HUMANI_T_CLAMD_ADDRESS:-}
-  # HUMANI_T_ALLOW_HOSTED_INFERENCE is deliberately not passed through: sending
-  # text to a third-party model API should take an edit here, not a stray .env line.
+  # HUMANI_T_ALLOW_HOSTED_INFERENCE and HUMANI_T_ALLOW_UNMASKED_HOSTED_INFERENCE are
+  # deliberately not passed through: sending text to a third-party model API should
+  # take an edit here, not a stray .env line.
 
 x-app-secrets: &app-secrets
   # `target` is the file name inside the container. Settings reads

@@ -2,7 +2,7 @@
 
 This document records the decisions that must be stable **before** feature work begins. Everything here serves one rule:
 
-> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured, and only after it has been masked.
+> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured. Text sent to a model the deployment does not run itself is masked first, unless both the operator and the project's owner have chosen otherwise.
 
 [ADR-0001](./adr/0001-web-only-self-hosted.md) explains why there is one deployment shape and no desktop version.
 
@@ -204,8 +204,9 @@ mmore ships a privacy mode (`src/mmore/privacy/`) with `humanitarian` as a domai
 **Masking happens at ingest as well as at query time.** mmore's pipeline sanitises retrieved chunks; it does not change what is stored. The brief's rules 1 to 3 therefore require our own masking stage between extraction and indexing. Without it, raw text would sit in the index and the database:
 
 - The question, clarifying answers and change requests are masked before any LLM call.
-- Uploaded documents are always masked, with the broad entity list. This cannot be switched off.
+- Uploaded documents are masked with the broad entity list, and their masking cannot be turned off document by document.
 - Raw text stays in a separate store, encrypted with the project's data key, and has a retention period.
+- All of this holds while the project's masking applies. Masking is a project's choice within the operator's policy ([ADR-0014](adr/0014-masking-is-a-project-choice.md), §5.8): with it off, only the project's rules mask text.
 
 #### 3.9.1 Masking is derived, reviewable and re-runnable
 
@@ -231,7 +232,7 @@ Masking is a function of the raw text and the spans, never an edit. That gives:
 - shows the extracted text with masked spans highlighted by type;
 - lists the detector's low-confidence spans first, so review is short;
 - lets the reviewer select missed text and mask it as a chosen type, or turn it into a project rule;
-- lets the owner mark a false positive as "not personal". This is audited and never allowed for structured identifiers. Rule 3 means masking itself cannot be switched off for documents; this is a narrow correction, not an off switch;
+- lets the owner mark a false positive as "not personal". This is audited and never allowed for structured identifiers. Rule 3 means masking cannot be switched off for one document; this is a narrow correction, not an off switch. Only the project's own masking switch turns masking off, for every text of the project at once (ADR 0014);
 - re-masks and re-indexes only the changed document after a correction.
 
 **Who sees raw text.** Only the document's owner, and only in the review screen. Reviewers and viewers see masked text. Each view of raw text writes an `AuditEvent`. The screen reviews *extracted text*, not the rendered file: text visible only in an image (a scanned signature, a photographed ID) is masked only if OCR extracted it, and the screen says so.
@@ -272,7 +273,11 @@ Session         a signed-in browser: token hash, assurance level (aal 1 | 2),
 Project         the unit of ownership, sharing, encryption and deletion;
                 owns one or more Reviews. Its name is stored only sealed
                 under its own data key; archived and deleted are dates, and
-                a deleted project stays as a tombstone row
+                a deleted project stays as a tombstone row. is_masking_on is
+                the owner's masking switch (ADR-0014)
+MaskingPolicy   the operator's side of the masking choice, built from
+                settings: whether the model is hosted, and whether owners may
+                send it unmasked text. Not stored
 Membership      (User, Project, Role) where Role is owner | reviewer | viewer;
                 removed when the project is deleted
 AuditEvent      who did what to which object, when; hash-chained
@@ -287,6 +292,8 @@ A **Project** is what the brief calls a project. It is the boundary for three th
 The fixed review vocabulary below (`Review`, `Vocabulary`, …) lives inside a Project.
 
 A project's status (planning, running, needs you, brief ready, …) is not stored: `project_status` in the domain derives it from the newest review and its latest run each time a project is read ([UI_UX_SPEC.md](UI_UX_SPEC.md) §11.1).
+
+Whether a project's text is masked is never read from storage alone. `is_masking_applied(is_masking_on, policy)` decides it each time text is about to leave: masked when the switch is on, or when the model is hosted and the operator has not allowed unmasked text ([ADR-0014](adr/0014-masking-is-a-project-choice.md)).
 
 Role permissions are a pure domain function, `can(role, action)`. It is tested as a table, so a change to who may do what is a visible diff. The actions follow [UI_UX_SPEC.md](UI_UX_SPEC.md) §3.3: viewers read and may leave; reviewers also search, run, confirm gates, relabel and ask; only owners rename, archive, manage members and documents, see raw text and delete. Being an instance administrator grants nothing inside a project.
 
@@ -517,7 +524,7 @@ The brief's security rules (`WEB_APP_BRIEF.md`, rules 1–18) are the requiremen
 - **Rotation.** The token is rotated on login and on step-up (re-authentication). A rotated session keeps its assurance level and its creation time, so a password alone neither raises the level nor restarts the 24-hour limit.
 - **Expiry.** 1 hour idle, 24 hours absolute; 5 minutes absolute for a session pending its second factor.
 - **Assurance level.** Each session has one (aal 1 or 2) and a pending flag. A session that has passed the password but not MFA can reach only the MFA endpoints. Changing the password rotates the session and keeps its level.
-- **Recent sign-in for sensitive actions.** Changing a password or an authenticator, deleting a project, or changing members requires a sign-in within the last 15 minutes.
+- **Recent sign-in for sensitive actions.** Changing a password or an authenticator, deleting a project, changing members, or turning a project's masking off requires a sign-in within the last 15 minutes.
 - **Password reset.** A reset changes the password only. MFA is still required, every session is revoked, and the user is emailed.
 
 ### 5.3 Request integrity
@@ -577,6 +584,16 @@ Feature tests send one request at a time; production does not. These rules keep 
 9. **Everything opened is closed.** `Providers.close()` releases every pool and client, at shutdown and at the end of every CLI command.
 
 ---
+
+### 5.8 Masking as a project's choice
+
+The one rule (`CLAUDE.md`) lets text reach a model unmasked only when the deployment runs the model itself, or when both the operator and the project's owner have chosen it ([ADR-0014](adr/0014-masking-is-a-project-choice.md)):
+
+- **The owner's switch.** `Project.is_masking_on`, changed by owners only (`PUT …/masking`), audited as `project.masking_changed`. Turning it off needs a recent sign-in.
+- **The operator's policy.** `MaskingPolicy`, built by `operator_masking_policy` in `api/dependencies.py` from `Settings.is_inference_hosted` (the model server is outside the deployment, or an Ollama `*-cloud` model) and `allow_unmasked_hosted_inference` (refused unless `allow_hosted_inference` is set; not passed through by compose).
+- **Decided when sent.** `MaskingChoice` reads the switch fresh and applies `is_masking_applied` for every sanitiser call (`mask_as_chosen`), every guarded model call (`GuardedInference.for_project`), every read of a paper's masked text, and every read of a document's passages. Text kept with masking off is withheld once masking applies again.
+- **What off changes.** The detectors and the identifier check of the prompt guard are skipped, documents need no privacy review, and papers keep their text. The project's rules still mask their terms everywhere, and the guard still refuses them.
+- **Provenance.** Receipts, follow-up questions, every stage that masks or sends text, the run manifest (`masking`) and the brief's trace record whether the text was masked.
 
 ## 6. Dependencies and prior art
 

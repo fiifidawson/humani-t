@@ -258,6 +258,13 @@ function TraceView({ trace }: { trace: Trace }) {
 			</Text>
 			<CanvasHeading id={`${id}-used`}>What this used</CanvasHeading>
 			<chakra.ul aria-labelledby={`${id}-used`} pl="5">
+				{trace.is_masked === null ? null : (
+					<li>
+						{trace.is_masked
+							? "Masking: on"
+							: "Masking: off for this run (the owner's choice)"}
+					</li>
+				)}
 				{Object.entries(trace.manifest).map(([key, value]) => (
 					<li key={key}>
 						{MANIFEST_NAMES[key] ?? key.replaceAll("_", " ")}:{" "}

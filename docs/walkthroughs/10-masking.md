@@ -13,6 +13,7 @@ After this phase, nothing reaches a model unmasked. Every paper's kept text is m
 - **The `mask` stage** masks each paper's kept text with the narrow list and the project's rules, stores masked text and spans sealed under the project's key, skips papers masked the same way already, and stops at the `privacy_review` gate when documents are waiting (P2).
 - **Endpoints:** `GET`, `POST /api/v1/projects/{project_id}/masking-rules` and `DELETE …/masking-rules/{rule_id}`, owners only ([api.md](../api.md#masking-rules)).
 - **Settings:** `HUMANI_T_MASKING_NER` (`auto`, `spacy` or `off`; default `auto`) and `HUMANI_T_MASKING_NER_MODEL` (default `en_core_web_sm`).
+- **Masking as a project's choice (2026-11-13, D10.6):** each project has a switch; owners turn it on or off with `PUT /api/v1/projects/{project_id}/masking` and in Project settings → Privacy; `HUMANI_T_ALLOW_UNMASKED_HOSTED_INFERENCE` lets them turn it off for a hosted model.
 
 ### Data model
 
@@ -65,6 +66,14 @@ Migration `0010` creates both, after `0009` creates `papers`. `paper_masks.paper
 - **Rejected and costs:** see [ADR 0011](../adr/0011-countries-and-regions-as-an-operator-setting.md).
 - **Where:** [`app/domain/geography.py`](../../services/api/app/domain/geography.py), [`app/privacy/sanitizer.py`](../../services/api/app/privacy/sanitizer.py), [`app/api/dependencies.py`](../../services/api/app/api/dependencies.py) (`planning_sanitizer`).
 - **Proven by:** `tests/test_geography_domain.py`, `tests/test_privacy_sanitizer.py::TestCountriesAndRegions`.
+
+### D10.6 Masking is a project's choice, within the operator's policy (2026-11-13)
+
+- **Decision:** each project has `is_masking_on`. New projects start on when the model is hosted (outside the deployment, or an Ollama cloud model) and off when the deployment runs it. Whether text is masked is decided when it is sent, by `is_masking_applied`: the switch, unless the model is hosted and `allow_unmasked_hosted_inference` is false, when it is always masked. With masking off, typed text skips the detectors, papers keep their text, documents need no privacy review, and the guard no longer refuses identifiers; the project's rules still mask their terms and the guard still refuses them.
+- **Why:** the owner's supervisor asked for it. A team running its own model loses quality to masking and sends nothing outside; a hosted model is the case the one rule guards.
+- **Rejected and costs:** see [ADR 0014](../adr/0014-masking-is-a-project-choice.md). The document worker still makes a masked copy with masking off, locally, so turning masking back on needs no reprocessing.
+- **Where:** [`app/domain/masking.py`](../../services/api/app/domain/masking.py) (`MaskingPolicy`, `is_masking_applied`, `mask_rules_only`), [`app/application/masking.py`](../../services/api/app/application/masking.py) (`MaskingChoice`, `mask_as_chosen`), [`app/application/inference.py`](../../services/api/app/application/inference.py) (`for_project`), [`app/application/projects.py`](../../services/api/app/application/projects.py) (`set_masking`), [`app/settings.py`](../../services/api/app/settings.py) (`is_inference_hosted`, `allow_unmasked_hosted_inference`), migration 0016, [`apps/web/src/features/projects/MaskingSwitch.tsx`](../../apps/web/src/features/projects/MaskingSwitch.tsx).
+- **Proven by:** `tests/test_masking_domain.py::TestMaskingChoice`, `::TestMaskingOff`, `tests/test_settings.py::TestUnmaskedHostedInference`, `tests/test_outbound_wiring.py::TestMaskingPolicy`, `tests/test_masking_choice.py`, `apps/web/src/features/projects/MaskingSwitch.test.tsx`.
 
 ## Libraries
 
@@ -159,6 +168,27 @@ Uses the project and the `Kofi Mensah` rule from T10.3, and a review of that pro
 | T10.5.4 | Click **Remove** on Gao Clinic | It leaves the list; the API logs `204` | rules can be removed | |
 | T10.5.5 | As a reviewer, open the same page | "Only owners can see and change the masking rules, because they hold names."; no `GET …/masking-rules` in the network tab | owners only | |
 
+### T10.6 Masking as a project's choice
+
+Uses the dev stack from 00 with a local model (`HUMANI_T_INFERENCE_URL=http://127.0.0.1:11434`), signed in as the owner in Postman with the CSRF header.
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T10.6.1 | `POST /api/v1/projects` with `{"name": "Masking choice"}` | `201`; `is_masking_on` `false`, `is_masking_effective` `false`, `can_turn_masking_off` `true` | a local model starts unmasked | check `operator_masking_policy` and `Settings.is_inference_hosted` |
+| T10.6.2 | `PUT /api/v1/projects/{project_id}/masking` with `{"is_masking_on": true}` | `200`, all three `true` | owners turn it on with no recent sign-in | check `ProjectService.set_masking` |
+| T10.6.3 | In pgAdmin, `SELECT is_masking_on, version FROM projects WHERE id = '<project_id>'` | `true`, and the version moved on | stored with a version check | check migration 0016 ran (`alembic upgrade head`) |
+| T10.6.4 | Wait 16 minutes (or sign in again later), then `PUT …/masking` with `{"is_masking_on": false}` | `401` with `reauthentication_required`; after `POST /api/v1/auth/reauthenticate`, the same request answers `200` with `is_masking_effective` `false` | turning it off needs a recent sign-in | check `needs_recent_sign_in=not is_on` |
+| T10.6.5 | In pgAdmin, `SELECT action FROM audit_events ORDER BY sequence DESC LIMIT 2` | `project.masking_changed` twice; details sealed | audited | check the `record` call |
+| T10.6.6 | As a reviewer, the same `PUT` | `403` | owners only | check `require(Action.UPDATE_PROJECT)` |
+| T10.6.7 | With masking off, create a review whose question is `Should we call amina.yusuf@example.org about the camps near Marib?` and `POST …/plan` with `{"mode": "shallow"}` (needs a model) | `receipts[0].is_masked` `false`; `sent` holds the email and `Marib` as written | off sends typed text as written | check `mask_as_chosen` in `PlanService._mask` |
+| T10.6.8 | Add the masking rule `Marib` (Location), then start another review the same way | `sent` holds `[LOCATION_1]`, not `Marib`; the email is still as written | the project's rules still apply when off | check `mask_rules_only` |
+| T10.6.9 | Stop the API. In `services/api/.env` set `HUMANI_T_INFERENCE_URL=https://models.example.org`, start it, and `GET /api/v1/projects/{project_id}` | `is_masking_on` `false`, `is_masking_effective` `true`, `can_turn_masking_off` `false`; a `PUT` with `false` answers `409` "This deployment sends text to a hosted model, so masking stays on." | a hosted model masks every project unless the operator allows otherwise | check `is_masking_applied`; put the URL back afterwards |
+| T10.6.10 | In PowerShell: `$env:HUMANI_T_ALLOW_UNMASKED_HOSTED_INFERENCE = 'true'; uv run python -c "from app.settings import Settings; Settings()"; Remove-Item Env:HUMANI_T_ALLOW_UNMASKED_HOSTED_INFERENCE` | a `ValidationError` ending `allow_unmasked_hosted_inference requires allow_hosted_inference` | the operator must allow hosted inference first | check `_inference_stays_with_the_operator` |
+| T10.6.11 | In the web app, as the owner, open Project settings → **Privacy** | the switch **Mask names, places and identifiers before text reaches the model** and "Masking is on…" or "Masking is off…" | the screen reads the API | |
+| T10.6.12 | Turn the switch off | "Turn masking off?" with the warning; **Turn masking off** saves it, **Cancel** leaves it on; a stale sign-in asks for the password first | confirmation and re-auth | |
+| T10.6.13 | As a reviewer, open the same page | the state in words and "Only owners can change this."; no switch | owners only | |
+| T10.6.14 | After a run with the brief stage and masking off, open "How this was made" | **What this used** lists "Masking: off for this run (the owner's choice)"; `GET /api/v1/runs/{run_id}/manifest` has `"masking": "off"` | provenance | check `is_masked` in the stage manifests |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -168,6 +198,7 @@ Uses the project and the `Kofi Mensah` rule from T10.3, and a review of that pro
 | T10.3 | ☐ | |
 | T10.4 | ☐ | |
 | T10.5 | ☐ | |
+| T10.6 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -182,6 +213,9 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | The stage masks, seals, skips on re-runs and gates on documents | `tests/test_mask_stage.py` |
 | Rules are owners only, sealed, shredded with the project and audited by id | `tests/test_masking_api.py` |
 | Project settings → Privacy lists, adds and removes rules, owners only | `apps/web/src/features/projects/MaskingRules.test.tsx` |
+| Masking is decided when text is sent; a hosted model the operator has not allowed is always masked | `tests/test_masking_domain.py::TestMaskingChoice` |
+| The switch: defaults, owners only, recent sign-in to turn off, `409` when required, audited; and what off changes everywhere | `tests/test_masking_choice.py` |
+| The switch on the web: confirmation, re-auth, locked when required, read-only for others | `apps/web/src/features/projects/MaskingSwitch.test.tsx` |
 
 ```powershell
 uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/test_privacy_sanitizer.py tests/test_mask_stage.py tests/test_masking_api.py tests/test_masking_storage_contract.py -v
@@ -195,6 +229,9 @@ uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/
 | G10.2 | The small spaCy model misses unfamiliar names | a name in a question can reach the model | a second detector (GLiNER) behind the same Protocol; owners can add rules |
 | G10.3 | Closed: uploaded documents, the review screen and "not personal" corrections are built ([16 — Documents](16-documents.md), D16.12) | — | — |
 | G10.4 | Postgres contract tests for `masking_rules` and `paper_masks` were not run in this phase (no database available) | a SQL mistake would show only at integration | run them against the lane database at integration |
+| G10.5 | With masking off, the document worker still masks each document and the documents screen still says it waits for review | an owner may think a review is needed; nothing from the masked copy is sent while masking is off | show the state in words on the documents screen |
+| G10.6 | A run already waiting at a `privacy_review` gate keeps waiting when the owner turns masking off | the owner approves the gate by hand | release such gates when masking is turned off, if asked for |
+| G10.7 | Postgres contract tests for the new columns (migration 0016) were not run in this lane | a SQL mistake would show only at integration | run them against the lane database at integration |
 
 ## Glossary
 
@@ -205,3 +242,4 @@ uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/
 | **Masking rule** | A term an owner says is always masked in their project. |
 | **Fingerprint** (`masked_with`) | The detectors, versions and rules a text was masked with. |
 | **Prompt guard** | The check on every model call's exact outgoing text, which refuses rather than repairs. |
+| **Masking switch** | A project's `is_masking_on`, set by owners; whether masking applies is decided when text is sent, and a hosted model can overrule it (ADR 0014). |
