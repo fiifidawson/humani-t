@@ -176,7 +176,7 @@ Skip docstrings on obvious properties and private helpers. `def is_frozen(self)`
 - Raise `ValueError` from the domain with a message naming the field: `"Concept.term must not be blank"`.
 - Translate to HTTP only at the boundary, with `raise ... from exc` so the chain survives.
 - Never swallow an exception silently. Never `except Exception: pass`.
-- Absence is not failure: `fetch_fulltext` returns `None` for a closed-access paper because that is a normal outcome. Reserve exceptions for the unexpected.
+- Absence is not failure: `model_instructions.in_force` returns `None` for a project that has no instructions yet, because that is a normal outcome. Reserve exceptions for the unexpected.
 
 ---
 

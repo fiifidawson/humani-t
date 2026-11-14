@@ -64,7 +64,7 @@ app/<seam>/       provider Protocols (base.py) and their implementations
 
 ### D1.4 Provider seams as Protocols, with fakes
 
-- **Decision:** each outside dependency sits behind a `typing.Protocol` in `<seam>/base.py`, with a real implementation and a fake. This phase has one seam, `PaperSearchProvider` (`source_id`, `search(query, limit)`, `fetch_fulltext(record)`), and one implementation, `FakePaperSearchProvider`. Later phases add storage, crypto, password hashing, email and rate limiting the same way.
+- **Decision:** each outside dependency sits behind a `typing.Protocol` in `<seam>/base.py`, with a real implementation and a fake. This phase has one seam, `PaperSearchProvider` (`source_id`, `search(query, limit)`, and then `fetch_fulltext(record)`, since removed because nothing used it), and one implementation, `FakePaperSearchProvider`. Later phases add storage, crypto, password hashing, email and rate limiting the same way.
 - **Why:** use cases are tested without a network or database, and an organisation can swap a provider (another key store, mail server, model or paper source) by changing one file. Protocols (PEP 544) need no inheritance, so implementations stay plain classes; `TestConformance` checks the fake satisfies the Protocol *without* inheriting it.
 - **Fakes over mocks:** a fake really behaves. `FakePaperSearchProvider` evaluates the compiled query for real against a four-paper corpus chosen so that AND across themes actually discriminates (two papers match one theme only and must not be returned). A mock that returns canned values makes tests pass without proving anything.
 - **Rejected:** abstract base classes (force inheritance); mocking libraries everywhere.
