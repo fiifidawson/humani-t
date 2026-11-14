@@ -552,7 +552,12 @@ def build_providers(
         email=email,
         rate_limiter=limiter,
         projects=ProjectService(
-            storage=storage, encryption=encryption, audit=audit, masking=policy, clock=clock
+            storage=storage,
+            encryption=encryption,
+            audit=audit,
+            masking=policy,
+            runs=runs,
+            clock=clock,
         ),
         mfa=MfaService(
             storage=storage,

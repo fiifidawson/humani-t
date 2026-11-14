@@ -71,7 +71,6 @@ from app.domain.masking import (
     rule_spans,
 )
 from app.domain.projects import Action
-from app.domain.runs import GateDecision, GateKind, RunConflictError, RunState
 from app.domain.screening import Passage
 from app.extraction.base import DocumentExtractor
 from app.files.base import FileStore, file_key
@@ -82,8 +81,6 @@ from app.signals.base import Signals
 from app.storage.base import StorageProvider, UnitOfWork
 
 DOCUMENTS_CHANNEL = "documents:queued"
-# The stage that raises the privacy_review gate (`application/masking.py`).
-MASK_STAGE = "mask"
 
 # Table, column; the row is the document, and a masking is bound to its version
 # too, so an older masking copied over a newer one fails to decrypt.
@@ -657,32 +654,14 @@ class DocumentService:
     async def _resume_runs(
         self, current: Current, project_id: UUID, request_id: str | None
     ) -> None:
-        """Approve the open privacy-review gates once no document waits for review.
-
-        Uses the gate route's conditional write, so a person deciding the gate at the
-        same moment wins or loses cleanly.
-        """
+        """Release the open privacy-review gates once no document waits for review."""
         if self._runs is None:
             return
         async with self._storage.unit_of_work() as uow:
             documents = await uow.documents.list_for_project(project_id)
-            if any(d.status is DocumentStatus.AWAITING_REVIEW for d in documents):
-                return
-            gate_ids: list[UUID] = []
-            for review in await uow.reviews.list_for_project(project_id):
-                for run in await uow.runs.list_for_review(review.id):
-                    if run.state is not RunState.WAITING:
-                        continue
-                    gate = await uow.gates.find(run.id, MASK_STAGE, GateKind.PRIVACY_REVIEW)
-                    if gate is not None and not gate.is_resolved:
-                        gate_ids.append(gate.id)
-        for gate_id in gate_ids:
-            try:
-                await self._runs.resolve_gate(
-                    current, gate_id, GateDecision.APPROVE, None, request_id
-                )
-            except RunConflictError:
-                _log.info("privacy_review_gate_already_decided", gate_id=str(gate_id))
+        if any(d.status is DocumentStatus.AWAITING_REVIEW for d in documents):
+            return
+        await self._runs.release_privacy_gates(current, project_id, request_id)
 
     async def _record(
         self,

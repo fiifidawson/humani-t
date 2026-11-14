@@ -17,6 +17,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
+from app.application.runs import RunService
 from app.domain.accounts import (
     ForbiddenError,
     NotFoundError,
@@ -93,6 +94,7 @@ class ProjectService:
         audit: AuditLog,
         session_policy: SessionPolicy | None = None,
         masking: MaskingPolicy | None = None,
+        runs: RunService | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
@@ -101,6 +103,7 @@ class ProjectService:
         self._session_policy = session_policy or SessionPolicy()
         # Unset means the strictest policy: every project masked, and kept masked.
         self._masking = masking or MaskingPolicy(is_model_hosted=True)
+        self._runs = runs
         self._clock = clock
 
     async def authorize(
@@ -202,7 +205,8 @@ class ProjectService:
         """Switch the project's masking on or off (ADR 0014).
 
         Turning it off needs a recent sign-in, and raises `MaskingRequiredError` while
-        the deployment requires masking.
+        the deployment requires masking. Turning it off also releases runs waiting for
+        a privacy review: with masking off there is nothing left to review.
         """
         async with self._storage.unit_of_work() as uow:
             project, membership = await self._access(
@@ -223,7 +227,10 @@ class ProjectService:
                     details={"is_masking_on": is_on},
                 )
                 await uow.commit()
-            return await self._view(uow, changed, membership.role)
+            view = await self._view(uow, changed, membership.role)
+        if not is_on and self._runs is not None:
+            await self._runs.release_privacy_gates(current, project_id, request_id)
+        return view
 
     async def archive(
         self, current: Current, project_id: UUID, request_id: str | None = None
