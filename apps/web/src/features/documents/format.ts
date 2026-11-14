@@ -16,8 +16,11 @@ const STATUS_WORDS: Readonly<Record<DocumentStatus, string>> = {
 	failed: "Failed",
 };
 
-export const statusWords = (status: DocumentStatus): string =>
-	STATUS_WORDS[status];
+/** With the project's masking off there is nothing to review: a read document is ready. */
+export const statusWords = (status: DocumentStatus, isMasked = true): string =>
+	!isMasked && status === "awaiting_review"
+		? "Ready (masking is off)"
+		: STATUS_WORDS[status];
 
 const KB = 1024;
 const MB = 1024 * KB;

@@ -37,7 +37,8 @@ Sending unmasked text to a model the deployment does not run itself is different
 
 - The one rule now reads: data leaves the deployment only to destinations the operator has configured, and text sent to a model the deployment does not run itself is masked first unless both the operator and the project's owner have chosen otherwise.
 - A local deployment's new projects are unmasked by default. Their owners see that in Project settings → Privacy and can turn masking on.
-- The document worker still makes a masked copy of each document with masking off. Nothing in it is sent while masking is off; it is there so turning masking back on needs no reprocessing, and the privacy review applies again from that moment.
+- The document worker still makes a masked copy of each document with masking off. Nothing in it is sent while masking is off; it is there so turning masking back on needs no reprocessing, and the privacy review applies again from that moment. Meanwhile the documents screen calls such a document "Ready (masking is off)".
+- Turning masking off approves the project's open `privacy_review` gates as the owner who turned it off, so no run waits on a review that no longer applies. The gate's event and audit entry name that owner.
 - A plan drafted while masking was off may hold words the model copied from the unmasked question. With masking back on it is still sent as the plan always is: checked by the guard and the project's rules, not masked.
 - Every existing project was masked, so migration 0016 backfills the switch on.
 - Proven by `tests/test_masking_domain.py::TestMaskingChoice`, `tests/test_settings.py::TestUnmaskedHostedInference`, `tests/test_outbound_wiring.py::TestMaskingPolicy` and `tests/test_masking_choice.py`.

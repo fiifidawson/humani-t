@@ -425,6 +425,37 @@ class TestDocuments:
 
         assert _passages(rt.harness, rt.project_id) == []
 
+    def test_turning_masking_off_releases_a_run_waiting_for_document_review(self):
+        rt = make_run_team(LOCAL)
+        switch(rt.owner, rt.project_id, on=True)
+        _upload(rt)
+        worker = rt.worker({"mask": _MaskLane(rt, texts=()).stage})
+        run_id = rt.start_run(["mask"])
+        run_until_idle(worker)
+        assert rt.stored_run(run_id).state.value == "waiting"
+
+        assert switch(rt.owner, rt.project_id, on=False).status_code == 200
+        run_until_idle(worker)
+
+        resolved = [e for e in rt.events(run_id) if e.name == "gate.resolved"]
+        assert [e.data["decision"] for e in resolved] == ["approve"]
+        outcome = rt.stored_run(run_id).outcome
+        assert outcome is not None
+        assert outcome.value == "done"
+
+    def test_a_refused_switch_leaves_the_run_waiting_for_document_review(self):
+        rt = make_run_team(HOSTED)
+        _upload(rt)
+        worker = rt.worker({"mask": _MaskLane(rt, texts=()).stage})
+        run_id = rt.start_run(["mask"])
+        run_until_idle(worker)
+
+        assert switch(rt.owner, rt.project_id, on=False).status_code == 409
+        run_until_idle(worker)
+
+        assert [e for e in rt.events(run_id) if e.name == "gate.resolved"] == []
+        assert rt.stored_run(run_id).state.value == "waiting"
+
     def test_with_masking_off_a_document_is_still_scanned_and_an_infected_one_never_used(self):
         team = make_document_team(masking_policy=LOCAL)
         team.uploaded(EICAR)

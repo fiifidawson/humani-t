@@ -188,6 +188,7 @@ Uses the dev stack from 00 with a local model (`HUMANI_T_INFERENCE_URL=http://12
 | T10.6.12 | Turn the switch off | "Turn masking off?" with the warning; **Turn masking off** saves it, **Cancel** leaves it on; a stale sign-in asks for the password first | confirmation and re-auth | |
 | T10.6.13 | As a reviewer, open the same page | the state in words and "Only owners can change this."; no switch | owners only | |
 | T10.6.14 | After a run with the brief stage and masking off, open "How this was made" | **What this used** lists "Masking: off for this run (the owner's choice)"; `GET /api/v1/runs/{run_id}/manifest` has `"masking": "off"` | provenance | check `is_masked` in the stage manifests |
+| T10.6.15 | With masking on, upload a document and start a run; once it waits at **Review masking**, turn masking off | the run carries on; its events show `gate.resolved` with `approve` by you; on the Documents page the file reads "Ready (masking is off)" | nothing is left waiting on a review that no longer applies | check `release_privacy_gates` in `ProjectService.set_masking` |
 
 ### Results checklist
 
@@ -216,6 +217,8 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Masking is decided when text is sent; a hosted model the operator has not allowed is always masked | `tests/test_masking_domain.py::TestMaskingChoice` |
 | The switch: defaults, owners only, recent sign-in to turn off, `409` when required, audited; and what off changes everywhere | `tests/test_masking_choice.py` |
 | The switch on the web: confirmation, re-auth, locked when required, read-only for others | `apps/web/src/features/projects/MaskingSwitch.test.tsx` |
+| Turning masking off releases a run waiting for document review; a refused switch does not | `tests/test_masking_choice.py::TestDocuments` |
+| The documents screen says what masking off means for each document | `apps/web/src/features/documents/Documents.test.tsx` |
 
 ```powershell
 uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/test_privacy_sanitizer.py tests/test_mask_stage.py tests/test_masking_api.py tests/test_masking_storage_contract.py -v
@@ -228,10 +231,10 @@ uv run pytest tests/test_masking_domain.py tests/test_privacy_patterns.py tests/
 | G10.1 | Unlabelled numbers (a bare `4481207`) are not masked | an identifier written without its label can reach a model | deliberate, to keep the guard from refusing statistics; project rules cover known values |
 | G10.2 | The small spaCy model misses unfamiliar names | a name in a question can reach the model | a second detector (GLiNER) behind the same Protocol; owners can add rules |
 | G10.3 | Closed: uploaded documents, the review screen and "not personal" corrections are built ([16 — Documents](16-documents.md), D16.12) | — | — |
-| G10.4 | Postgres contract tests for `masking_rules` and `paper_masks` were not run in this phase (no database available) | a SQL mistake would show only at integration | run them against the lane database at integration |
-| G10.5 | With masking off, the document worker still masks each document and the documents screen still says it waits for review | an owner may think a review is needed; nothing from the masked copy is sent while masking is off | show the state in words on the documents screen |
-| G10.6 | A run already waiting at a `privacy_review` gate keeps waiting when the owner turns masking off | the owner approves the gate by hand | release such gates when masking is turned off, if asked for |
-| G10.7 | Postgres contract tests for the new columns (migration 0016) were not run in this lane | a SQL mistake would show only at integration | run them against the lane database at integration |
+| G10.4 | Closed: the Postgres contract tests for `masking_rules` and `paper_masks` pass against a migrated database (2026-11-13) | — | — |
+| G10.5 | Closed: with masking off, the documents screen says a document waiting for review is "Ready (masking is off)", and that the model reads ready documents as written | — | — |
+| G10.6 | Closed: turning masking off approves the project's open `privacy_review` gates as the owner who turned it off, so a waiting run carries on (`RunService.release_privacy_gates`) | — | — |
+| G10.7 | Closed: the Postgres contract tests for `projects.is_masking_on` and `plan_receipts.is_masked` (migration 0016) pass against a database migrated to 0017 (2026-11-13) | — | — |
 
 ## Glossary
 
