@@ -487,7 +487,7 @@ uv run pytest tests/test_net_addresses.py tests/test_net_fetcher.py tests/test_n
 | --- | --- | --- | --- |
 | G9.1 | ~~The search-planning conversation does not exist~~ | Closed | [Planning conversation](#planning-conversation) |
 | G9.2 | The prompt guard allows everything | Unmasked text could reach the model server | Masking lane (`10-masking`) replaces `FakePromptGuard()` in `api/dependencies.py` |
-| G9.3 | `fetch_fulltext` returns `None` for every source | Screening works on abstracts only | Full-text retrieval and extraction (build order step 10), with a PDF-host fetcher policy |
+| G9.3 | No full text is fetched for papers (`fetch_fulltext` was removed unused) | Screening works on abstracts only | Full-text retrieval and extraction (build order step 10), with a PDF-host fetcher policy |
 | G9.4 | Pacing is per process | Several workers searching at once can exceed a source's rate limit | A shared limiter in Valkey when more than one process searches |
 | G9.5 | No retry on 429 or 5xx | One busy moment fails a source for the whole run | A bounded retry honouring `Retry-After`, once runs report per-source status |
 | G9.6 | ~~The exact compiled query per source is not yet stored~~ (closed by the `queries` stage's manifest) | A reviewer can recompute it (`compile_*_query` is pure) but not read it from the run | Record it in the `RunManifest` with the search results |

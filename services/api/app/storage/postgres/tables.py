@@ -191,6 +191,7 @@ projects = Table(
     Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("deleted_at", DateTime(timezone=True), nullable=True),
     Column("version", Integer, nullable=False, server_default="0"),
+    Column("is_masking_on", Boolean, nullable=False, server_default="true"),
 )
 
 memberships = Table(
@@ -419,6 +420,7 @@ plan_receipts = Table(
     Column("body_sealed", LargeBinary, nullable=False),
     Column("plan_version", Integer, nullable=True),
     Column("change_request_id", Uuid, nullable=True),
+    Column("is_masked", Boolean, nullable=False, server_default="true"),
     CheckConstraint("purpose IN ('clarify', 'draft', 'revise')", name="purpose_is_known"),
     CheckConstraint(
         "plan_version IS NULL OR plan_version >= 1", name="plan_version_counts_from_one"
@@ -541,4 +543,15 @@ label_rule_versions = Table(
         name="unclear_counts_as_is_known",
     ),
     CheckConstraint("papers_moved >= 0", name="papers_moved_is_a_count"),
+)
+
+model_instruction_versions = Table(
+    "model_instruction_versions",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("instructions_sealed", LargeBinary, nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version >= 1", name="version_counts_from_one"),
 )

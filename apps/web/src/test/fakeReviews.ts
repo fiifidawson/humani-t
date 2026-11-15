@@ -499,6 +499,7 @@ export class FakeReviews {
 				0,
 			),
 			items,
+			is_masked: true,
 		};
 	}
 

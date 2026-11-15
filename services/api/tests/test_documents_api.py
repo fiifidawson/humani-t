@@ -63,7 +63,7 @@ def _passages(team: DocumentTeam) -> list[Any]:
     providers = team.harness.providers
     from app.application.documents import DocumentEvidence
 
-    evidence = DocumentEvidence(providers.encryption)
+    evidence = DocumentEvidence(providers.encryption, providers.masking_rules)
 
     async def read() -> list[Any]:
         async with providers.storage.unit_of_work() as uow:

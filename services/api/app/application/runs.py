@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import structlog
+
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
@@ -61,8 +63,13 @@ SESSION_RECHECK_INTERVAL = timedelta(minutes=1)
 _POLL_INTERVAL = timedelta(seconds=2)
 _READ_BATCH = 500
 
+# The stage that raises the privacy_review gate (`application/masking.py`).
+MASK_STAGE = "mask"
+
 _RUN_NOT_FOUND = "No such run."
 _GATE_NOT_FOUND = "No such gate."
+
+_log = structlog.get_logger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -226,6 +233,31 @@ class RunService:
         await self._signals.publish(run_channel(run.id))
         await self._signals.publish(QUEUE_CHANNEL)
         return resolved
+
+    async def release_privacy_gates(
+        self, current: Current, project_id: UUID, request_id: str | None = None
+    ) -> None:
+        """Approve the project's open privacy-review gates, as `current`.
+
+        Uses the gate route's conditional write, so a person deciding a gate at the
+        same moment wins or loses cleanly.
+        """
+        async with self._storage.unit_of_work() as uow:
+            gate_ids: list[UUID] = []
+            for review in await uow.reviews.list_for_project(project_id):
+                for run in await uow.runs.list_for_review(review.id):
+                    if run.state is not RunState.WAITING:
+                        continue
+                    gate = await uow.gates.find(run.id, MASK_STAGE, GateKind.PRIVACY_REVIEW)
+                    if gate is not None and not gate.is_resolved:
+                        gate_ids.append(gate.id)
+        for gate_id in gate_ids:
+            try:
+                await self.resolve_gate(
+                    current, gate_id, GateDecision.APPROVE, None, request_id
+                )
+            except RunConflictError:
+                _log.info("privacy_review_gate_already_decided", gate_id=str(gate_id))
 
     async def open_stream(
         self, current: Current, run_id: UUID, last_event_id: str | None

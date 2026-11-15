@@ -18,6 +18,7 @@ from app.ratelimit.memory import MemoryRateLimiter
 from tests.support import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    MASKED_BY_DEPLOYMENT,
     NEW_PASSWORD,
     ORIGIN,
     USER_EMAIL,
@@ -842,6 +843,7 @@ class TestClientAddress:
             mfa_policy=MfaPolicy(is_required=False),
             rate_limiter=limiter,
             clock=clock,
+            masking_policy=MASKED_BY_DEPLOYMENT,
             **settings,
         )
         harness.create_user(USER_EMAIL, USER_PASSWORD)

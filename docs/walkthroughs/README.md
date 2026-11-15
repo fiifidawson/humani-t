@@ -10,7 +10,7 @@ A reviewer asks a research question. humani-t helps turn it into a search, finds
 
 Two rules from [`CLAUDE.md`](../../CLAUDE.md) shape every phase:
 
-> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured, and only after it has been masked.
+> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured. Text sent to a model the deployment does not run itself is masked first, unless both the operator and the project's owner have chosen otherwise.
 
 > Could a reviewer reconstruct why this paper was included or excluded, six months from now, from what we stored?
 

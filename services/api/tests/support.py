@@ -21,6 +21,7 @@ from httpx2 import Response
 
 from app.api.dependencies import Providers, build_providers
 from app.auth.fake import FakePasswordHasher
+from app.domain.masking import MaskingPolicy
 from app.domain.mfa import MfaPolicy
 from app.domain.notifications import EmailMessage
 from app.email.recording import RecordingEmailProvider
@@ -37,6 +38,10 @@ ADMIN_PASSWORD = "violet-harbour-quietly-41-lanterns"
 USER_EMAIL = "amara@example.org"
 USER_PASSWORD = "seventeen-copper-kites-over-lagos"
 NEW_PASSWORD = "the-tide-returns-at-nine-o-clock"
+
+# Projects start masked and stay masked, as with a hosted model: the specs written
+# before masking became a project's choice assume it (ADR 0014).
+MASKED_BY_DEPLOYMENT = MaskingPolicy(is_model_hosted=True)
 
 
 @dataclass
@@ -152,6 +157,7 @@ def make_harness(
     mfa_policy: MfaPolicy | None = None,
     rate_limiter: RateLimiter | None = None,
     clock: FakeClock | None = None,
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
     **settings_overrides: object,
 ) -> AuthHarness:
     """An app with production's defaults — MFA required — unless a spec says otherwise.
@@ -180,6 +186,7 @@ def make_harness(
         email=email,
         rate_limiter=rate_limiter,
         mfa_policy=mfa_policy,
+        masking_policy=masking_policy,
     )
     return AuthHarness(
         create_app(settings, providers=providers), providers, clock, hasher, storage, email

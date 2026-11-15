@@ -25,6 +25,7 @@ from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.screening import ScreenStage
 from app.domain.inference import ChatRequest, ChatResult, InferenceUnavailableError
+from app.domain.masking import MaskingPolicy
 from app.domain.paper import PaperRecord
 from app.domain.plans import (
     Criterion,
@@ -44,6 +45,7 @@ from app.search.base import DEFAULT_LIMIT
 from app.search.fake import FakePaperSearchProvider
 from app.storage.base import UnitOfWork
 from tests.run_support import RunTeam, make_run_team
+from tests.support import MASKED_BY_DEPLOYMENT
 
 # Sensitive on purpose: a place name the fake masker hides. It may appear in
 # stored, sealed text, and never in anything sent to a model or to a member.
@@ -366,6 +368,7 @@ class Pipeline:
                 inference=inference,
                 masked=self.masked,
                 rules=providers.masking_rules,
+                instructions=providers.model_instructions,
                 audit=providers.audit,
                 concurrency=self.concurrency,
                 clock=clock,
@@ -430,8 +433,9 @@ def make_pipeline(
     script: Callable[[ChatRequest], Mapping[str, Any]] = reasonable_answer,
     concurrency: int = 2,
     accept_plan: bool = True,
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
 ) -> Pipeline:
-    rt = make_run_team()
+    rt = make_run_team(masking_policy)
     providers = rt.harness.providers
     store = PaperStore(providers.encryption, rt.clock)
     masked = FakeMaskedTexts()

@@ -52,6 +52,7 @@ from app.domain.notifications import EmailDeliveryError
 from app.domain.projects import (
     AlreadyMemberError,
     LastOwnerError,
+    MaskingRequiredError,
     NoSuchAccountError,
     ProjectError,
 )
@@ -165,6 +166,8 @@ _PROJECT_STATUS: dict[type[ProjectError], int] = {
     AlreadyMemberError: 409,
     # 422, not 404: on a project route the UI reads 404 as "no such project".
     NoSuchAccountError: 422,
+    # 409, as for the last owner: the request is valid, the deployment's state refuses it.
+    MaskingRequiredError: 409,
 }
 
 
@@ -174,6 +177,8 @@ async def _project_error(_: Request, exc: Exception) -> JSONResponse:
     extensions: dict[str, Any] = {}
     if isinstance(exc, LastOwnerError):
         extensions["last_owner"] = True
+    if isinstance(exc, MaskingRequiredError):
+        extensions["masking_required"] = True
     return problem(status, str(exc), **extensions)
 
 

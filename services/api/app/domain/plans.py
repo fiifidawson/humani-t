@@ -765,6 +765,8 @@ class PrivacyReceipt:
     items: tuple[SentText, ...]
     plan_version: int | None = None
     change_request_id: UUID | None = None
+    # False when the project's masking was off: only its rule terms were masked.
+    is_masked: bool = True
 
     def __post_init__(self) -> None:
         require_aware("PrivacyReceipt", created_at=self.created_at)
@@ -839,6 +841,7 @@ class StoredReceipt:
     body_sealed: bytes
     plan_version: int | None = None
     change_request_id: UUID | None = None
+    is_masked: bool = True
 
     def __post_init__(self) -> None:
         require_aware("StoredReceipt", created_at=self.created_at)

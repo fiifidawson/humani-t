@@ -21,9 +21,11 @@ from httpx2 import Response
 
 from app.domain.audit import AuditEvent, ChainReport
 from app.domain.encryption import EncryptionContext
+from app.domain.masking import MaskingPolicy
 from tests.support import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    MASKED_BY_DEPLOYMENT,
     USER_EMAIL,
     USER_PASSWORD,
     AuthHarness,
@@ -74,19 +76,21 @@ class Team:
         return {"owner": self.owner, "reviewer": self.reviewer, "viewer": self.viewer}[role]
 
 
-def make_project_harness() -> AuthHarness:
+def make_project_harness(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> AuthHarness:
     """Return a harness in which a password sign-in is a full sign-in.
 
     Project specs cover authorisation, so they opt out of MFA; the MFA specs cover it.
     """
     if "mfa_policy" not in inspect.signature(make_harness).parameters:
-        return make_harness()
+        return make_harness(masking_policy=masking_policy)
     mfa = importlib.import_module("app.domain.mfa")
-    return make_harness(mfa_policy=mfa.MfaPolicy(is_required=False))
+    return make_harness(
+        mfa_policy=mfa.MfaPolicy(is_required=False), masking_policy=masking_policy
+    )
 
 
-def make_team() -> Team:
-    harness = make_project_harness()
+def make_team(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> Team:
+    harness = make_project_harness(masking_policy)
     harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
     for email in (OWNER_EMAIL, REVIEWER_EMAIL, VIEWER_EMAIL, OUTSIDER_EMAIL):
         harness.create_user(email, PASSWORD)

@@ -22,6 +22,8 @@ import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
 import { LeaveControl } from "./LeaveProject";
 import { MaskingRulesSection } from "./MaskingRules";
+import { MaskingSwitch } from "./MaskingSwitch";
+import { ModelInstructionsSection } from "./ModelInstructions";
 import { ArchiveControl, ArchiveStatus } from "./ProjectArchive";
 import { MembersSection } from "./ProjectMembers";
 import { SettingsSection } from "./SettingsSection";
@@ -61,11 +63,16 @@ export function ProjectSettingsPage() {
 					<MembersSection projectId={projectId} isOwner={role === "owner"} />
 				</SettingsSection>
 				<SettingsSection title="Privacy">
+					<MaskingSwitch project={project.data} />
 					<MaskingRulesSection
 						projectId={projectId}
 						isOwner={role === "owner"}
 					/>
 				</SettingsSection>
+				<ModelInstructionsSection
+					projectId={projectId}
+					isOwner={role === "owner"}
+				/>
 				<SettingsSection title="Danger zone" isDanger>
 					<Stack gap="4">
 						<LeaveControl project={project.data} />

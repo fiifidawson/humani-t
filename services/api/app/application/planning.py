@@ -1,9 +1,10 @@
 """The search-planning conversation: from a review's question to an accepted plan.
 
 Either the model drafts and redrafts until a person accepts a version, or a person
-uploads their own terms and no model is called. Model input is masked first, goes through
-`GuardedInference` with no transaction open, and is kept as a privacy receipt. The audit
-log gets ids only. The rules themselves live in `domain/plans.py`.
+uploads their own terms and no model is called. Model input is masked as the project
+chooses (ADR 0014), goes through `GuardedInference` with no transaction open, and is kept
+as a privacy receipt. The audit log gets ids only. The rules themselves live in
+`domain/plans.py`.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from app.application.accounts import Current
 from app.application.audit import SYSTEM, Actor, AuditLog
 from app.application.encryption import ScopeEncryption
 from app.application.inference import GuardedInference
-from app.application.masking import MaskingRuleService
+from app.application.masking import MaskingRuleService, mask_as_chosen
 from app.application.membership import REVIEW_NOT_FOUND, require_review_member
 from app.application.reviews import question_context
 from app.domain.accounts import NotFoundError
@@ -36,7 +37,7 @@ from app.domain.inference import (
     InvalidStructuredOutputError,
     PromptRefusedError,
 )
-from app.domain.masking import MaskingRule, holds_placeholder
+from app.domain.masking import ProjectPrivacy, holds_placeholder
 from app.domain.plans import (
     AuthorKind,
     ChangeKind,
@@ -264,6 +265,7 @@ class PlanVersionView:
 class _ReceiptLinks:
     plan_version: int | None
     change_request_id: UUID | None
+    is_masked: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,8 +335,8 @@ class PlanService:
                 review_id
             ):
                 raise PlanConflictError("This review already has a search plan. Showing it.")
-            question, rules = await self._question_and_rules(uow, review)
-        masked = _Masked(await self._mask(SentTextKind.QUESTION, question, rules))
+            question, privacy = await self._question_and_privacy(uow, review)
+        masked = _Masked(await self._mask(SentTextKind.QUESTION, question, privacy))
         now = self._clock()
         conversation = PlanConversation(
             review.id, review.project_id, mode, now, current.user.id
@@ -342,13 +344,13 @@ class PlanService:
         plan = None
         if mode is PlanMode.DEEP:
             result = await self._ask(
-                review, ModelCallPurpose.CLARIFY, masked, rules, None, current
+                review, ModelCallPurpose.CLARIFY, masked, privacy, None, current
             )
             conversation = replace(conversation, questions=_questions_from(result.output))
             trigger = ReviewTrigger.CLARIFY
         else:
             result = await self._ask(
-                review, ModelCallPurpose.DRAFT, masked, rules, None, current
+                review, ModelCallPurpose.DRAFT, masked, privacy, None, current
             )
             plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, now)
             trigger = ReviewTrigger.DRAFT
@@ -393,19 +395,19 @@ class PlanService:
                 await self._seal_conversation(uow, conversation, stored.version)
             )
             await self._record(uow, current.actor(request_id), "plan.answered", review)
-            question, rules = await self._question_and_rules(uow, review)
+            question, privacy = await self._question_and_privacy(uow, review)
             await uow.commit()
         if not conversation.is_ready_to_draft:
             return await self.get(current, review_id)
         answered = [
-            (q, await self._mask(SentTextKind.ANSWER, q.answer, rules, ref=q.id))
+            (q, await self._mask(SentTextKind.ANSWER, q.answer, privacy, ref=q.id))
             for q in conversation.questions
             if q.answer is not None
         ]
         masked = _Masked(
-            await self._mask(SentTextKind.QUESTION, question, rules), tuple(answered)
+            await self._mask(SentTextKind.QUESTION, question, privacy), tuple(answered)
         )
-        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, rules, None, current)
+        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, privacy, None, current)
         plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, self._clock())
         plan = replace(plan, clarifications=conversation.questions)
         async with self._storage.unit_of_work() as uow:
@@ -453,15 +455,15 @@ class PlanService:
             if review.status is not ReviewStatus.CHANGES_REQUESTED:
                 await uow.reviews.save(review.transitioned(ReviewTrigger.REQUEST_CHANGES))
             await self._record(uow, current.actor(request_id), "plan.changes_requested", review)
-            question, rules = await self._question_and_rules(uow, review)
+            question, privacy = await self._question_and_privacy(uow, review)
             await uow.commit()
         masked = _Masked(
-            await self._mask(SentTextKind.QUESTION, question, rules),
+            await self._mask(SentTextKind.QUESTION, question, privacy),
             current_plan=SentText(SentTextKind.CURRENT_PLAN, _plan_json(latest)),
-            change=await self._mask(SentTextKind.CHANGE_REQUEST, change.text, rules),
+            change=await self._mask(SentTextKind.CHANGE_REQUEST, change.text, privacy),
         )
         result = await self._ask(
-            review, ModelCallPurpose.REVISE, masked, rules, latest, current, change.id
+            review, ModelCallPurpose.REVISE, masked, privacy, latest, current, change.id
         )
         concepts, criteria, notes = _draft_from(result.output)
         plan = latest.followed_by(
@@ -594,9 +596,9 @@ class PlanService:
             latest = await self._latest(uow, review_id)
             if latest is not None:
                 return latest
-            question, rules = await self._question_and_rules(uow, review)
-        masked = _Masked(await self._mask(SentTextKind.QUESTION, question, rules))
-        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, rules, None, None)
+            question, privacy = await self._question_and_privacy(uow, review)
+        masked = _Masked(await self._mask(SentTextKind.QUESTION, question, privacy))
+        result = await self._ask(review, ModelCallPurpose.DRAFT, masked, privacy, None, None)
         now = self._clock()
         plan = _model_plan(review.id, None, result, DRAFT_PROMPT_VERSION, now)
         async with self._storage.unit_of_work() as uow:
@@ -702,23 +704,23 @@ class PlanService:
         record = await uow.plans.latest_version(review_id)
         return None if record is None else (await self.open_version(uow, record))[0]
 
-    async def _question_and_rules(
+    async def _question_and_privacy(
         self, uow: UnitOfWork, review: Review
-    ) -> tuple[str, Sequence[MaskingRule]]:
+    ) -> tuple[str, ProjectPrivacy]:
         question = await self._encryption.decrypt(
             uow, question_context(review.project_id, review.id), review.question_sealed
         )
-        return question.decode(), await self._rules.rules_for(uow, review.project_id)
+        return question.decode(), await self._rules.privacy_for(uow, review.project_id)
 
     async def _mask(
         self,
         kind: SentTextKind,
         text: str,
-        rules: Sequence[MaskingRule],
+        privacy: ProjectPrivacy,
         *,
         ref: str | None = None,
     ) -> SentText:
-        masked = await self._sanitizer.mask(text, rules=rules)
+        masked = await mask_as_chosen(self._sanitizer, text, privacy)
         return SentText(kind, masked.masked, dict(masked.counts), ref)
 
     async def _ask(
@@ -726,20 +728,21 @@ class PlanService:
         review: Review,
         purpose: ModelCallPurpose,
         masked: _Masked,
-        rules: Sequence[MaskingRule],
+        privacy: ProjectPrivacy,
         current_plan: ReviewPlan | None,
         current: Current | None,
         change_request_id: UUID | None = None,
     ) -> ChatResult:
-        """Call the model with masked text only, and store a receipt of what it received.
+        """Call the model with the text masked as the project chose; keep a receipt of it.
 
         The guard also refuses the project's always-masked terms: the model's own text in
         the message (its questions, the current plan) was never masked for them. The
         receipt names the version being drafted (the one after `current_plan`; none for
-        clarifying questions) and the change request behind a revision.
+        clarifying questions), the change request behind a revision, and whether the
+        project's masking was on.
         """
         system, schema, prompt_version = _PROMPTS[purpose]
-        inference = self._inference.with_rules(rules)
+        inference = self._inference.for_project(privacy)
         request = ChatRequest(
             messages=(
                 ChatMessage(ChatRole.SYSTEM, system),
@@ -751,7 +754,7 @@ class PlanService:
         drafting = None
         if purpose is not ModelCallPurpose.CLARIFY:
             drafting = 1 if current_plan is None else current_plan.version + 1
-        links = _ReceiptLinks(drafting, change_request_id)
+        links = _ReceiptLinks(drafting, change_request_id, privacy.is_masked)
         # A reasoning model's answers vary, so an unusable one is asked for again
         # once. Each attempt sent the text, so each leaves its own receipt.
         for attempt in (1, 2):
@@ -824,6 +827,7 @@ class PlanService:
                     ),
                     plan_version=links.plan_version,
                     change_request_id=links.change_request_id,
+                    is_masked=links.is_masked,
                 )
             )
             await uow.commit()
@@ -847,6 +851,7 @@ class PlanService:
             ),
             plan_version=record.plan_version,
             change_request_id=record.change_request_id,
+            is_masked=record.is_masked,
         )
 
     async def _add_version(

@@ -16,8 +16,10 @@ from app.api.dependencies import (
     build_providers,
     inference_destination,
     inference_provider,
+    operator_masking_policy,
     paper_source_destination,
 )
+from app.domain.masking import MaskingPolicy
 from app.inference.ollama import OllamaInferenceProvider
 from app.inference.openai_compatible import OpenAICompatibleInferenceProvider
 from app.net.base import Destination
@@ -122,3 +124,15 @@ class TestInference:
 
         assert providers.inference.model_id == "qwen3:8b"
         await providers.close()
+
+
+class TestMaskingPolicy:
+    def test_a_local_model_leaves_masking_to_each_project(self):
+        assert operator_masking_policy(settings()) == MaskingPolicy(is_model_hosted=False)
+
+    def test_a_hosted_model_requires_masking_unless_the_operator_allows_otherwise(self):
+        hosted = {"inference_url": "https://api.openai.com/v1", "allow_hosted_inference": True}
+        allowed = {**hosted, "allow_unmasked_hosted_inference": True}
+
+        assert operator_masking_policy(settings(**hosted)) == MaskingPolicy(True)
+        assert operator_masking_policy(settings(**allowed)) == MaskingPolicy(True, True)

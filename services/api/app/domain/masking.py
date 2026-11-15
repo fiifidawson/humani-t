@@ -342,6 +342,11 @@ def rule_spans(text: str, rules: Sequence[MaskingRule]) -> tuple[MaskSpan, ...]:
     )
 
 
+def mask_rules_only(text: str, rules: Sequence[MaskingRule]) -> MaskedText:
+    """Mask only the project's rule terms: what a project with masking off sends."""
+    return apply_spans(text, rule_spans(text, rules))
+
+
 def masking_fingerprint(
     detector_sources: Collection[str], rules: Sequence[MaskingRule]
 ) -> tuple[str, ...]:
@@ -350,6 +355,58 @@ def masking_fingerprint(
     A stored masking with another fingerprint is out of date and must be redone.
     """
     return (*sorted(detector_sources), *sorted(rule_source(r.id) for r in rules))
+
+
+# Stands in for the detectors in a fingerprint when a project's masking was off, so a
+# masking made that way is never mistaken for a real one (ADR 0014).
+MASKING_OFF_SOURCE = detector_source("masking-off", "1")
+
+
+def is_unmasked_fingerprint(masked_with: Sequence[str]) -> bool:
+    """Whether a stored masking was made with the project's masking off: rule terms only."""
+    return MASKING_OFF_SOURCE in masked_with
+
+
+@dataclass(frozen=True, slots=True)
+class MaskingPolicy:
+    """The operator's side of a project's masking choice (ADR 0014), built from settings.
+
+    `is_model_hosted` says the model runs outside the deployment; `allows_unmasked_hosted`
+    says the operator lets owners send it unmasked text anyway.
+    """
+
+    is_model_hosted: bool
+    allows_unmasked_hosted: bool = False
+
+    @property
+    def is_masking_required(self) -> bool:
+        return self.is_model_hosted and not self.allows_unmasked_hosted
+
+    @property
+    def starts_masked(self) -> bool:
+        """Whether a new project's switch starts on."""
+        return self.is_model_hosted
+
+    @property
+    def can_turn_masking_off(self) -> bool:
+        return not self.is_masking_required
+
+
+def is_masking_applied(*, is_masking_on: bool, policy: MaskingPolicy) -> bool:
+    """Whether a project's text is masked now: its owner's switch, unless the policy overrules.
+
+    Decided each time text is about to leave, never read back from storage, so a project
+    switched off under a local model is masked again once the model is hosted.
+    """
+    return is_masking_on or policy.is_masking_required
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectPrivacy:
+    """What a use case needs to send a project's text: its rules, and whether to mask."""
+
+    rules: tuple[MaskingRule, ...]
+    is_masked: bool
 
 
 @dataclass(frozen=True, slots=True)

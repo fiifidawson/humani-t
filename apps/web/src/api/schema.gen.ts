@@ -557,6 +557,26 @@ export interface paths {
         patch: operations["rename_project_api_v1_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/masking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch masking on or off for the project
+         * @description Owners only. The project's own masking rules apply either way (ADR 0014).
+         */
+        put: operations["set_project_masking_api_v1_projects__project_id__masking_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/archive": {
         parameters: {
             query?: never;
@@ -1171,6 +1191,27 @@ export interface paths {
          * @description Texts already masked keep their placeholders until the next mask stage.
          */
         delete: operations["remove_masking_rule_api_v1_projects__project_id__masking_rules__rule_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/model-instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's instructions to the model and every earlier version */
+        get: operations["read_instructions_api_v1_projects__project_id__model_instructions_get"];
+        /**
+         * Save these instructions as the project's next version
+         * @description Refuses a term the project always masks, naming the field and never the term.
+         */
+        put: operations["save_instructions_api_v1_projects__project_id__model_instructions_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2281,6 +2322,16 @@ export interface components {
              */
             status: string;
         };
+        /** InstructionsSentOut */
+        InstructionsSentOut: {
+            /** Version */
+            version: number;
+            /**
+             * Text
+             * @description The project's writing instructions as the Writer got them.
+             */
+            text: string;
+        };
         /** InvitationIn */
         InvitationIn: {
             /**
@@ -2428,6 +2479,11 @@ export interface components {
             criteria_versions: number[];
             /** Plan Versions */
             plan_versions: number[];
+            /**
+             * Instructions Versions
+             * @description The project's instruction versions the model calls carried.
+             */
+            instructions_versions: number[];
             /** Sources */
             sources: string[];
             /** Queries */
@@ -2445,6 +2501,11 @@ export interface components {
              * @description Runs whose discovery this run reused.
              */
             papers_from_runs: string[];
+            /**
+             * Masking
+             * @description Whether the run's text was masked, as its stages recorded it (ADR 0014): mixed when the switch changed during the run; null when no stage recorded it.
+             */
+            masking: ("on" | "off" | "mixed") | null;
             /** Stage Facts */
             stage_facts: components["schemas"]["StageFactsOut"][];
         };
@@ -2612,6 +2673,61 @@ export interface components {
          * @enum {string}
          */
         ModelCallPurpose: "clarify" | "draft" | "revise";
+        /**
+         * ModelInstructionsIn
+         * @example {
+         *       "screening": "Treat studies in refugee camps as displaced settings.",
+         *       "writing": "Write for a field manager: short sentences, no jargon."
+         *     }
+         */
+        ModelInstructionsIn: {
+            /**
+             * Screening
+             * @description How to judge papers; blank for none.
+             */
+            screening: string;
+            /**
+             * Writing
+             * @description How to write briefs and answers; blank for none.
+             */
+            writing: string;
+            /**
+             * Based On Version
+             * @description The version being edited; null if the project has none yet.
+             */
+            based_on_version: number | null;
+        };
+        /** ModelInstructionsOut */
+        ModelInstructionsOut: {
+            /** @description The instructions in force; null means none were ever saved. */
+            current: components["schemas"]["ModelInstructionsVersionOut"] | null;
+            /**
+             * Versions
+             * @description Every version, oldest first.
+             */
+            versions: components["schemas"]["ModelInstructionsVersionOut"][];
+        };
+        /** ModelInstructionsVersionOut */
+        ModelInstructionsVersionOut: {
+            /** Version */
+            version: number;
+            /**
+             * Screening
+             * @description As typed; masked only when sent to a model.
+             */
+            screening: string;
+            /**
+             * Writing
+             * @description As typed; masked only when sent to a model.
+             */
+            writing: string;
+            saved_by: components["schemas"]["UserRefOut"];
+            /**
+             * Saved At
+             * Format: date-time
+             */
+            saved_at: string;
+        };
         /** OptionOut */
         OptionOut: {
             /** Name */
@@ -2918,6 +3034,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ProjectMaskingIn */
+        ProjectMaskingIn: {
+            /** Is Masking On */
+            is_masking_on: boolean;
+        };
         /** ProjectOut */
         ProjectOut: {
             /**
@@ -2938,6 +3059,21 @@ export interface components {
             archived_at: string | null;
             /** @description UI_UX_SPEC §11.1: derived from the newest review and its latest run. */
             status: components["schemas"]["ProjectStatus"];
+            /**
+             * Is Masking On
+             * @description The owner's switch, as stored (ADR 0014).
+             */
+            is_masking_on: boolean;
+            /**
+             * Is Masking Effective
+             * @description Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking.
+             */
+            is_masking_effective: boolean;
+            /**
+             * Can Turn Masking Off
+             * @description false while the deployment requires masking for every project.
+             */
+            can_turn_masking_off: boolean;
         };
         /** ProjectRenameIn */
         ProjectRenameIn: {
@@ -3048,6 +3184,11 @@ export interface components {
              * @description The change request a revision was drafted from.
              */
             change_request_id?: string | null;
+            /**
+             * Is Masked
+             * @description false when the project's masking was off: the text was sent as written, apart from the project's own masking rules.
+             */
+            is_masked: boolean;
         };
         /** RecoveryCodeIn */
         RecoveryCodeIn: {
@@ -3284,7 +3425,7 @@ export interface components {
             ref: string | null;
             /**
              * Sent
-             * @description Exactly what the model received: masked.
+             * @description Exactly what the model received; see `is_masked`.
              */
             sent: string;
             /**
@@ -3686,6 +3827,13 @@ export interface components {
             manifest: {
                 [key: string]: unknown;
             };
+            /**
+             * Is Masked
+             * @description Whether the brief's text was masked (ADR 0014); null for a brief written before this was recorded.
+             */
+            is_masked: boolean | null;
+            /** @description Masked where masking applies; null when the Writer had none. */
+            instructions: components["schemas"]["InstructionsSentOut"] | null;
         };
         /** TradeOffOut */
         TradeOffOut: {
@@ -3941,7 +4089,7 @@ export interface components {
             asked_at: string;
             /**
              * Question Sent
-             * @description The question as the model will see it: masked.
+             * @description The question as the model will see it.
              */
             question_sent: string;
             /**
@@ -3951,6 +4099,11 @@ export interface components {
             masked: {
                 [key: string]: number;
             };
+            /**
+             * Is Masked
+             * @description false when the project's masking was off: the question was sent as written, apart from the project's own masking rules.
+             */
+            is_masked: boolean;
             /** Answered At */
             answered_at: string | null;
             /** Model Id */
@@ -4949,6 +5102,55 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_project_masking_api_v1_projects__project_id__masking_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMaskingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Turning it off needs a recent sign-in; reauthenticate first */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The deployment requires masking: it stays on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6336,6 +6538,79 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_instructions_api_v1_projects__project_id__model_instructions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelInstructionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_instructions_api_v1_projects__project_id__model_instructions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelInstructionsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelInstructionsVersionOut"];
+                };
+            };
+            /** @description Someone saved another version since it was read */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

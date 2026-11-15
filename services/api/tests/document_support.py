@@ -20,6 +20,7 @@ from httpx2 import Response
 from pypdf import PdfReader, PdfWriter
 
 from app.api.dependencies import build_providers
+from app.domain.masking import MaskingPolicy
 from app.domain.mfa import MfaPolicy
 from app.extraction.base import DocumentExtractor
 from app.extraction.local import LocalDocumentExtractor
@@ -42,6 +43,7 @@ from tests.project_support import (
 from tests.support import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    MASKED_BY_DEPLOYMENT,
     ORIGIN,
     AuthHarness,
     FakeClock,
@@ -257,6 +259,7 @@ def make_document_team(
     scanner: MalwareScanner | None = None,
     extractor: DocumentExtractor | None = None,
     clock: FakeClock | None = None,
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
     **settings_overrides: object,
 ) -> DocumentTeam:
     clock = clock or FakeClock()
@@ -280,6 +283,7 @@ def make_document_team(
         file_store=files,
         malware_scanner=chosen_scanner,
         document_extractor=extractor or LocalDocumentExtractor(),
+        masking_policy=masking_policy,
     )
     harness = AuthHarness(
         create_app(settings, providers=providers),

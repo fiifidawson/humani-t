@@ -154,6 +154,9 @@ class Project:
     deleted_at: datetime | None = None
     # Optimistic locking, as for users: a stale copy can never overwrite a newer one.
     version: int = 0
+    # The owner's switch only. Whether text is masked is decided when it is sent
+    # (`domain.masking.is_masking_applied`), because the operator's policy can overrule it.
+    is_masking_on: bool = True
 
     def __post_init__(self) -> None:
         require_aware(
@@ -175,6 +178,9 @@ class Project:
 
     def renamed(self, name_sealed: bytes) -> Project:
         return replace(self, name_sealed=name_sealed)
+
+    def with_masking(self, *, is_on: bool) -> Project:
+        return replace(self, is_masking_on=is_on)
 
     def archived(self, at: datetime) -> Project:
         """Archive; archiving again keeps the first date."""
@@ -217,6 +223,10 @@ class AlreadyMemberError(ProjectError):
 
 class NoSuchAccountError(ProjectError):
     """No active account uses the email given for a new member."""
+
+
+class MaskingRequiredError(ProjectError):
+    """The deployment sends text to a hosted model and does not let owners turn masking off."""
 
 
 def require_an_owner_remains(

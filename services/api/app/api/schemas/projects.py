@@ -31,6 +31,10 @@ class ProjectRenameIn(_Strict):
     name: str = _Name
 
 
+class ProjectMaskingIn(_Strict):
+    is_masking_on: bool
+
+
 class MemberIn(_Strict):
     email: EmailStr
     role: Role
@@ -49,6 +53,16 @@ class ProjectOut(BaseModel):
     status: ProjectStatus = Field(
         description="UI_UX_SPEC §11.1: derived from the newest review and its latest run."
     )
+    is_masking_on: bool = Field(description="The owner's switch, as stored (ADR 0014).")
+    is_masking_effective: bool = Field(
+        description=(
+            "Whether text is masked before it reaches the model now: the switch, unless "
+            "the deployment's hosted model requires masking."
+        )
+    )
+    can_turn_masking_off: bool = Field(
+        description="false while the deployment requires masking for every project."
+    )
 
     @classmethod
     def from_view(cls, view: ProjectView) -> ProjectOut:
@@ -59,6 +73,9 @@ class ProjectOut(BaseModel):
             created_at=view.created_at,
             archived_at=view.archived_at,
             status=view.status,
+            is_masking_on=view.masking.is_on,
+            is_masking_effective=view.masking.is_effective,
+            can_turn_masking_off=view.masking.can_turn_off,
         )
 
 

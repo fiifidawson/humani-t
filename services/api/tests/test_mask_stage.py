@@ -77,7 +77,7 @@ class Lane:
         providers = rt.harness.providers
         self.rt = rt
         self.texts = texts
-        self.masks = PaperMaskStore(providers.encryption, rt.clock)
+        self.masks = PaperMaskStore(providers.encryption, providers.masking, rt.clock)
         masker = DetectorSanitizer([PatternDetector()], entity_types=PAPER_ENTITY_TYPES)
         self.stage = MaskStage(
             storage=providers.storage,
@@ -249,6 +249,7 @@ class TestTheSummary:
         summary = finished_summary(rt, Lane(rt, FakeIngestedTexts([])).run())
 
         assert summary["manifest"] == {
+            "is_masked": True,
             "detectors": ["patterns@1"],
             "entity_types": sorted(t.value for t in PAPER_ENTITY_TYPES),
             "masking_rules": 0,

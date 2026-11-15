@@ -266,6 +266,13 @@ class Settings(BaseSettings):
             "default: turning it on sends masked text outside the deployment."
         ),
     )
+    allow_unmasked_hosted_inference: bool = Field(
+        default=False,
+        description=(
+            "Let a project's owner turn masking off while the model is hosted. Needs "
+            "allow_hosted_inference; off keeps every project's text masked (ADR 0014)."
+        ),
+    )
     paper_sources: str = Field(
         default="",
         description="Comma-separated sources to search: openalex, europepmc, arxiv.",
@@ -520,7 +527,23 @@ class Settings(BaseSettings):
             raise ValueError(
                 "production requires https for an inference_url outside the deployment"
             )
+        if self.allow_unmasked_hosted_inference and not self.allow_hosted_inference:
+            raise ValueError("allow_unmasked_hosted_inference requires allow_hosted_inference")
         return self
+
+    @property
+    def is_inference_hosted(self) -> bool:
+        """Whether text sent to the model leaves the deployment (ADR 0014).
+
+        Outside the deployment means any host `_is_internal_host` does not accept, or an
+        Ollama cloud model. The demo model answers in this process.
+        """
+        if self.demo_inference:
+            return False
+        host = (urlsplit(self.inference_url.strip()).hostname or "").rstrip(".").lower()
+        return bool(_OLLAMA_CLOUD_MODEL.search(self.inference_model)) or not _is_internal_host(
+            host
+        )
 
     @model_validator(mode="after")
     def _paper_sources_are_known(self) -> Self:

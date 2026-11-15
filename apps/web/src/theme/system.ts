@@ -30,7 +30,9 @@ import {
 	semanticTokens,
 	separatorRecipe,
 	skeletonRecipe,
+	switchSlotRecipe,
 	tableSlotRecipe,
+	textareaRecipe,
 	textStyles,
 	tokens,
 } from "@chakra-ui/react/theme";
@@ -261,6 +263,21 @@ const config = defineConfig({
 			link: linkRecipe,
 			separator: separatorRecipe,
 			skeleton: skeletonRecipe,
+			// A text box is an input: the same rounded corner and 3:1 edge.
+			textarea: {
+				...textareaRecipe,
+				base: { ...textareaRecipe.base, borderRadius: "card" },
+				variants: {
+					...textareaRecipe.variants,
+					variant: {
+						...textareaRecipe.variants?.variant,
+						outline: {
+							...textareaRecipe.variants?.variant?.outline,
+							borderColor: "border.emphasized",
+						},
+					},
+				},
+			},
 		},
 		slotRecipes: {
 			alert: alertSlotRecipe,
@@ -284,6 +301,7 @@ const config = defineConfig({
 				},
 			},
 			radioGroup: radioGroupSlotRecipe,
+			switch: switchSlotRecipe,
 			table: tableSlotRecipe,
 		},
 	},

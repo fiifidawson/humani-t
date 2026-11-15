@@ -244,12 +244,14 @@ function UploadArea({
 function DocumentRows({
 	documents,
 	isOwner,
+	isMasked,
 	uploaderName,
 	onOpen,
 	onDelete,
 }: {
 	documents: readonly ProjectDocument[];
 	isOwner: boolean;
+	isMasked: boolean;
 	uploaderName: (userId: string) => string;
 	onOpen: (documentId: string) => void;
 	onDelete: (document: ProjectDocument) => void;
@@ -286,9 +288,15 @@ function DocumentRows({
 								<Table.Cell>
 									<Stack gap="1">
 										<HStack gap="1.5">
-											<StatusIcon status={document.status} />
+											<StatusIcon
+												status={
+													isMasked || document.status !== "awaiting_review"
+														? document.status
+														: "approved"
+												}
+											/>
 											<span data-testid="status">
-												{statusWords(document.status)}
+												{statusWords(document.status, isMasked)}
 											</span>
 										</HStack>
 										{document.failure_message == null ? null : (
@@ -423,11 +431,13 @@ function MaskedReview({
 	projectId,
 	document,
 	isOwner,
+	isMasked,
 	onClose,
 }: {
 	projectId: string;
 	document: ProjectDocument;
 	isOwner: boolean;
+	isMasked: boolean;
 	onClose: () => void;
 }) {
 	const api = useApi();
@@ -550,6 +560,12 @@ function MaskedReview({
 					</Text>
 				</Alert.Content>
 			</Alert.Root>
+			{isMasked ? null : (
+				<Text fontWeight="medium">
+					Masking is off, so the model reads this document as written. Your
+					decision applies if masking is turned back on.
+				</Text>
+			)}
 			<Text>
 				{totalMasked(document.masked_items) === 0
 					? "Nothing was masked."
@@ -627,6 +643,7 @@ export function DocumentsPage() {
 	const members = useQuery(membersQuery(api, projectId));
 	const listing = useQuery(documentsQuery(api, projectId, POLL_INTERVAL_MS));
 	const isOwner = project.data?.role === "owner";
+	const isMasked = project.data?.is_masking_effective ?? true;
 	const [deleting, setDeleting] = useState<ProjectDocument | null>(null);
 	const [deleted, setDeleted] = useState<string | null>(null);
 
@@ -661,6 +678,12 @@ export function DocumentsPage() {
 						masked, then an owner checks the masking. Only approved documents
 						are used, and the brief cites them as D1, D2 and so on.
 					</Text>
+					{isMasked ? null : (
+						<Text maxW="3xl" fontWeight="medium">
+							Masking is off for this project, so the model reads each ready
+							document as written. The project's masking rules still apply.
+						</Text>
+					)}
 					{listing.isPending || project.isPending ? (
 						<Loading what="the documents" />
 					) : null}
@@ -691,6 +714,7 @@ export function DocumentsPage() {
 								<DocumentRows
 									documents={listing.data.documents}
 									isOwner={isOwner}
+									isMasked={isMasked}
 									uploaderName={uploaderName}
 									onOpen={open}
 									onDelete={(document) => {
@@ -713,6 +737,7 @@ export function DocumentsPage() {
 						projectId={projectId}
 						document={opened}
 						isOwner={isOwner}
+						isMasked={isMasked}
 						onClose={() => open(undefined)}
 					/>
 				)}

@@ -44,7 +44,7 @@ def _mask_stage(rt: RunTeam) -> MaskStage:
     return MaskStage(
         storage=providers.storage,
         texts=_NoPapers(),
-        masks=PaperMaskStore(providers.encryption, rt.clock),
+        masks=PaperMaskStore(providers.encryption, providers.masking, rt.clock),
         rules=providers.masking_rules,
         sanitizer=masker,
         detector_sources=masker.sources,

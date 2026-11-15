@@ -17,6 +17,7 @@ import {
 	problem,
 	text,
 } from "./fakeHttp";
+import { FakeInstructions } from "./fakeInstructions";
 import { FakeReviews } from "./fakeReviews";
 
 const API = "*/api/v1";
@@ -62,12 +63,18 @@ interface FakeProject {
 	archived_at: string | null;
 	/** What the newest review makes it; archiving overrides it, as in the API. */
 	status: components["schemas"]["ProjectStatus"];
+	is_masking_on: boolean;
+	/** False plays a deployment whose hosted model requires masking (ADR 0014). */
+	can_turn_masking_off: boolean;
 }
 
 const projectOut = (project: FakeProject) => ({
 	...project,
 	status: project.archived_at === null ? project.status : "archived",
+	is_masking_effective: project.is_masking_on || !project.can_turn_masking_off,
 });
+const MASKING_REQUIRED =
+	"This deployment sends text to a hosted model, so masking stays on.";
 
 /** Someone in a project other than the signed-in person, whose role is the project's `role`. */
 interface FakeMember {
@@ -120,6 +127,18 @@ export class FakeApi {
 		roleIn: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
 		userId: () => this.session?.userId ?? null,
+	});
+	/** A project's instructions to the model (fakeInstructions.ts). */
+	readonly instructions = new FakeInstructions({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		user: () => {
+			const user = this.users.find((u) => u.id === this.session?.userId);
+			return user === undefined
+				? null
+				: { id: user.id, display_name: user.display_name };
+		},
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -181,6 +200,8 @@ export class FakeApi {
 			created_at: createdAt,
 			archived_at: null,
 			status: "planning",
+			is_masking_on: true,
+			can_turn_masking_off: true,
 		};
 		this.projects.push(project);
 		return project;
@@ -909,6 +930,34 @@ export class FakeApi {
 				return HttpResponse.json(projectOut(project));
 			}),
 
+			// Owner only; turning masking off also needs a recent sign-in, and is
+			// refused while the deployment requires masking.
+			http.put(
+				`${API}/projects/:projectId/masking`,
+				async ({ params, request }) => {
+					const body = await jsonBody(request);
+					const isOn = body["is_masking_on"];
+					const { project, refused } = this.gate(params["projectId"], {
+						isOwnersOnly: true,
+						needsRecentSignIn: isOn === false,
+					});
+					if (refused !== null) {
+						return refused;
+					}
+					if (typeof isOn !== "boolean") {
+						return invalidBody(
+							"is_masking_on",
+							"Input should be a valid boolean",
+						);
+					}
+					if (!isOn && !project.can_turn_masking_off) {
+						return problem(409, MASKING_REQUIRED, { masking_required: true });
+					}
+					project.is_masking_on = isOn;
+					return HttpResponse.json(projectOut(project));
+				},
+			),
+
 			// Owner only, with no recent sign-in; archiving twice keeps the first date.
 			http.post(`${API}/projects/:projectId/archive`, ({ params }) => {
 				const { project, refused } = this.gate(params["projectId"], {
@@ -1060,6 +1109,7 @@ export class FakeApi {
 
 			...this.reviews.handlers(),
 			...this.documents.handlers(),
+			...this.instructions.handlers(),
 		];
 	}
 }

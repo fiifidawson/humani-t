@@ -284,6 +284,65 @@ describe("following a document while it is processed", () => {
 	});
 });
 
+describe("documents while the project's masking is off (ADR 0014)", () => {
+	function withMaskingOff(role: Role = "owner") {
+		const { api, project } = signedInWith(role);
+		project.is_masking_on = false;
+		api.documents.add(project.id, "report.txt", { status: "awaiting_review" });
+		return { api, project };
+	}
+
+	it("says a document waiting for review is ready, because nothing needs reviewing", async () => {
+		const { project } = withMaskingOff();
+		await openDocuments(project.id);
+
+		const row = (await rowFor("report.txt")) ?? document.body;
+		expect(within(row).getByTestId("status").textContent).toBe(
+			"Ready (masking is off)",
+		);
+	});
+
+	it("says the model reads documents as written, apart from the masking rules", async () => {
+		const { project } = withMaskingOff("viewer");
+		await openDocuments(project.id);
+
+		expect(
+			screen.getByText(
+				"Masking is off for this project, so the model reads each ready document as written. The project's masking rules still apply.",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("tells the owner in the review that approving matters only once masking is on", async () => {
+		const { project } = withMaskingOff();
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		const review = await screen.findByRole("region", {
+			name: "Privacy review: D1 report.txt",
+		});
+		expect(
+			within(review).getByText(
+				"Masking is off, so the model reads this document as written. Your decision applies if masking is turned back on.",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("follows what the API says applies, not the owner's switch alone", async () => {
+		const { project } = withMaskingOff();
+		project.can_turn_masking_off = false;
+		await openDocuments(project.id);
+
+		const row = (await rowFor("report.txt")) ?? document.body;
+		expect(within(row).getByTestId("status").textContent).toBe(
+			"Waiting for privacy review",
+		);
+	});
+});
+
 describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 	function withDocumentWaiting(role: Role = "owner") {
 		const { api, project } = signedInWith(role);
