@@ -2,7 +2,7 @@
 
 This guide runs the whole stack, the language model included, on one Always Free Arm virtual machine at Oracle Cloud Infrastructure (OCI). It follows [the self-hosting guide](self-hosting.md) and links to it for everything that is not specific to Oracle: read that guide too, especially key custody and backups.
 
-> **Status: untested on OCI.** This guide was written from Oracle's and Docker's documentation, and has not yet been run end to end on a real instance. Console labels may differ from what is written here. What was checked: every pinned image in the stack is published for `linux/arm64`, and both images built from this repository build for `linux/arm64` under emulation on an x86 machine. Steps or figures that are estimates say so.
+> **Status: untested on OCI.** This guide was written from Oracle's and Docker's documentation, and has not yet been run end to end on a real instance. Console labels may differ from what is written here. What was checked: every pinned image in the stack is published for `linux/arm64`, and CI builds both of this repository's images and starts the whole stack on an Arm runner (the `compose smoke test (arm64)` check). Steps or figures that are estimates say so.
 
 > humani-t has not yet had an independent security review. Until it has, use fictional or already-public data only.
 

@@ -20,6 +20,7 @@ from app.domain.briefs import BriefRecord
 from app.domain.discovery import PaperSet, PaperText, RunPaper, RunSource, StoredPaper
 from app.domain.documents import Document, DocumentMask, DocumentReview, DocumentText
 from app.domain.encryption import WrappedDataKey
+from app.domain.label_rules import LabelRulesVersion
 from app.domain.masking import MaskingRuleRecord, PaperMask
 from app.domain.mfa import (
     ChallengePurpose,
@@ -28,6 +29,7 @@ from app.domain.mfa import (
     TotpCredential,
     WebAuthnChallenge,
 )
+from app.domain.model_instructions import StoredModelInstructions
 from app.domain.plans import StoredConversation, StoredPlanVersion, StoredReceipt
 from app.domain.projects import Membership, Project, Role
 from app.domain.questions import QuestionRecord, Thread
@@ -425,6 +427,38 @@ class ScreeningRepository(Protocol):
     async def list_for_run(self, run_id: UUID) -> list[StoredDecision]: ...
 
 
+class LabelRulesRepository(Protocol):
+    """A review's label rule versions: inserted, never updated."""
+
+    async def add(self, version: LabelRulesVersion, /) -> bool:
+        """False if the review already has this version: someone applied rules first."""
+        ...
+
+    async def latest(self, review_id: UUID) -> LabelRulesVersion | None: ...
+
+    async def list_for_review(self, review_id: UUID) -> list[LabelRulesVersion]:
+        """Oldest first."""
+        ...
+
+
+class ModelInstructionsRepository(Protocol):
+    """A project's instruction versions, sealed: inserted, never updated."""
+
+    async def add(self, version: StoredModelInstructions, /) -> bool:
+        """False if the project already has this version: someone saved first."""
+        ...
+
+    async def latest(self, project_id: UUID) -> StoredModelInstructions | None: ...
+
+    async def in_force(self, project_id: UUID, at: datetime) -> StoredModelInstructions | None:
+        """The highest version saved at or before `at`, or `None` if there was none yet."""
+        ...
+
+    async def list_for_project(self, project_id: UUID) -> list[StoredModelInstructions]:
+        """Oldest first."""
+        ...
+
+
 class PlanRepository(Protocol):
     """A review's planning conversation, its plan versions and its privacy receipts."""
 
@@ -704,6 +738,12 @@ class UnitOfWork(Protocol):
 
     @property
     def plans(self) -> PlanRepository: ...
+
+    @property
+    def label_rules(self) -> LabelRulesRepository: ...
+
+    @property
+    def model_instructions(self) -> ModelInstructionsRepository: ...
 
     @property
     def briefs(self) -> DecisionBriefRepository: ...

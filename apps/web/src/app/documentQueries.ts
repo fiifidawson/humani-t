@@ -1,7 +1,7 @@
 /**
- * The reads and the upload of a project's documents. Apart from queries.ts so
- * that only the lazily loaded documents page carries them; their keys stay in
- * `keys` with every other key.
+ * The reads and the upload of a project's documents, and its masking rules.
+ * Apart from queries.ts so that only the screens using them carry them; their
+ * keys stay in `keys` with every other key.
  */
 
 import { queryOptions } from "@tanstack/react-query";
@@ -12,6 +12,8 @@ import { keys } from "./queries";
 export type DocumentListing = components["schemas"]["DocumentListOut"];
 export type ProjectDocument = components["schemas"]["DocumentOut"];
 export type DocumentStatus = components["schemas"]["DocumentStatus"];
+export type DocumentReview = components["schemas"]["DocumentReviewOut"];
+export type MaskingRule = components["schemas"]["MaskingRuleOut"];
 
 /** A worker is still scanning, reading or masking it. */
 export const IN_PROGRESS: readonly DocumentStatus[] = [
@@ -24,10 +26,11 @@ export const IN_PROGRESS: readonly DocumentStatus[] = [
 export const isInProgress = (document: ProjectDocument): boolean =>
 	IN_PROGRESS.includes(document.status);
 
+/** `pollIntervalMs` false: never look again on a timer. */
 export const documentsQuery = (
 	api: ApiClient,
 	projectId: string,
-	pollIntervalMs: number,
+	pollIntervalMs: number | false,
 ) =>
 	queryOptions({
 		queryKey: keys.documents(projectId),
@@ -65,6 +68,63 @@ export const maskedDocumentQuery = (
 		// must name the version on screen, so never show a cached one.
 		staleTime: 0,
 	});
+
+// Raw text: the API audits every fetch, so fetch once per opening, and drop it
+// from memory as soon as nothing shows it.
+const RAW_TEXT_CACHE = {
+	staleTime: Number.POSITIVE_INFINITY,
+	gcTime: 0,
+	refetchOnWindowFocus: false,
+	refetchOnReconnect: false,
+} as const;
+
+/** The original text and every mask over it. Owners only. */
+export const documentReviewQuery = (
+	api: ApiClient,
+	projectId: string,
+	documentId: string,
+) =>
+	queryOptions({
+		queryKey: keys.documentReview(projectId, documentId),
+		queryFn: () =>
+			unwrap(
+				api.GET(
+					"/api/v1/projects/{project_id}/documents/{document_id}/review",
+					{
+						params: {
+							path: { project_id: projectId, document_id: documentId },
+						},
+					},
+				),
+			),
+		...RAW_TEXT_CACHE,
+	});
+
+/** Owners only: a rule's term is usually a name. */
+export const maskingRulesQuery = (api: ApiClient, projectId: string) =>
+	queryOptions({
+		queryKey: keys.maskingRules(projectId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/projects/{project_id}/masking-rules", {
+					params: { path: { project_id: projectId } },
+				}),
+			),
+		...RAW_TEXT_CACHE,
+	});
+
+export function addMaskingRule(
+	api: ApiClient,
+	projectId: string,
+	rule: components["schemas"]["MaskingRuleIn"],
+): Promise<MaskingRule> {
+	return unwrap(
+		api.POST("/api/v1/projects/{project_id}/masking-rules", {
+			params: { path: { project_id: projectId } },
+			body: rule,
+		}),
+	);
+}
 
 export function uploadDocument(
 	api: ApiClient,

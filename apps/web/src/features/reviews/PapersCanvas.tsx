@@ -18,8 +18,17 @@ import {
 } from "@chakra-ui/react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
-import { useId, useState } from "react";
+import {
+	ArrowRight,
+	Check,
+	ChevronDown,
+	ChevronRight,
+	CircleQuestionMark,
+	Contrast,
+	TriangleAlert,
+	X,
+} from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
@@ -37,8 +46,9 @@ import { Loading } from "../../ui/Loading";
 import { Canvas, CanvasHeading } from "./Canvas";
 import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { paperDownloads } from "./exports";
-import { plural, sourceName, TIER_ORDER, TIERS } from "./format";
+import { plural, shownLabel, sourceName, TIER_ORDER, TIERS } from "./format";
 import { MaskedText } from "./MaskedText";
+import { RulesEditor } from "./RulesEditor";
 import { LabelBadge } from "./RunCards";
 import { useReview, useRunNumber } from "./reviewContext";
 
@@ -46,22 +56,104 @@ type Schemas = components["schemas"];
 type Paper = Schemas["PaperOut"];
 
 type PaperLabel = NonNullable<PapersSearch["label"]>;
+type PaperTier = NonNullable<PapersSearch["tier"]>;
 
 const FILTERS: readonly {
-	label: PaperLabel | null;
 	name: string;
+	label?: PaperLabel;
+	tier?: PaperTier;
 	counts: readonly string[];
 }[] = [
-	{ label: null, name: "All", counts: [] },
+	{ name: "All", counts: TIER_ORDER },
 	{
-		label: "include",
 		name: "Included",
+		label: "include",
 		counts: ["highly_relevant", "relevant", "possibly_relevant"],
 	},
-	{ label: "exclude", name: "Excluded", counts: ["excluded"] },
-	{ label: "uncertain", name: "Uncertain", counts: ["uncertain"] },
-	{ label: "unscreened", name: "Not screened", counts: ["unscreened"] },
+	{ name: "Excluded", label: "exclude", counts: ["excluded"] },
+	{ name: "Uncertain", label: "uncertain", counts: ["uncertain"] },
+	{ name: "Skipped", tier: "skipped", counts: ["skipped"] },
+	{ name: "Failed", tier: "failed", counts: ["failed"] },
+	{ name: "Not screened", tier: "not_screened", counts: ["not_screened"] },
 ];
+
+/** Why a paper has no decision, in plain words; `null` once it has one. */
+function noDecisionReason(paper: Paper): string | null {
+	switch (shownLabel(paper)) {
+		case "skipped":
+			return paper.skipped_because === "not_masked"
+				? "Its text wasn't masked, so it wasn't sent to the model."
+				: "It has no abstract, so there was nothing to screen.";
+		case "failed":
+			return "The privacy check stopped its text, so it wasn't sent to the model.";
+		case "not_screened":
+			return "This run hasn't screened it.";
+		default:
+			return null;
+	}
+}
+
+type Verdict = Schemas["CriterionVerdict"];
+
+const ANSWERS: Readonly<Record<Verdict, [ReactNode, string]>> = {
+	yes: [<Check key="y" size={16} />, "Yes"],
+	partly: [<Contrast key="p" size={16} />, "Partly"],
+	no: [<X key="n" size={16} />, "No"],
+	unclear: [<CircleQuestionMark key="u" size={16} />, "Not clear"],
+};
+
+/** Each criterion's answer and the model's quote. Quotes are model output: plain text only. */
+function CriterionAnswers({
+	answers,
+	criteria,
+}: {
+	answers: readonly Schemas["CriterionAnswerOut"][];
+	criteria: readonly Schemas["CriterionOut"][];
+}) {
+	const id = useId();
+	return (
+		<Box>
+			<Text id={id} fontWeight="medium">
+				Each criterion
+			</Text>
+			{/* role="list": Safari drops list semantics when the bullets are removed. */}
+			<chakra.ul
+				role="list"
+				aria-labelledby={id}
+				listStyleType="none"
+				p="0"
+				mt="1.5"
+				css={{ "& > li + li": { mt: "1.5" } }}
+			>
+				{answers.map((answer) => {
+					const criterion = criteria.find((c) => c.id === answer.id);
+					const [icon, word] = ANSWERS[answer.answer];
+					const name = criterion?.text ?? "A criterion";
+					return (
+						<Flex as="li" key={answer.id} gap="2" align="flex-start">
+							<Box as="span" color="fg.muted" flex="none" mt="1">
+								{icon}
+							</Box>
+							<Box>
+								<Text as="span">
+									{criterion?.kind === "exclusion"
+										? `Excluded if: ${name}`
+										: name}
+									{` · ${word}`}
+								</Text>
+								{answer.quote === null ? null : (
+									<Box color="fg.muted">
+										<MaskedText text={`“${answer.quote}”`} />
+									</Box>
+								)}
+							</Box>
+						</Flex>
+					);
+				})}
+			</chakra.ul>
+		</Box>
+	);
+}
 
 const FROM = "/signed-in/p/$projectId/r/$reviewId/papers" as const;
 
@@ -132,11 +224,7 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 			py="2"
 			css={{ "& > * + *": { mt: "2" } }}
 		>
-			{decision === null ? (
-				<Text>
-					Not screened: there was no abstract, or it wasn't masked yet.
-				</Text>
-			) : (
+			{decision === null ? null : (
 				<>
 					<Text>
 						<Text as="span" fontWeight="medium">
@@ -144,24 +232,38 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 						</Text>
 						{decision.rationale}
 					</Text>
-					<CriteriaList
-						title="Criteria met"
-						items={listed(decision.criteria_matched, false)}
-					/>
-					<CriteriaList
-						title="Excluded because"
-						items={listed(decision.exclusion_reasons, true)}
-					/>
+					{/* Decisions before per-criterion answers name only the criteria met and missed. */}
+					{decision.criteria !== undefined && decision.criteria.length > 0 ? (
+						<CriterionAnswers answers={decision.criteria} criteria={criteria} />
+					) : (
+						<>
+							<CriteriaList
+								title="Criteria met"
+								items={listed(decision.criteria_matched, false)}
+							/>
+							<CriteriaList
+								title="Excluded because"
+								items={listed(decision.exclusion_reasons, true)}
+							/>
+						</>
+					)}
 					{decision.is_unreadable ? (
 						<Text color="caveat.fg">
 							The model's answer couldn't be read twice, so this paper is marked
 							uncertain.
 						</Text>
-					) : null}
+					) : (
+						<Text>
+							Label: {TIERS[decision.tier].word},{" "}
+							{decision.rules_version === null
+								? "as the model judged it. No rule changed it."
+								: `set by the label rules (version ${decision.rules_version}).`}
+						</Text>
+					)}
 					<Text color="fg.muted">
 						Read:{" "}
 						{decision.evidence_kind === "abstract"
-							? "the abstract"
+							? "the abstract only, not the full text"
 							: "the title only"}{" "}
 						· Decided by {decision.model_id} · Criteria from plan version{" "}
 						{decision.criteria_version}
@@ -175,6 +277,9 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 					? ` · found by ${paper.found_by.map(sourceName).join(", ")}`
 					: ""}
 			</Text>
+			{paper.is_cited_in_brief ? (
+				<Text>Cited in the brief as [{paper.tag}]</Text>
+			) : null}
 			{paper.url === null ? null : (
 				<ChakraLink
 					href={paper.url}
@@ -193,11 +298,12 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 	const [isOpen, setOpen] = useState(false);
 	const id = useId();
+	const reason = noDecisionReason(paper);
 	return (
 		<>
 			<Table.Row>
 				<Table.Cell whiteSpace="nowrap">
-					<LabelBadge tier={paper.decision?.tier ?? "unscreened"} />
+					<LabelBadge tier={shownLabel(paper)} />
 				</Table.Cell>
 				<Table.Cell as="th" scope="row" fontWeight="normal" textAlign="start">
 					<chakra.button
@@ -219,6 +325,11 @@ function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 						{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
 						{paper.title}
 					</chakra.button>
+					{reason === null ? null : (
+						<Text fontSize="sm" color="fg.muted" ps="5">
+							{reason}
+						</Text>
+					)}
 				</Table.Cell>
 				<Table.Cell fontVariantNumeric="tabular-nums">
 					{paper.year ?? "—"}
@@ -465,9 +576,10 @@ export function PapersCanvas() {
 	const runId = search.run ?? runs[0]?.id;
 	const number = useRunNumber(runId ?? "");
 	const label = search.label ?? null;
+	const tier = search.tier ?? null;
 	const page = search.page ?? 1;
 	const papers = useQuery({
-		...papersQuery(api, review.id, { runId: runId ?? "", label, page }),
+		...papersQuery(api, review.id, { runId: runId ?? "", label, tier, page }),
 		enabled: runId !== undefined,
 		// A new filter or page keeps the current rows until its own arrive, so
 		// the panel does not flash empty with every click.
@@ -505,13 +617,12 @@ export function PapersCanvas() {
 	}
 	const { counts, total, page_size: size } = papers.data;
 	const sum = (keys: readonly string[]) =>
-		keys.length === 0
-			? Object.values(counts).reduce((a, b) => a + b, 0)
-			: keys.reduce((a, key) => a + (counts[key] ?? 0), 0);
+		keys.reduce((a, key) => a + (counts[key] ?? 0), 0);
 	const first = (page - 1) * size + 1;
 	const last = Math.min(page * size, total);
 	const go = (next: {
 		label?: PaperLabel | undefined;
+		tier?: PaperTier | undefined;
 		page?: number | undefined;
 	}) => void navigate({ search: (previous) => ({ ...previous, ...next }) });
 
@@ -522,25 +633,36 @@ export function PapersCanvas() {
 		>
 			<PrismaFlow
 				runId={papers.data.run_id}
-				onShow={(shown) => go({ label: shown, page: undefined })}
+				onShow={(shown) =>
+					go({ label: shown, tier: undefined, page: undefined })
+				}
 			/>
 			<Flex role="group" aria-label="Show" gap="2" wrap="wrap">
-				{FILTERS.map((filter) => (
-					<Button
-						key={filter.name}
-						size="xs"
-						variant={label === filter.label ? "solid" : "outline"}
-						aria-pressed={label === filter.label}
-						onClick={() =>
-							go({ label: filter.label ?? undefined, page: undefined })
-						}
-					>
-						{filter.name}{" "}
-						<Text as="span" fontVariantNumeric="tabular-nums">
-							{sum(filter.counts)}
-						</Text>
-					</Button>
-				))}
+				{FILTERS.map((filter) => {
+					const isPressed =
+						label === (filter.label ?? null) && tier === (filter.tier ?? null);
+					const count = sum(filter.counts);
+					// Failures are a warning, so their filter stands out while there are any.
+					const isWarning = filter.tier === "failed" && count > 0;
+					return (
+						<Button
+							key={filter.name}
+							size="xs"
+							variant={isPressed ? "solid" : "outline"}
+							colorPalette={isWarning ? "caveat" : undefined}
+							aria-pressed={isPressed}
+							onClick={() =>
+								go({ label: filter.label, tier: filter.tier, page: undefined })
+							}
+						>
+							{isWarning ? <TriangleAlert /> : null}
+							{filter.name}{" "}
+							<Text as="span" fontVariantNumeric="tabular-nums">
+								{count}
+							</Text>
+						</Button>
+					);
+				})}
 			</Flex>
 			<Text mt="3" color="fg.muted">
 				{TIER_ORDER.filter((tier) => (counts[tier] ?? 0) > 0)
@@ -595,6 +717,8 @@ export function PapersCanvas() {
 					</Button>
 				</Flex>
 			) : null}
+
+			<RulesEditor />
 
 			<CanvasHeading>How this list was made</CanvasHeading>
 			<Text color="fg.muted">

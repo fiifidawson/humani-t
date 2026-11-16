@@ -5,6 +5,7 @@ import { expectNoAccessibilityViolations } from "../../test/axe";
 import {
 	MASKING_CHANGED,
 	NOT_YOUR_ROLE,
+	REVIEW_NOTICE,
 	UNSUPPORTED,
 } from "../../test/fakeDocuments";
 import { installNodeFiles } from "../../test/nodeFiles";
@@ -29,6 +30,24 @@ async function openDocuments(projectId: string) {
 	const view = renderApp(`/p/${projectId}/documents`);
 	await screen.findByRole("heading", { level: 2, name: "Documents" });
 	return view;
+}
+
+/** Select `wanted` inside `container`, as a person dragging over it would. */
+function selectText(container: HTMLElement, wanted: string) {
+	const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+	for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+		const at = node.textContent?.indexOf(wanted) ?? -1;
+		if (at >= 0) {
+			const range = document.createRange();
+			range.setStart(node, at);
+			range.setEnd(node, at + wanted.length);
+			window.getSelection()?.removeAllRanges();
+			window.getSelection()?.addRange(range);
+			fireEvent.mouseUp(node.parentElement ?? container);
+			return;
+		}
+	}
+	throw new Error(`No text "${wanted}" to select`);
 }
 
 /** The table row of the document with this exact name. */
@@ -265,6 +284,65 @@ describe("following a document while it is processed", () => {
 	});
 });
 
+describe("documents while the project's masking is off (ADR 0014)", () => {
+	function withMaskingOff(role: Role = "owner") {
+		const { api, project } = signedInWith(role);
+		project.is_masking_on = false;
+		api.documents.add(project.id, "report.txt", { status: "awaiting_review" });
+		return { api, project };
+	}
+
+	it("says a document waiting for review is ready, because nothing needs reviewing", async () => {
+		const { project } = withMaskingOff();
+		await openDocuments(project.id);
+
+		const row = (await rowFor("report.txt")) ?? document.body;
+		expect(within(row).getByTestId("status").textContent).toBe(
+			"Ready (masking is off)",
+		);
+	});
+
+	it("says the model reads documents as written, apart from the masking rules", async () => {
+		const { project } = withMaskingOff("viewer");
+		await openDocuments(project.id);
+
+		expect(
+			screen.getByText(
+				"Masking is off for this project, so the model reads each ready document as written. The project's masking rules still apply.",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("tells the owner in the review that approving matters only once masking is on", async () => {
+		const { project } = withMaskingOff();
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		const review = await screen.findByRole("region", {
+			name: "Privacy review: D1 report.txt",
+		});
+		expect(
+			within(review).getByText(
+				"Masking is off, so the model reads this document as written. Your decision applies if masking is turned back on.",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("follows what the API says applies, not the owner's switch alone", async () => {
+		const { project } = withMaskingOff();
+		project.can_turn_masking_off = false;
+		await openDocuments(project.id);
+
+		const row = (await rowFor("report.txt")) ?? document.body;
+		expect(within(row).getByTestId("status").textContent).toBe(
+			"Waiting for privacy review",
+		);
+	});
+});
+
 describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 	function withDocumentWaiting(role: Role = "owner") {
 		const { api, project } = signedInWith(role);
@@ -379,21 +457,246 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		);
 	});
 
-	it("never asks for or shows the original text", async () => {
-		const { api, project } = withDocumentWaiting();
+	it("shows the owner the original beside the masked text, and says the view is recorded", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
 		await user.click(
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
-		await screen.findByRole("button", { name: "Approve" });
 
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		expect(original).toHaveTextContent("Kofi Mensah leads the team.");
+		const masked = screen.getByRole("region", {
+			name: "What the model will see",
+		});
+		expect(within(masked).getByText("masked person 1")).toBeInTheDocument();
+		expect(masked).not.toHaveTextContent("Kofi Mensah");
+		expect(screen.getByText(REVIEW_NOTICE)).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"GET",
+				`/projects/${project.id}/documents/${waiting.id}/review`,
+			),
+		).toHaveLength(1);
+	});
+
+	it("lists every mask with what it hides, and offers Not personal only where the API allows it", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		const masks = await screen.findByRole("list", { name: "Masks" });
+		const items = within(masks).getAllByRole("listitem");
+		expect(items.map((item) => item.textContent)).toEqual([
+			expect.stringContaining("“12 March” · Date · Found automatically"),
+			expect.stringContaining("“amina@example.org” · Email address"),
+			expect.stringContaining("“Kofi Mensah” · Person"),
+			expect.stringContaining("“448-1207” · Medical record number"),
+		]);
+		expect(
+			within(masks).getByRole("button", { name: "Not personal: 12 March" }),
+		).toBeInTheDocument();
+		expect(
+			within(masks).queryByRole("button", {
+				name: "Not personal: amina@example.org",
+			}),
+		).not.toBeInTheDocument();
+	});
+
+	it("removes a mask that is not personal, with the reason the owner gives", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		const remove = screen.getByRole("button", { name: "Remove mask" });
+		expect(remove).toBeDisabled();
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"Date of a public meeting",
+		);
+		await user.click(remove);
+
+		expect(
+			await screen.findByText("“12 March” is no longer masked."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/unmask`,
+			)[0]?.body,
+		).toEqual({
+			version: 1,
+			start: 13,
+			end: 21,
+			reason: "Date of a public meeting",
+		});
+		expect(
+			screen.getByRole("region", { name: "What the model will see" }),
+		).toHaveTextContent("Interview on 12 March with");
+	});
+
+	it("masks text the detectors missed, from a selection in the original", async () => {
+		const { api, project } = signedInWith("owner");
+		const waiting = api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: {
+				text: "Dr Traoré met the team at the clinic.",
+				found: [],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		selectText(
+			await screen.findByRole("region", { name: "Original text" }),
+			"Dr Traoré",
+		);
+		expect(
+			await screen.findByText("Selected: “Dr Traoré”"),
+		).toBeInTheDocument();
+		await user.selectOptions(
+			screen.getByRole("combobox", { name: "Mask as" }),
+			"Person",
+		);
+		await user.click(screen.getByRole("button", { name: "Mask it" }));
+
+		expect(
+			await screen.findByText("“Dr Traoré” is masked."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/masks`,
+			)[0]?.body,
+		).toEqual({ version: 1, start: 0, end: 9, entity_type: "PERSON" });
+		expect(
+			within(
+				screen.getByRole("region", { name: "What the model will see" }),
+			).getByText("masked person 1"),
+		).toBeInTheDocument();
+	});
+
+	it("makes a masked name a project rule, and masks it everywhere in the document now", async () => {
+		const { api, project } = signedInWith("owner");
+		const waiting = api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: {
+				text: "Kofi Mensah met the team. Later, kofi mensah left.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "Always mask in this project: Kofi Mensah",
+			}),
+		);
+
+		expect(
+			await screen.findByText(
+				"“Kofi Mensah” is now masked everywhere in this project.",
+			),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo("POST", `/projects/${project.id}/masking-rules`)[0]?.body,
+		).toEqual({ term: "Kofi Mensah", entity_type: "PERSON" });
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/masks`,
+			),
+		).toHaveLength(1);
+		expect(
+			screen.getByRole("region", { name: "What the model will see" }),
+		).not.toHaveTextContent(/kofi mensah/i);
+	});
+
+	it("approves the masked version on screen after a correction", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"A public meeting",
+		);
+		await user.click(screen.getByRole("button", { name: "Remove mask" }));
+		await screen.findByText("“12 March” is no longer masked.");
+
+		await user.click(screen.getByRole("button", { name: "Approve" }));
+
+		expect(
+			await screen.findByText("Approved. The brief can now cite it as D1."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/approve`,
+			)[0]?.body,
+		).toEqual({ version: 2 });
+	});
+
+	it("shows the API's answer when a correction meets a newer masking", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		await user.click(
+			await screen.findByRole("button", { name: "Not personal: 12 March" }),
+		);
+		await user.type(
+			screen.getByRole("textbox", { name: "Why it isn't personal" }),
+			"A public meeting",
+		);
+
+		api.documents.correct(waiting.id);
+		await user.click(screen.getByRole("button", { name: "Remove mask" }));
+
+		expect(await screen.findByText(MASKING_CHANGED)).toBeInTheDocument();
+	});
+
+	it("never asks for the original when an owner reads an approved document", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "report.txt", { status: "approved" });
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "See masked text D1 report.txt",
+			}),
+		);
+
+		await screen.findByRole("region", {
+			name: "What the model will see: D1 report.txt",
+		});
+		expect(await screen.findByText("masked person 1")).toBeInTheDocument();
 		expect(api.requests.filter((r) => r.path.endsWith("/review"))).toEqual([]);
 	});
 
 	it.each<Role>(["reviewer", "viewer"])(
-		"lets a %s see what the model will see, without approving",
+		"lets a %s see what the model will see, never the original, without approving",
 		async (role) => {
-			const { project } = withDocumentWaiting(role);
+			const { api, project } = withDocumentWaiting(role);
 			const { user } = await openDocuments(project.id);
 
 			await user.click(
@@ -412,6 +715,10 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			expect(
 				within(view).getByText("Only owners can approve or reject documents."),
 			).toBeInTheDocument();
+			expect(view).not.toHaveTextContent("Kofi Mensah");
+			expect(api.requests.filter((r) => r.path.endsWith("/review"))).toEqual(
+				[],
+			);
 		},
 	);
 

@@ -35,10 +35,15 @@ from app.domain.screening import StoredDecision
 from app.domain.sessions import Session, SessionPolicy
 from app.storage.memory_briefs import BriefState, MemoryDecisionBriefRepository
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
+from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
 from app.storage.memory_masking import (
     MaskingState,
     MemoryMaskingRuleRepository,
     MemoryPaperMaskRepository,
+)
+from app.storage.memory_model_instructions import (
+    MemoryModelInstructionsRepository,
+    ModelInstructionsState,
 )
 from app.storage.memory_plans import MemoryPlanRepository, PlanState
 from app.storage.memory_questions import MemoryQuestionRepository, QuestionState
@@ -76,6 +81,8 @@ class _MemoryState:
         self.question_state = QuestionState()
         self.masking_state = MaskingState()
         self.document_state = DocumentState()
+        self.label_rules_state = LabelRulesState()
+        self.model_instructions_state = ModelInstructionsState()
 
     def copy(self) -> _MemoryState:
         clone = _MemoryState()
@@ -107,6 +114,8 @@ class _MemoryState:
         clone.question_state = self.question_state.copy()
         clone.masking_state = self.masking_state.copy()
         clone.document_state = self.document_state.copy()
+        clone.label_rules_state = self.label_rules_state.copy()
+        clone.model_instructions_state = self.model_instructions_state.copy()
         return clone
 
 
@@ -738,6 +747,10 @@ class MemoryUnitOfWork:
         self.masking_rules = MemoryMaskingRuleRepository(state.masking_state)
         self.paper_masks = MemoryPaperMaskRepository(state.masking_state)
         self.documents = MemoryDocumentRepository(state.document_state)
+        self.label_rules = MemoryLabelRulesRepository(state.label_rules_state)
+        self.model_instructions = MemoryModelInstructionsRepository(
+            state.model_instructions_state
+        )
 
     async def commit(self) -> None:
         self._storage.state = self._staged

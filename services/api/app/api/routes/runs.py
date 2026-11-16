@@ -130,7 +130,10 @@ async def resolve_gate(
     runs: RunsDep,
 ) -> GateResolvedOut:
     """The first decision wins and every open stream sees it; a later one gets 409."""
-    gate = await runs.resolve_gate(
-        current, gate_id, payload.decision, payload.revisions, request_id(request)
-    )
+    try:
+        gate = await runs.resolve_gate(
+            current, gate_id, payload.decision, payload.revisions, request_id(request)
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return GateResolvedOut.from_domain(gate)

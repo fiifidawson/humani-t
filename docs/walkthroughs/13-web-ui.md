@@ -281,6 +281,9 @@ Unless a test says otherwise, use Chrome or Edge at `http://localhost:5173`, wit
 | T13.20 | Run `pnpm --filter @humani-t/web dev` and open `http://localhost:5173` with the Console open. Edit a component and save. | The page loads styled; hot reload applies the edit; no "Refused to …" errors. Response headers carry the dev policy (fixed nonce `humani-t-dev`) and a `Content-Security-Policy-Report-Only` for Trusted Types. | D13.11 | The dev policy in `csp.config.ts`. |
 | T13.21 | Open `/sign-in`, then Home, All projects and Account, in the light theme and then the dark one. Compare with [light-laboratory.org](https://www.light-laboratory.org/). | Eggshell page; titles in the headline serif; text in Manrope; pill-shaped buttons; 8 px cards with hairlines; section labels in small capitals with a black dot and a rule; humani-t on the left and "by LiGHT" on the right in the header, on the cover and in the footer; the light-beam only on the sign-in cover. Dark theme: blue-black surfaces, Eggshell text, Light Blue buttons and links. | §9 | `theme/system.ts`, `UI_UX_SPEC.md` §9.9. |
 | T13.22 | With the browser's DevTools → Rendering → "Emulate vision deficiencies" (achromatopsia), look at an error, the signed-out banner (T13.17) and a waiting run strip. | Each still reads by its words and icon alone. | §9.2.3, WCAG 1.4.1 | The component's icon or word is missing. |
+| T13.23 | As the administrator, send `POST /api/v1/admin/invitations` `{"email": "kofi@example.org"}` (Postman, with the session cookie and `X-CSRF-Token`). Open the link from Mailpit (`http://127.0.0.1:58025`) in a private window. Enter a name and the password `short one`, then a 15-character passphrase. | "Set up your account". The address bar shows `/accept-invitation` with no `#token=…`, and Back does not bring it back. The short password shows "Use 15 characters or more." under the field. The good one lands on `/enrol`. Opening the same link again and submitting says the link has expired or was already used. | §6.1, D13.6 | Network: the token must be in the `POST /auth/register` body, never in a URL. |
+| T13.24 | Sign out. On the sign-in page choose "Forgot your password?", enter the administrator's email, then an unknown email. Open the link from Mailpit, try `aaaaaaaaaaaaaaaa` (a repeat), then a new passphrase. | Both emails get the same answer. The link page shows no `#token=…` in the address bar. A refused password shows the reason under the field. Success says the second factor is still needed and offers "Sign in"; signing in asks for the passkey or code. | §6.1, enumeration parity | `ResetPasswordPage.tsx`; the API answer to `POST /auth/password-reset/confirm` should be 204. |
+| T13.25 | Open All projects and Home with a project in each state: one new, one with a run going, one whose run wrote a brief, one archived ("Show archived projects"). | A Status column on All projects and a badge on each Home card: "Planning", "Running", "Brief ready", "Archived". `GET /api/v1/projects` carries the same `status` for each. | §11.1 | The API derives it (`project_status` in `domain/projects.py`); the web only words it (`ProjectStatusBadge.tsx`). |
 
 ### Results checklist
 
@@ -308,6 +311,9 @@ Unless a test says otherwise, use Chrome or Edge at `http://localhost:5173`, wit
 | T13.20 | ☐ | |
 | T13.21 | ☐ | |
 | T13.22 | ☐ | |
+| T13.23 | ☐ | |
+| T13.24 | ☐ | |
+| T13.25 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -319,10 +325,11 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Every §11.4 status maps to the right kind; 404 wording is the same for missing and forbidden | `apps/web/src/api/problem.test.ts` |
 | Sign-in: one message for every wrong password, countdown on 429, passkey/TOTP/recovery code, resume after reload, no off-site redirect | `apps/web/src/features/auth/SignInPage.test.tsx` |
 | First sign-in: passkey or app, codes shown once, explicit confirmation | `apps/web/src/features/auth/EnrolPage.test.tsx` |
+| Invitation and reset links: token read from the fragment and cleared, sent only in the body, policy reasons under the field, one message for a used link | `apps/web/src/features/auth/AcceptInvitationPage.test.tsx`, `ResetPasswordPage.test.tsx` |
 | Passkey options and credentials converted as WebAuthn JSON; malformed options refused before the prompt | `apps/web/src/features/auth/webauthn.test.ts` |
 | Sign-in answers narrowed; unknown methods dropped | `apps/web/src/features/auth/signInOutcome.test.ts` |
 | Shell landmarks, skip link, shortcuts off while typing, drawer, sign-out, session-ended banner, themes | `apps/web/src/shell/AppShell.test.tsx` |
-| Home, all projects, create project, workspace, drafts in memory | `apps/web/src/features/projects/*.test.tsx` |
+| Home, all projects with their status, create project, workspace, drafts in memory | `apps/web/src/features/projects/*.test.tsx` |
 | Composer: Enter, Shift+Enter, growth with wrapped lines, kept text when sending is unavailable | `apps/web/src/features/chat/Composer.test.tsx` |
 | Devices, sign-in methods, re-authentication and its single retry, theme | `apps/web/src/features/account/AccountPage.test.tsx` |
 | Run events applied once, reconnect, closed after the run, progress throttled | `apps/web/src/features/runs/*.test.ts(x)` |
@@ -343,13 +350,13 @@ pnpm --filter @humani-t/web exec vitest run src/features/auth
 | --- | --- | --- | --- |
 | G13.1 | No Playwright smoke test against the Compose stack (plan M13). | Cookies, real WebAuthn and the real CSP are checked by hand only (T13.5, T13.12). | With the deploy lane's Caddy image. |
 | G13.2 | Needs-you, pinned projects, collections, activity and search are not shown. | Home shows recent projects only. | P3, when the API serves them. |
-| G13.3 | The workspace cannot start a review; the run strip and hook are not mounted. | The composer keeps text but cannot send it. | The planning and runs lanes; `POST /projects/{id}/reviews` and `/runs/{id}/events` now exist in the schema. |
+| G13.3 | ~~The workspace cannot start a review; the run strip and hook are not mounted~~ | Closed: the composer sends `POST /projects/{id}/reviews` and opens the review (`WorkspacePage.tsx`); `useRunEvents` drives the run strip in the review (`liveRun.tsx`, `RunCards.tsx`) | `WorkspacePage.test.tsx`, `RunInReview.test.tsx` |
 | G13.4 | Password change, text size, reduced-motion and low-data preferences are missing from Account. | Password change only through the API. | Next pass. |
 | G13.5 | A 429 at sign-in counts down but does not retry by itself at zero (§11.4). | The person presses Sign in again. | Deliberate: re-sending credentials unasked is surprising; to confirm with the owner. |
-| G13.6 | When the browser gives up on a run stream, the new stream carries no `Last-Event-ID` (EventSource cannot set headers), so the API replays the whole run. | More bytes on a bad connection; no wrong state (events apply once). | Ask the API to also accept `?last_event_id=`. |
+| G13.6 | ~~When the browser gives up on a run stream, the new stream carries no `Last-Event-ID`, so the API replays the whole run~~ | Closed: the API accepts `?last_event_id=` and `useRunEvents.ts` sends it on every reconnect | `useRunEvents.test.tsx` |
 | G13.7 | Focus moves to a page's heading only when focus was on an element before the navigation. | After a keyboard shortcut navigation, focus stays at the top of the page. | Revisit with screen-reader testing (T13.18). |
 | G13.8 | Opening the drawer does not move focus into it. | Keyboard users press Tab once more. | Small follow-up. |
-| G13.9 | Canvas drag-resizing and the canvas itself are not built. | — | With the first canvas view. |
+| G13.9 | ~~Canvas drag-resizing and the canvas itself are not built~~ | Closed: draft, run, papers, brief and trace canvases are routes under the review, and `ResizeHandle` resizes the chat and the source panel | `Canvases.test.tsx`, `ResizablePanels.test.tsx` |
 | G13.10 | Colour contrast is not checked automatically (jsdom). | A token change could fail WCAG 1.4.3 unnoticed. The measured table in `UI_UX_SPEC.md` §9.2.2 is the check until then. | Lighthouse in CI (§13.1), or the Playwright run. |
 | G13.11 | First-load JavaScript is 206 KB gzipped, over the spec's 170 KB budget (§13.1); it was 125 KB before Chakra. | Slower first load on poor connections. | The owner decides: split routes, replace Ark-backed parts with native ones, move to Panda CSS, or raise the budget (see the report on the brand change). |
 | G13.12 | The LiGHT and humani-t logos and the licensed Ivy Presto Headline files are not in the repository. | Text stands in for the logos; Playfair Display stands in for the headline font. | Drop them in as `apps/web/public/brand/README.md` says. |

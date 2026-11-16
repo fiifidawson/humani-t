@@ -10,7 +10,7 @@ Deeper context lives in [`docs/architecture.md`](docs/architecture.md) (provider
 
 ## The one rule
 
-> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured, and only after it has been masked.
+> humani-t is a self-hosted web application. Data leaves the deployment only to destinations the operator has configured. Text sent to a model the deployment does not run itself is masked first, unless both the operator and the project's owner have chosen otherwise.
 
 Before any implementation decision, ask: *does this send anything — a question, a document, a log line, a request — somewhere the operator did not choose?* If it might, put it behind a provider seam the operator configures, and default it to off or to something we can run ourselves.
 
@@ -176,7 +176,7 @@ Skip docstrings on obvious properties and private helpers. `def is_frozen(self)`
 - Raise `ValueError` from the domain with a message naming the field: `"Concept.term must not be blank"`.
 - Translate to HTTP only at the boundary, with `raise ... from exc` so the chain survives.
 - Never swallow an exception silently. Never `except Exception: pass`.
-- Absence is not failure: `fetch_fulltext` returns `None` for a closed-access paper because that is a normal outcome. Reserve exceptions for the unexpected.
+- Absence is not failure: `model_instructions.in_force` returns `None` for a project that has no instructions yet, because that is a normal outcome. Reserve exceptions for the unexpected.
 
 ---
 

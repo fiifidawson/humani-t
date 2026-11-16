@@ -327,6 +327,15 @@ class TestReceipts:
 
         assert listed == [earlier, later]
 
+    async def test_a_receipt_keeps_whether_masking_was_on(self, storage):
+        user, review = await _stored_review(storage)
+        receipt = replace(_receipt(review, at=NOW, user=user), is_masked=False)
+        async with storage.unit_of_work() as uow:
+            await uow.plans.add_receipt(receipt)
+            await uow.commit()
+        async with storage.unit_of_work() as uow:
+            assert await uow.plans.list_receipts(review.id) == [receipt]
+
     async def test_a_receipt_keeps_the_version_and_change_request_it_belongs_to(self, storage):
         user, review = await _stored_review(storage)
         receipt = replace(

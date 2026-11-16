@@ -2,7 +2,8 @@
 
 It reuses the brief's `LoopRunner` and `revise_until_done`; only the prompts differ, and
 the answer is up to six claims, or none when nothing retrieved answers it. There is no
-Planner: the question is the search. Only masked text goes in.
+Planner: the question is the search. Only masked text goes in, and only the Writer gets
+the project's writing instructions.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from app.domain.briefs import (
     StopReason,
     claim_to_dict,
 )
+from app.domain.model_instructions import SentInstructions
 from app.domain.questions import MAX_ANSWER_CLAIMS, Answer, check_answer
 from app.domain.runs import JsonValue
 from app.domain.screening import Passage
@@ -95,6 +97,7 @@ class AnswerResult:
     evidence: tuple[RetrievedPassage, ...]
     steps: tuple[AgentStep, ...]
     manifest: dict[str, JsonValue]
+    instructions: SentInstructions | None = None
 
 
 async def _ignore(step: AgentStep) -> None:
@@ -123,9 +126,11 @@ class AnswerLoop:
         earlier: Sequence[Turn],
         corpus: Sequence[Passage],
         on_step: StepSink = _ignore,
+        instructions: SentInstructions | None = None,
     ) -> AnswerResult:
         """Answer the masked `question` from `corpus`, with the thread's `earlier` turns.
 
+        `instructions` are the project's writing instructions as sent, for the Writer.
         Nothing retrieved is an answer, not an error: "nothing in this project
         answers that". Raises `LoopFailedError` when no usable draft came back.
         """
@@ -154,6 +159,9 @@ class AnswerLoop:
                 tuple(runner.steps),
                 manifest,
             )
+        if instructions is not None:
+            manifest["instructions_version"] = instructions.version
+        writer = _WRITER.instructed(instructions)
         kinds = runner.source_kinds()
         turns: list[JsonValue] = [{"question": t.question, "answer": t.answer} for t in earlier]
 
@@ -165,7 +173,7 @@ class AnswerLoop:
                 "feedback": list(feedback),
             }
             return await runner.ask(
-                _WRITER, number, payload, lambda a: _parse_answer(a, kinds), _answer_output
+                writer, number, payload, lambda a: _parse_answer(a, kinds), _answer_output
             )
 
         async def review(
@@ -202,6 +210,7 @@ class AnswerLoop:
             evidence=tuple(runner.evidence.values()),
             steps=tuple(runner.steps),
             manifest=manifest,
+            instructions=instructions,
         )
 
 

@@ -52,6 +52,7 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/projects` | projects | The caller's projects, newest first |
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
 | `PATCH` | `/api/v1/projects/{project_id}` | projects | Rename (owner) |
+| `PUT` | `/api/v1/projects/{project_id}/masking` | projects | Switch masking on or off (owner; recent sign-in to turn it off) |
 | `POST` | `/api/v1/projects/{project_id}/archive` | projects | Hide from the default list (owner) |
 | `POST` | `/api/v1/projects/{project_id}/unarchive` | projects | Bring back (owner) |
 | `DELETE` | `/api/v1/projects/{project_id}` | projects | Delete by destroying the project's key (owner, recent sign-in) |
@@ -59,6 +60,8 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/projects/{project_id}/members` | projects | Give an existing account a role (owner, recent sign-in) |
 | `PATCH` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Change a member's role (owner, recent sign-in) |
 | `DELETE` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Remove a member (owner, recent sign-in), or leave (anyone) |
+| `GET` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | The project's instructions to the model and every version (any member) |
+| `PUT` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | Save them as the next version (owner) |
 | `POST` | `/api/v1/projects/{project_id}/reviews` | reviews | Ask a question in the project (owner, reviewer) |
 | `GET` | `/api/v1/projects/{project_id}/reviews` | reviews | The project's reviews, newest first (any member) |
 | `GET` | `/api/v1/projects/{project_id}/reviews/{review_id}` | reviews | One review (any member) |
@@ -119,7 +122,7 @@ A project is the unit of access, encryption and deletion. Everything below `/api
 1. `401` if not signed in; `403` if a write lacks the CSRF token;
 2. `404` if the project does not exist **or** the caller is not a member, with the same body either way: a project's existence is never confirmed to someone outside it, not even to an instance administrator;
 3. `403` if the caller's role does not allow the action;
-4. `401` with `"reauthentication_required": true` if the action needs a sign-in within the last 15 minutes (delete, adding a member, changing a role, removing someone else);
+4. `401` with `"reauthentication_required": true` if the action needs a sign-in within the last 15 minutes (delete, adding a member, changing a role, removing someone else, turning masking off);
 5. then the request itself: `422` for bad input, `409` for a conflict.
 
 Steps 1 to 4 happen before the request body is read, so a non-member learns nothing, not even whether their body was valid.
@@ -131,7 +134,7 @@ Steps 1 to 4 happen before the request body is read, so a non-member learns noth
 | Read the project and its members | yes | yes | yes |
 | Search, start or cancel runs, confirm gates, edit labels, ask questions | yes | yes | no |
 | Upload documents, see raw text | yes | no | no |
-| Rename, archive, manage members, delete | yes | no | no |
+| Rename, archive, switch masking, manage members, delete | yes | no | no |
 | Leave | yes, unless the last owner | yes | yes |
 
 The table is the domain function `can(role, action)` in `app/domain/projects.py`; anything it does not list is refused. Being an instance administrator grants nothing inside a project.
@@ -144,11 +147,36 @@ The table is the domain function `can(role, action)` in `app/domain/projects.py`
   "name": "Cholera response, Sana'a",
   "role": "owner",
   "created_at": "2026-11-03T09:00:00Z",
-  "archived_at": null
+  "archived_at": null,
+  "status": "brief_ready",
+  "is_masking_on": true,
+  "is_masking_effective": true,
+  "can_turn_masking_off": false
 }
 ```
 
 `role` is the caller's own role. The name is stored encrypted under the project's own key; only members ever see it in the clear.
+
+`status` is derived, never set (UI_UX_SPEC §11.1), by `project_status` in `app/domain/projects.py`. It comes from the newest review and that review's latest run:
+
+| `status` | When |
+| --- | --- |
+| `planning` | No review yet, or the newest review is `new`, `clarifying`, `drafting`, `changes_requested` or `accepted` |
+| `running` | A run is going |
+| `needs_you` | The run waits at a gate |
+| `brief_ready` | The latest run finished and wrote a brief |
+| `done_without_brief` | The latest run finished without the brief stage |
+| `failed` | The latest run failed |
+| `cancelled` | The latest run was cancelled |
+| `archived` | An owner archived the project, whatever its review |
+
+The masking fields come from the API, so the web app shows them without deciding anything ([ADR-0014](adr/0014-masking-is-a-project-choice.md)):
+
+| Field | Meaning |
+| --- | --- |
+| `is_masking_on` | The owner's switch, as stored. A new project starts on when the model is hosted, off when the deployment runs it itself. |
+| `is_masking_effective` | Whether text is masked before it reaches the model now: the switch, unless the model is hosted and the operator has not set `allow_unmasked_hosted_inference`, when it is `true` whatever the switch says. |
+| `can_turn_masking_off` | `false` while the deployment requires masking for every project. |
 
 ### `POST /api/v1/projects`
 
@@ -165,6 +193,12 @@ The caller's projects, newest first, each with the caller's role. Archived proje
 - `GET` returns the `ProjectOut` to any member.
 - `PATCH` with `{"name": "…"}` renames (owner), with the same rules as on create.
 - `POST …/archive` hides the project from the default list and keeps everything; archiving an archived project keeps the first date. `POST …/unarchive` brings it back. Owner only. An archived project is not read-only.
+
+### `PUT /api/v1/projects/{project_id}/masking`
+
+Owner only. **Request** `{"is_masking_on": false}`. **Response** `200` with the `ProjectOut`. Turning masking off needs a sign-in in the last 15 minutes; turning it on never does. `409` with `"masking_required": true` and the detail "This deployment sends text to a hosted model, so masking stays on." when masking cannot be turned off; the request is valid, but the deployment's configuration refuses it, as with the last owner. Setting the value it already has changes nothing and records nothing. Turning masking off also approves the project's open `privacy_review` gates, as the caller, so a waiting run carries on; each shows as `gate.resolved` in its run's events.
+
+With masking effectively off, typed text (the question, clarifying answers, change requests, follow-up questions) is sent without the name, place and pattern detectors; the `mask` stage keeps paper text as written; uploaded documents are used once scanned and read, with no privacy review and no `privacy_review` gate; and the prompt guard no longer refuses identifiers. The project's masking rules still apply to every text, and the guard still refuses a rule term. Receipts, follow-up questions, stage manifests and the brief's trace record which way each text was sent.
 
 ### `DELETE /api/v1/projects/{project_id}`
 
@@ -189,7 +223,7 @@ The last owner can neither be demoted nor removed, nor leave: `409` with `"last_
 
 ### Audit
 
-Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
+Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
 
 ---
 
@@ -198,8 +232,6 @@ Every project action is recorded with ids only: `project.created`, `project.rena
 A review is a question inside a project. A run executes some of the review's pipeline stages as a background job; the browser follows it on one Server-Sent Events stream and answers its gates with ordinary `POST`s ([architecture §4.4](architecture.md#44-runs-live-events-and-gates), [ADR-0003](adr/0003-run-queue-and-event-fan-out.md)).
 
 The run, event and gate paths name a review, run or gate rather than the project. The API finds the project from that id and then answers exactly as on a project route: `401`, then `404` for a non-member with the same body as for an id that does not exist, then `403` for a role that may not, then the request itself. Routes with a body check access before reading it.
-
-The stages are fake until the real ones are built: each counts through five items, half a second apart; `mask` first asks for a `privacy_review` gate, and `answer` reports agent steps. The contract below does not change when real stages replace them.
 
 ### `ReviewOut`
 
@@ -295,7 +327,7 @@ Owner or reviewer. `202` with the run. A queued or waiting run ends at once (`st
 
 **Request** `{"decision": "approve" | "reject", "revisions": {…} | null}`. `revisions` is any JSON object the person changed (for example an edited vocabulary); it is stored encrypted and handed to the stage. **Who:** a `vocabulary` gate needs an owner or reviewer; a `privacy_review` gate needs an owner, because approving masking means reading raw text.
 
-**Response** `200` with `{"gate_id", "decision", "by"}`. The first decision wins: `gate.resolved` goes to every open stream and the run is queued again; the stage that asked receives the decision and decides what follows. A second decision, or one on a run that is no longer waiting (it was cancelled), gets `409`. Audited as `gate.resolved`.
+**Response** `200` with `{"gate_id", "decision", "by"}`. The first decision wins: `gate.resolved` goes to every open stream and the run is queued again; the stage that asked receives the decision and decides what follows. A second decision, or one on a run that is no longer waiting (it was cancelled), gets `409`. On a `vocabulary` gate, `422` names the first text in `revisions` that holds a term the project always masks (`revisions.criteria[1].text holds a term…`), never the term itself; nothing is stored. Audited as `gate.resolved`.
 
 ### Audit
 
@@ -309,7 +341,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `PaperOut`
 
-`{"paper_id", "tag", "position", "title", "year", "doi", "url", "source_id", "found_by", "is_open_access", "decision", "screening_status", "skipped_because"}`. `url` is the record's own link, else `https://doi.org/<doi>` when it has a DOI (public metadata), else `null`. `screening_status` is `screened` (it has a decision), `skipped` (the screen stage had no masked abstract to send; `skipped_because` is `no_abstract` or `not_masked`), `failed` (the privacy check stopped its text, so nothing was sent; it is tried again next run) or `not_screened` (this run has not screened it yet). `tag` is `P` and the paper's place in the run's merged list (`P1`, `P12`…); it is how the brief cites the paper and does not change when labels do. `source_id` is the source whose record was kept; `found_by` every source that returned it. `decision` is `null` until screened, else `DecisionOut`: `{"label": "include"|"exclude"|"uncertain", "priority": "high"|"medium"|"low", "tier", "score", "rationale", "criteria_matched", "exclusion_reasons", "is_unreadable", "model_id", "prompt_version", "criteria_version", "evidence_kind", "decided_at"}`. `tier` is the name shown (UI_UX_SPEC §6.8): `highly_relevant`, `relevant`, `possibly_relevant` (an inclusion by priority), `excluded`, `uncertain`. `criteria_matched` names the criteria (`I1`, `E1`…) the paper meets; an exclusion's `exclusion_reasons` are the exclusion criteria it meets, then the inclusion criteria it misses. `is_unreadable` marks the `uncertain` decision recorded when the model's answer could not be read twice. `criteria_version` is the plan version whose criteria were applied (read it with `GET …/plan/versions/{criteria_version}`); `evidence_kind` is what was read (`abstract`). `criteria` is each criterion's answer in the plan's order, `[{"id": "I1", "answer": "yes"|"partly"|"no"|"unclear", "quote": str|null}]`, for the expanded row (UI_UX_SPEC §6.8): `yes` and `partly` are exactly the criteria in `criteria_matched`, and every quote is the masked text's own words: the model's quote is found in that text ignoring case and whitespace, with pieces joined by an ellipsis in order and of at least three words each, and the matching span is stored (pieces joined with ` … `, cut at a word and ended with `…` past 300 characters). A quote not found is refused and the paper asked again. Empty for decisions made before prompt version `screen-2`, and when the model gave none.
+`{"paper_id", "tag", "position", "title", "year", "doi", "url", "source_id", "found_by", "is_open_access", "decision", "screening_status", "skipped_because", "is_cited_in_brief"}`. `url` is the record's own link, else `https://doi.org/<doi>` when it has a DOI (public metadata), else `null`. `screening_status` is `screened` (it has a decision), `skipped` (the screen stage had no masked abstract to send; `skipped_because` is `no_abstract` or `not_masked`), `failed` (the privacy check stopped its text, so nothing was sent; it is tried again next run) or `not_screened` (this run has not screened it yet). `tag` is `P` and the paper's place in the run's merged list (`P1`, `P12`…); it is how the brief cites the paper and does not change when labels do. `is_cited_in_brief` says whether the brief this run wrote cites that tag; `false` while the run has no brief. It is about this run's brief only, not a later run's. `source_id` is the source whose record was kept; `found_by` every source that returned it. `decision` is `null` until screened, else `DecisionOut`: `{"label": "include"|"exclude"|"uncertain", "priority": "high"|"medium"|"low", "tier", "score", "rationale", "criteria_matched", "exclusion_reasons", "is_unreadable", "model_id", "prompt_version", "criteria_version", "evidence_kind", "decided_at", "label_set_by", "rules_version"}`. `label_set_by` is `model`, or `rules` when the review's label rules set `label`, `priority`, `tier` and `exclusion_reasons` (then `rules_version` names the version; see Label rules below). `tier` is the name shown (UI_UX_SPEC §6.8): `highly_relevant`, `relevant`, `possibly_relevant` (an inclusion by priority), `excluded`, `uncertain`. `criteria_matched` names the criteria (`I1`, `E1`…) the paper meets; an exclusion's `exclusion_reasons` are the exclusion criteria it meets, then the inclusion criteria it misses. `is_unreadable` marks the `uncertain` decision recorded when the model's answer could not be read twice. `criteria_version` is the plan version whose criteria were applied (read it with `GET …/plan/versions/{criteria_version}`); `evidence_kind` is what was read (`abstract`). `criteria` is each criterion's answer in the plan's order, `[{"id": "I1", "answer": "yes"|"partly"|"no"|"unclear", "quote": str|null}]`, for the expanded row (UI_UX_SPEC §6.8): `yes` and `partly` are exactly the criteria in `criteria_matched`, and every quote is the masked text's own words: the model's quote is found in that text ignoring case and whitespace, with pieces joined by an ellipsis in order and of at least three words each, and the matching span is stored (pieces joined with ` … `, cut at a word and ended with `…` past 300 characters). A quote not found is refused and the paper asked again. Empty for decisions made before prompt version `screen-2`, and when the model gave none.
 
 ### `GET /api/v1/reviews/{review_id}/papers?run_id=&label=&tier=&page=`
 
@@ -325,7 +357,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `GET /api/v1/runs/{run_id}/manifest`
 
-**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished.
+**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did.
 
 ### Stage summaries
 
@@ -333,7 +365,7 @@ What the pipeline stages put in `stage.finished`:
 
 - **discover:** `identified`, `by_source`, `failed_sources`, `after_deduplication`, `duplicates_removed`, `new_papers`; manifest `plan_version`, `vocabulary_version`, `sources`, `queries`, `limit_per_source`. One `stage.progress` per source (`"openalex · 25 found"`, `"arxiv · could not be searched"`).
 - **ingest:** `papers`, `abstracts`, `title_only`, `full_texts` (0 until P2), `open_access_not_read`, `kept`, `already_kept`, `gaps`.
-- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `model_id`, `prompt_version` (`screen-3`: quotes located in the text as above; `screen-2`: per-criterion answers and exact quotes), `criteria_version`, `plan_version`. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
+- **screen:** `papers`, `screened`, `tiers`, `unreadable`, `skipped` (`no_abstract`, `not_masked`), `failed`; manifest `is_masked`, `model_id`, `prompt_version` (`screen-3`: quotes located in the text as above; `screen-2`: per-criterion answers and exact quotes), `criteria_version`, `plan_version`, and `instructions_version` when the project's screening instructions were added. One `stage.progress` per paper, with its `screened` row and its (deprecated) item `"HIGH · <masked title> — <one-line reason>"`.
 - **export:** `prisma` (as above), `dataset` (`papers`, `by_source`, `years`, `open_access`, `with_abstract`), `gaps`.
 
 A stage that worked from another run's discovery adds `papers_from_run` to its manifest.
@@ -341,6 +373,28 @@ A stage that worked from another run's discovery adds `papers_from_run` to its m
 ### Audit
 
 `screening.decided` (target: the paper, actor: the system, details: the run id), one per decision, with the project as `scope_id`. Ids only: never a title, text or rationale.
+
+## Label rules
+
+How a decision's per-criterion answers become a label (UI_UX_SPEC §6.8, [ADR 0013](adr/0013-label-rules-applied-on-read.md)). No route here calls a model, and the model's decisions are never changed: labels are computed when read, from the stored answers and the review's latest rules version. With no version stored, every label is the model's. Under rules: an exclusion criterion answered `yes` excludes (a `partly` does not); else every inclusion criterion `yes` is Highly relevant; else every one met (`yes` or `partly`) is Relevant; else at least `possibly_min_met` met is Possibly relevant; else Excluded, for the inclusion criteria missed. `unclear_counts_as` says what an `unclear` inclusion answer counts as: `met` (never enough for Highly relevant), `not_met`, or `uncertain`, which makes a paper that would not reach Relevant Uncertain. Decisions without per-criterion answers, unreadable ones and skipped or failed papers keep the model's label. The papers list, its counts and tier filters, PRISMA and every download use these labels; an existing brief keeps the labels it was written from.
+
+Body of `POST …/preview` and `PUT`: `{"possibly_min_met": int ≥ 1, "unclear_counts_as": "met"|"not_met"|"uncertain"}`; anything else is `422`. Preview and apply are for owners and reviewers (`label.edit`, viewers `403`); reading is for every member; a non-member gets the same `404` as a missing review.
+
+### `GET /api/v1/reviews/{review_id}/label-rules`
+
+**Response** `200` `{"current": LabelRulesVersionOut|null, "versions": [LabelRulesVersionOut]}`, oldest first. `LabelRulesVersionOut` is `{"version", "possibly_min_met", "unclear_counts_as", "changed_by", "changed_at", "papers_moved"}`: `papers_moved` is how many of the newest run's papers changed tier when it was applied, the number the chat's note shows ("Labels changed by new rules: 4 papers moved").
+
+### `POST /api/v1/reviews/{review_id}/label-rules/preview`
+
+**Response** `200` `{"run_id", "moves": [{"from_tier", "to_tier", "count"}], "moved", "untouchable"}` for the review's newest run with papers, from the labels shown now. `moves` lists only papers that change tier, most relevant `from_tier` first; `untouchable` counts decisions the rules cannot reach. `run_id` is `null` and `moves` empty when the review has no papers yet. Nothing is stored.
+
+### `PUT /api/v1/reviews/{review_id}/label-rules`
+
+Stores the rules as the next version and returns the preview's fields plus `"version": LabelRulesVersionOut`. `409` when someone else applied rules at the same moment.
+
+### Audit
+
+`review.label_rules_changed` (target: the review; details: `version`, `possibly_min_met`, `unclear_counts_as`, `papers_moved`), with the project as `scope_id`.
 
 ---
 
@@ -363,7 +417,7 @@ The question, every answer and every change request are masked before any model 
   "accepted_version": 1,
   "rerun_from": "queries",
   "versions": [{"version": 1, "origin": "llm_assisted", "author": {"kind": "model", "user_id": null}, "created_at": "…", "accepted_at": "…"}],
-  "receipts": [{"id": "…", "purpose": "draft", "created_at": "…", "created_by": "…", "model_id": "llama3.1:8b", "prompt_version": "plan.draft@2", "delivered": true, "masked_total": 1, "items": [{"kind": "question", "ref": null, "sent": "… in [LOCATION_1]?", "counts": {"LOCATION": 1}}], "plan_version": 1, "change_request_id": null}]
+  "receipts": [{"id": "…", "purpose": "draft", "created_at": "…", "created_by": "…", "model_id": "llama3.1:8b", "prompt_version": "plan.draft@2", "delivered": true, "masked_total": 1, "items": [{"kind": "question", "ref": null, "sent": "… in [LOCATION_1]?", "counts": {"LOCATION": 1}}], "plan_version": 1, "change_request_id": null, "is_masked": true}]
 }
 ```
 
@@ -375,7 +429,7 @@ The question, every answer and every change request are masked before any model 
   - `null` when nothing changed.
 
   After a run that is done, failed or cancelled, `POST …/plan/changes` drafts the next version, and the web app starts a run from this stage when it is accepted (Wave 2, prompt-first changes).
-- `receipts` are the privacy receipts (UI_UX_SPEC §5.3.2): one per model call, with exactly the masked text the model received and the masked counts by type, never the original values. `delivered: false` means the call failed after the text may have left. `plan_version` is the version the call was drafting (`null` for clarifying questions), and `change_request_id` the change request a revision was drafted from; both are set on failed calls too, so a receipt is placed by them, never by its position. A failed call's `plan_version` may later be written by a retry, whose receipt names it as well. Receipts written before these fields existed have both `null`.
+- `receipts` are the privacy receipts (UI_UX_SPEC §5.3.2): one per model call, with exactly the text the model received and the masked counts by type, never the original values. Item `kind` is `question`, `answer` or `change_request` (masked), or `current_plan`: on a revision, the plan's JSON as sent (from `plan.revise@3`; `counts` is empty). `delivered: false` means the call failed after the text may have left. `plan_version` is the version the call was drafting (`null` for clarifying questions), and `change_request_id` the change request a revision was drafted from; both are set on failed calls too, so a receipt is placed by them, never by its position. A failed call's `plan_version` may later be written by a retry, whose receipt names it as well. Receipts written before these fields existed have both `null`. `is_masked: false` means the project's masking was off: the text was sent as written, apart from the project's masking rules.
 
 `VersionOut` carries `version`, `origin` (`llm_assisted` or `user_supplied`), `is_strict`, `author` (`model` or a `person` with their id), `created_at`, `accepted_at`, `accepted_by`, `model_id` and `prompt_version` (null for a person's version), `themes` (each concept with its `term`, `synonyms` and `terms`, every term with `added_by`), `criteria` (`I1`, `E1`… with `kind` and `text`), `notes` (changes made automatically to the model's draft, such as a term dropped because it held masked text), the `change_request` that produced it, the `clarifications` it was drafted from, and `query`, the compiled Boolean query: `rendered` (for people, not what a source receives), `themes`, `term_count` and `provenance`.
 
@@ -393,7 +447,7 @@ The question, every answer and every change request are masked before any model 
 
 ### `POST /api/v1/reviews/{review_id}/plan/changes`
 
-**Request** `{"request": "add mobile money as a synonym for cash", "based_on_version": 2}`. The request is recorded first (`status` becomes `changes_requested`), then the model drafts the next version from the current one. **Response** `200` with `PlanOut`. `409` when `based_on_version` is not the latest, for your own terms (the model never changes them), or during a run. Audited as `plan.changes_requested` and `plan.revised`.
+**Request** `{"request": "add mobile money as a synonym for cash", "based_on_version": 2}`. The request is recorded first (`status` becomes `changes_requested`), then the model drafts the next version from the current one. **Response** `200` with `PlanOut`. `409` when `based_on_version` is not the latest, for your own terms (the model never changes them), or during a run. `422` when the current plan holds a term the project always masks (a rule added after it was written), naming the criterion or concept; change the plan first. Audited as `plan.changes_requested` and `plan.revised`.
 
 ### `POST /api/v1/reviews/{review_id}/plan/accept`
 
@@ -408,7 +462,7 @@ Your own search terms, used exactly as given (route B). Parsed by code; no model
 - `text`: one concept per line, `term; synonym; synonym`. A line `[theme]` starts a theme; lines before any belong to `general`. Blank lines and lines starting with `#` are ignored.
 - `csv`: a header `theme,term,synonyms`, then one concept per row, synonyms separated by `;`. A blank theme means `general`.
 
-Each term is trimmed of surrounding spaces and otherwise kept exactly. An empty term, a term repeated within its concept and a concept repeated within its theme are refused with `422` naming the line, never silently dropped. **Response** `200` with `PlanOut`: a new, unaccepted version with `origin: user_supplied`. Audited as `plan.vocabulary_uploaded`.
+Each term is trimmed of surrounding spaces and otherwise kept exactly. An empty term, a term repeated within its concept and a concept repeated within its theme are refused with `422` naming the line, never silently dropped. A criterion, term or theme holding a term the project always masks (a masking rule) is refused with `422` naming it (`Criterion E1 holds a term this project always masks…`, or `Concept 2`), never the term, since criteria reach the model and terms the paper sources. **Response** `200` with `PlanOut`: a new, unaccepted version with `origin: user_supplied`. Audited as `plan.vocabulary_uploaded`.
 
 ### `GET /api/v1/reviews/{review_id}/plan/versions/{version}`
 
@@ -426,7 +480,7 @@ A run's `queries` stage compiles the accepted plan into each enabled source's qu
 
 ## Masking rules
 
-A project's masking rules are terms always masked in every text of the project, as the entity type chosen: a staff list, a clinic's name ([`architecture.md` §3.9.1](./architecture.md#391-masking-is-derived-reviewable-and-re-runnable)). They apply to questions, answers and change requests before planning calls a model, to every paper in the `mask` stage, and to the prompt guard when a use case passes them with `GuardedInference.with_rules`. Matching ignores case and needs whole words; `Kofi` does not match `Kofiville`.
+A project's masking rules are terms always masked in every text of the project, as the entity type chosen, whether the project's masking is on or off: a staff list, a clinic's name ([`architecture.md` §3.9.1](./architecture.md#391-masking-is-derived-reviewable-and-re-runnable)). They apply to questions, answers and change requests before planning calls a model, to every paper in the `mask` stage, and to the prompt guard when a use case passes them with `GuardedInference.with_rules`. Matching ignores case and needs whole words; `Kofi` does not match `Kofiville`.
 
 **Who:** owners only, for reading too, because a term is usually a person's name and counts as raw text. Reviewers and viewers get `403`; a non-member gets the same `404` as a missing project. Terms are sealed under the project's key (`masking_rules.term`, bound to the rule's id), so deleting the project makes them unreadable.
 
@@ -444,11 +498,35 @@ A project's masking rules are terms always masked in every text of the project, 
 
 ### The `mask` stage
 
-The `mask` stage masks each paper's kept text (title and abstract in P1) with the narrow entity list: emails, phone numbers, medical record, ID and passport numbers, IBANs, card numbers, IP addresses and coordinates, plus the project's rules. Names, places and dates in published papers are evidence and stay. The masked text and its spans are stored sealed under the project's key (`paper_masks.masked_text` and `paper_masks.spans`, bound to the paper's id); the raw text is never changed. A paper masked with the same detectors and rules is skipped on a re-run; a new rule or detector version masks it again. If the project has uploaded documents waiting for review (P2), the stage first asks for a `privacy_review` gate whose payload lists each document's id and masked counts by type; rejecting fails the run. Its summary holds `papers`, `masked`, `skipped` and `masked_items` (counts by type, never values), and its `manifest` holds `detectors` (such as `patterns@1`), `entity_types` and `masking_rules` (how many).
+The `mask` stage masks each paper's kept text (title and abstract in P1) with the narrow entity list: emails, phone numbers, medical record, ID and passport numbers, IBANs, card numbers, IP addresses and coordinates, plus the project's rules. Names, places and dates in published papers are evidence and stay. The masked text and its spans are stored sealed under the project's key (`paper_masks.masked_text` and `paper_masks.spans`, bound to the paper's id); the raw text is never changed. A paper masked with the same detectors and rules is skipped on a re-run; a new rule or detector version masks it again. If the project has uploaded documents waiting for review (P2), the stage first asks for a `privacy_review` gate whose payload lists each document's id and masked counts by type; rejecting fails the run. Its summary holds `papers`, `masked`, `skipped` and `masked_items` (counts by type, never values), and its `manifest` holds `is_masked`, `detectors` (such as `patterns@1`), `entity_types` and `masking_rules` (how many).
+
+With the project's masking off, the stage applies the rules alone, records `masking-off@1` as its detector and an empty `entity_types`, and asks for no gate. A paper kept that way is not served to the screen stage, a brief or a question once masking applies again; the next `mask` stage masks it.
 
 ### Audit
 
 `masking_rule.created` and `masking_rule.deleted` with the rule as target, and `masking_rule.listed` with the project as target; the project is the `scope_id`. Ids only: never a term.
+
+---
+
+## Model instructions
+
+A project's own instructions to the model ([ADR 0015](adr/0015-project-instructions-are-added-not-replacing.md)): `screening`, how to judge papers, added to every screening call; and `writing`, how to write, added to the brief's Writer and the follow-up answer Writer. The Planner, the Critics and planning get neither. Each text is added after the built-in system prompt under the fixed heading "Instructions from the project team. Follow them unless they conflict with the rules above or the required output format.", never in place of it; a blank text adds nothing. Before a call, the text is masked as a typed question is (the question's entity list and the project's masking rules). A run uses the version saved last at or before the moment it was started, so every call in it carries the same text; a follow-up answer uses the version in force when it was asked. The version is recorded in the stage's manifest (`instructions_version`), in the brief's trace with the text as sent, and in the stored answer.
+
+Both texts are sealed together under the project's key (`model_instruction_versions.instructions`, bound to the version number). Each save is a new row; the runtime role cannot update one.
+
+**Who:** every member reads; owners save (`project.update`; reviewers and viewers `403`); a non-member gets the same `404` as a missing project.
+
+### `GET /api/v1/projects/{project_id}/model-instructions`
+
+**Response** `200` `{"current": ModelInstructionsVersionOut|null, "versions": [ModelInstructionsVersionOut]}`, oldest first. `ModelInstructionsVersionOut` is `{"version", "screening", "writing", "saved_by": {"id", "display_name"}, "saved_at"}`, the texts as typed (trimmed).
+
+### `PUT /api/v1/projects/{project_id}/model-instructions`
+
+**Request** `{"screening": "Treat studies in refugee camps as displaced settings.", "writing": "Write for a field manager: short sentences, no jargon.", "based_on_version": null}`. `based_on_version` is the version the person edited, `null` when the project has none yet. **Response** `200` with the new `ModelInstructionsVersionOut`. `409` when `based_on_version` is no longer the latest, or someone saved at the same moment. `422` for a text over 2,000 characters after trimming, or with control characters (line breaks and tabs are fine), naming the field; and for a text holding a term the project always masks, naming the field and never the term. Blank texts are allowed: saving both blank is a new version with no instructions.
+
+### Audit
+
+`project.model_instructions_changed` (target: the project; sealed details: `version`), with the project as `scope_id`. Never the text.
 
 ---
 
@@ -493,11 +571,11 @@ The source panel. **Response** `200` with `EvidenceOut`: `{"tag", "source_kind",
 
 ### `GET /api/v1/briefs/{brief_id}/trace`
 
-How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds"}}`. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
+How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds", "instructions_version"?}, "is_masked", "instructions": {"version", "text"} | null}`. `is_masked` says whether the brief's question and passages were masked; `null` for a brief written before this was recorded. `instructions` is the project's writing instructions exactly as the Writer received them, masked where masking applies; `null` when it had none, as for every brief written before they existed. `instructions_version` is in the manifest only when they were added. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
 
 ### The `answer` stage
 
-Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.with_rules`. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever` and `max_rounds`.
+Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.for_project`, which adds the project's rules. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever`, `max_rounds`, `is_masked` and, when the Writer got the project's writing instructions, `instructions_version`.
 
 ### Audit
 
@@ -517,7 +595,7 @@ Downloads of a review's results (UI_UX_SPEC §6.8, §6.9, §15 P2). Each file is
 
 | Name | Media type | Holds |
 | --- | --- | --- |
-| `dataset.csv` | `text/csv; charset=utf-8` | One row per paper of the run, in the screening table's order: `tag`, `position`, `title`, `year`, `doi`, `url`, `source_id`, `found_by`, `is_open_access`, `label`, `tier`, `priority`, `score`, `rationale`, `criteria_matched`, `exclusion_reasons`, `is_unreadable`, `model_id`, `prompt_version`, `criteria_version`, `evidence_kind`, `decided_at`. A cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'`, so a spreadsheet shows it as text instead of running it. |
+| `dataset.csv` | `text/csv; charset=utf-8` | One row per paper of the run, in the screening table's order: `tag`, `position`, `title`, `year`, `doi`, `url`, `source_id`, `found_by`, `is_open_access`, `label`, `tier`, `label_set_by`, `rules_version`, `priority`, `score`, `rationale`, `criteria_matched`, `exclusion_reasons`, `is_unreadable`, `model_id`, `prompt_version`, `criteria_version`, `evidence_kind`, `decided_at`. A cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'`, so a spreadsheet shows it as text instead of running it. |
 | `dataset.jsonl` | `application/x-ndjson` | One `PaperOut` per line, exactly as `GET …/papers` returns it. |
 | `included.ris` | `application/x-research-info-systems` | The included papers, for a reference manager: `TY`, `ID` (the tag), `TI`, `PY`, `DO`, `UR`, `ER`. |
 | `prisma.md` | `text/markdown; charset=utf-8` | The PRISMA counts of `GET …/prisma` as a Markdown table. |
@@ -548,7 +626,7 @@ Questions about a review's evidence, in threads (UI_UX_SPEC §6.12, §5.3.9). As
 
 **Request** `{"question": "…", "thread_id": "…" | null}` (1 to 2000 characters; whitespace is collapsed). **Response** `202` with `QuestionOut` and a `Location: /api/v1/questions/{id}` header. `409` while the thread's last question is open, or when someone asked in the same thread at the same moment. `404` for a thread of another review. `422` for a blank question. `403` for a viewer.
 
-`QuestionOut`: `{"id", "thread_id", "review_id", "position", "status": "pending"|"answering"|"answered"|"failed", "asked_by", "asked_at", "question_sent", "masked": {"LOCATION": 1}, "answered_at", "model_id", "error", "answer": AnswerOut | null}`. `question_sent` is the masked question, for the privacy receipt; `masked` counts what was masked, never the values. `error` is a plain sentence when `failed`.
+`QuestionOut`: `{"id", "thread_id", "review_id", "position", "status": "pending"|"answering"|"answered"|"failed", "asked_by", "asked_at", "question_sent", "masked": {"LOCATION": 1}, "is_masked": true, "answered_at", "model_id", "error", "answer": AnswerOut | null}`. `question_sent` is the question as sent, for the privacy receipt; `masked` counts what was masked, never the values; `is_masked` is `false` when the project's masking was off, and such a question fails with a plain message if masking is on again before it is answered. `error` is a plain sentence when `failed`.
 
 `AnswerOut`: `{"claims": [Claim], "nothing_found", "message", "run_id", "sources": [{"tag", "source_kind", "paper_id", "passages": [{"text", "locator", "found_by", "round"}]}], "steps": [AgentStep], "rounds", "kept_round", "stopped_because", "warnings": [{"code", "message", "where"}]}`. Claims and agent steps have the brief's shapes. `sources` lists every cited tag with the masked passages the answer drew on. `stopped_because` is `null` when nothing was retrieved and no model was asked.
 
@@ -659,7 +737,7 @@ Every state-changing request made while signed in must send the CSRF token back 
 
 Sessions end after 1 hour idle or 24 hours in total. Changing the password needs a sign-in within the last 15 minutes; otherwise the response is `401` with `"reauthentication_required": true`, and `POST /auth/reauthenticate` refreshes it.
 
-`POST /auth/reauthenticate` `{"password"}` answers `204` with **new** `__Host-session` and `__Host-csrf` cookies: the token from before stops working at once. The session keeps its assurance level and its 24-hour limit, counted from the original sign-in; a wrong password is `403` and changes nothing.
+`POST /auth/reauthenticate` `{"password"}` answers `204` with **new** `__Host-session` and `__Host-csrf` cookies: the token from before stops working at once. The session keeps its assurance level and its 24-hour limit, counted from the original sign-in; a wrong password is `403` and changes nothing. Each attempt counts against the account's sign-in limit (10 per 15 minutes, shared with `POST /auth/login` and `POST /account/password`); past it the answer is `429` with `Retry-After`, even for the right password. A confirmed password clears the count.
 
 Registration is by invitation only. The first administrator is created inside the deployment: `python -m app.cli create-admin --email … --password-stdin`.
 
@@ -745,11 +823,7 @@ Every response carries security headers (CSP, HSTS, `nosniff`, `Cache-Control: n
 
 ---
 
-## Not here yet
+## Not here
 
-Deliberately absent, in build order:
-
-- **Real sources** — arXiv, OpenAlex, Europe PMC, Google Scholar
-- **Real pipeline stages** — screening, masking behind the privacy gate (the run machinery, its gates and its fake stages are in place)
-
-See [`dependencies.md`](./dependencies.md) for the sequence.
+- **Google Scholar** is not a source and will not be: it has no API, and its terms forbid automated access ([dependencies §4](dependencies.md#4-outside-services-and-the-libraries-that-reach-them)).
+- **P3 features** (collections, tags, pins, seen and saved marks, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).

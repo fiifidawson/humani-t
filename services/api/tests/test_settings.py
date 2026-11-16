@@ -227,6 +227,61 @@ class TestInferenceDestination:
         assert "tok-123" not in repr(settings)
 
 
+class TestUnmaskedHostedInference:
+    """ADR 0014: a hosted model gets unmasked text only if operator and owner both chose so."""
+
+    def test_unmasked_text_to_a_hosted_model_is_off_by_default(self):
+        assert Settings(environment=Environment.TEST).allow_unmasked_hosted_inference is False
+
+    def test_it_is_refused_unless_hosted_inference_is_allowed_too(self):
+        with pytest.raises(ValidationError, match="allow_hosted_inference"):
+            Settings(environment=Environment.TEST, allow_unmasked_hosted_inference=True)
+
+    def test_it_is_accepted_with_hosted_inference(self):
+        settings = production_settings(
+            inference_url="https://api.openai.com/v1",
+            allow_hosted_inference=True,
+            allow_unmasked_hosted_inference=True,
+        )
+
+        assert settings.allow_unmasked_hosted_inference is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://ollama:11434",
+            "http://127.0.0.1:11434",
+            "http://192.168.1.20:11434",
+            "http://100.101.102.103:11434",
+        ],
+    )
+    def test_a_model_server_inside_the_deployment_is_not_hosted(self, url):
+        settings = Settings(environment=Environment.TEST, inference_url=url)
+
+        assert settings.is_inference_hosted is False
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"inference_url": "https://api.openai.com/v1", "allow_hosted_inference": True},
+            {"inference_url": "https://models.example.org/ollama"},
+            {"inference_model": "gpt-oss:120b-cloud", "allow_hosted_inference": True},
+        ],
+        ids=["hosted-api", "outside-the-deployment", "ollama-cloud-model"],
+    )
+    def test_a_model_outside_the_deployment_or_in_ollamas_cloud_is_hosted(self, overrides):
+        assert Settings(environment=Environment.TEST, **overrides).is_inference_hosted is True
+
+    def test_the_demo_model_is_not_hosted_whatever_the_url_says(self):
+        settings = Settings(
+            environment=Environment.TEST,
+            demo_inference=True,
+            inference_url="https://models.example.org",
+        )
+
+        assert settings.is_inference_hosted is False
+
+
 class TestPaperSources:
     def test_none_are_enabled_by_default(self):
         assert Settings(environment=Environment.TEST).paper_source_ids == ()

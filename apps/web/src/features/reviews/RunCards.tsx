@@ -32,6 +32,7 @@ import {
 	Library,
 	Minus,
 	Square,
+	TriangleAlert,
 	X,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
@@ -45,8 +46,15 @@ import { RunStrip } from "../runs/RunStrip";
 import type { RunState, StageId } from "../runs/runEvents";
 import { StageList } from "../runs/StageList";
 import { ChatCard, ChatLine } from "./ChatCard";
-import { clockTime, plural, TIER_ORDER, TIERS, type Tier } from "./format";
+import {
+	clockTime,
+	plural,
+	type ShownLabel,
+	TIER_ORDER,
+	TIERS,
+} from "./format";
 import { type LiveRun, useLiveRun } from "./liveRun";
+import { PrivacyGateCard } from "./PrivacyGateCard";
 import { type Run, stagesOf, useReview, useRunNumber } from "./reviewContext";
 
 /** The stages to run again: from the one that stopped, else every one not done. */
@@ -270,17 +278,11 @@ export function GateCard({ live }: { live: LiveRun }) {
 
 	if (gate.kind === "privacy_review") {
 		return (
-			<ChatCard title="Needs you · Privacy review" tone="warning">
-				<Text>
-					Uploaded documents need a masking check before any model reads them.
-					The run continues when an owner approves.
-				</Text>
-				<Text color="fg.muted">
-					{project.role === "owner"
-						? "The masking review isn't available in the browser yet."
-						: "Only owners can do this."}
-				</Text>
-			</ChatCard>
+			<PrivacyGateCard
+				projectId={project.id}
+				isOwner={project.role === "owner"}
+				payload={gatePayload}
+			/>
 		);
 	}
 
@@ -342,17 +344,19 @@ export function GateCard({ live }: { live: LiveRun }) {
 	);
 }
 
-const TIER_ICONS: Readonly<Record<Tier | "unscreened", ReactNode>> = {
+const TIER_ICONS: Readonly<Record<ShownLabel, ReactNode>> = {
 	highly_relevant: <BadgeCheck size={14} />,
 	relevant: <CircleCheck size={14} />,
 	possibly_relevant: <CircleDot size={14} />,
 	uncertain: <CircleQuestionMark size={14} />,
 	excluded: <CircleMinus size={14} />,
-	unscreened: <CircleDashed size={14} />,
+	skipped: <Minus size={14} />,
+	failed: <TriangleAlert size={14} />,
+	not_screened: <CircleDashed size={14} />,
 };
 
 /** A screening label as the word and its icon (§10.2 `LabelBadge`); colour only repeats them. */
-export function LabelBadge({ tier }: { tier: Tier | "unscreened" }) {
+export function LabelBadge({ tier }: { tier: ShownLabel }) {
 	return (
 		<Flex
 			as="span"
@@ -363,7 +367,7 @@ export function LabelBadge({ tier }: { tier: Tier | "unscreened" }) {
 			py="0.5"
 			rounded="sm"
 			bg={TIERS[tier].fill}
-			borderWidth={tier === "unscreened" ? "1px" : "0"}
+			borderWidth={TIERS[tier].fill === "transparent" ? "1px" : "0"}
 			borderColor="border"
 			color={TIERS[tier].tone}
 			fontSize="xs"
@@ -386,6 +390,7 @@ export function ScreeningCard({ live }: { live: LiveRun }) {
 		...papersQuery(api, review.id, {
 			runId: live.run.id,
 			label: null,
+			tier: null,
 			page: 1,
 		}),
 		enabled: live.state.summaries.screen !== undefined,
@@ -394,7 +399,8 @@ export function ScreeningCard({ live }: { live: LiveRun }) {
 		return null;
 	}
 	const { counts } = papers.data;
-	const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+	const total = TIER_ORDER.reduce((sum, tier) => sum + (counts[tier] ?? 0), 0);
+	const failed = counts["failed"] ?? 0;
 	return (
 		<ChatCard
 			title={`Screening · ${plural(total, "paper")}`}
@@ -418,7 +424,9 @@ export function ScreeningCard({ live }: { live: LiveRun }) {
 				flexWrap="wrap"
 				gap="3"
 			>
-				{TIER_ORDER.filter((tier) => (counts[tier] ?? 0) > 0).map((tier) => (
+				{TIER_ORDER.filter(
+					(tier) => tier !== "failed" && (counts[tier] ?? 0) > 0,
+				).map((tier) => (
 					<Flex as="li" key={tier} align="center" gap="1.5">
 						<Text
 							as="span"
@@ -431,6 +439,24 @@ export function ScreeningCard({ live }: { live: LiveRun }) {
 					</Flex>
 				))}
 			</chakra.ul>
+			{/* Warnings are never folded away (§1 principle 1), so failures get their own line. */}
+			{failed === 0 ? null : (
+				<Flex color="caveat.fg" gap="1.5" align="center" wrap="wrap">
+					<TriangleAlert size={16} />
+					<Text as="span">
+						{`${plural(failed, "paper")} failed the privacy check and ${failed === 1 ? "wasn't" : "weren't"} screened.`}
+					</Text>
+					<ChakraLink asChild css={linkStyle}>
+						<Link
+							to="/p/$projectId/r/$reviewId/papers"
+							params={{ projectId: project.id, reviewId: review.id }}
+							search={{ run: live.run.id, tier: "failed" }}
+						>
+							Show the failed papers
+						</Link>
+					</ChakraLink>
+				</Flex>
+			)}
 		</ChatCard>
 	);
 }

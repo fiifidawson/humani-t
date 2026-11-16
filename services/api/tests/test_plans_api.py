@@ -29,6 +29,7 @@ from tests.plan_support import (
     stored_versions,
 )
 from tests.project_support import PROJECTS, project_events, send
+from tests.run_support import add_rule
 
 
 @pytest.fixture
@@ -399,6 +400,67 @@ class TestMaskedPlaces:
         assert "ask the team to name" in clarify.messages[0].content.casefold()
 
 
+class TestProjectMaskingRules:
+    """A project's always-masked terms never reach the model, whoever wrote the text."""
+
+    CAMP = "Hagadera"
+
+    def test_model_text_holding_a_masked_term_is_refused_and_never_sent(self, team):
+        team.model.clarifying = {
+            "questions": [
+                {"text": f"Which {self.CAMP} blocks matter?", "suggestions": []},
+                {"text": "Which years?", "suggestions": []},
+            ]
+        }
+        ids = [q["id"] for q in team.start("deep").json()["questions"]]
+        add_rule(team.rt, self.CAMP, "LOCATION")
+
+        response = team.answer({ids[0]: "All of them", ids[1]: None})
+
+        assert response.status_code == 422
+        assert len(team.model.requests) == 1
+        assert self.CAMP not in team.model.sent_text()
+
+    def test_a_change_to_a_plan_holding_a_masked_term_is_refused_naming_it(self):
+        camp_draft = {
+            **DRAFT,
+            "criteria": {"inclusion": ["Cash programmes"], "exclusion": [f"Not {self.CAMP}"]},
+        }
+        team = make_plan_team(drafts=[camp_draft, REVISED])
+        team.drafted()
+        add_rule(team.rt, self.CAMP, "LOCATION")
+
+        response = team.change("add mobile money", based_on_version=1)
+
+        assert response.status_code == 422
+        assert "Criterion E1" in response.json()["detail"]
+        assert self.CAMP not in response.json()["detail"]
+        assert self.CAMP not in team.model.sent_text()
+
+    def test_an_uploaded_criterion_holding_a_masked_term_is_refused_naming_it(self, team):
+        add_rule(team.rt, self.CAMP, "LOCATION")
+        criteria = [
+            {"kind": "inclusion", "text": "Randomised trials"},
+            {"kind": "exclusion", "text": f"Reports from the {self.CAMP} office"},
+        ]
+
+        response = team.upload(criteria=criteria)
+
+        assert response.status_code == 422
+        assert "Criterion E1" in response.json()["detail"]
+        assert self.CAMP not in response.json()["detail"]
+        assert stored_versions(team) == []
+
+    def test_an_uploaded_search_term_holding_a_masked_term_is_refused(self, team):
+        add_rule(team.rt, self.CAMP, "LOCATION")
+
+        response = team.upload(f"[setting]\nrefugee camps; {self.CAMP} camp\n")
+
+        assert response.status_code == 422
+        assert "Concept 1" in response.json()["detail"]
+        assert stored_versions(team) == []
+
+
 class TestAccept:
     def test_accepting_freezes_the_vocabulary_at_this_version(self, team):
         team.drafted()
@@ -547,6 +609,23 @@ class TestPrivacyReceipts:
             "sent": "add mobile money",
             "counts": {},
         }
+
+    def test_a_revision_receipt_holds_the_current_plan_exactly_as_sent(self, team):
+        team.drafted()
+        team.change("add mobile money", based_on_version=1)
+
+        receipt = team.plan()["receipts"][-1]
+        sent_lines = team.model.requests[-1].messages[1].content.splitlines()
+
+        assert [i["kind"] for i in receipt["items"]] == [
+            "question",
+            "current_plan",
+            "change_request",
+        ]
+        plan_item = receipt["items"][1]
+        assert plan_item["counts"] == {}
+        assert f"Current plan (JSON): {plan_item['sent']}" in sent_lines
+        assert receipt["prompt_version"] == "plan.revise@3"
 
 
 class TestAccess:

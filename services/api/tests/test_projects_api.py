@@ -14,6 +14,9 @@ from uuid import UUID
 import pytest
 
 from app.domain.encryption import KeyDestroyedError
+from app.domain.runs import GateKind
+from app.runs.fake import FakeStage
+from tests.brief_support import write_brief
 from tests.project_support import (
     OUTSIDER_EMAIL,
     OWNER_EMAIL,
@@ -35,9 +38,17 @@ from tests.project_support import (
     stored_name_ciphertext,
     verify_audit,
 )
+from tests.run_support import (
+    RunTeam,
+    create_review,
+    failing_with_message,
+    make_run_team,
+    run_until_idle,
+    simple_stages,
+)
 from tests.support import AuthHarness, csrf_headers
 
-PROJECT_FIELDS = {"id", "name", "role", "created_at", "archived_at"}
+PROJECT_FIELDS = {"id", "name", "role", "created_at", "archived_at", "status"}
 MEMBER_FIELDS = {"user_id", "display_name", "role", "added_at"}
 
 
@@ -165,6 +176,101 @@ class TestListProjects:
 
         assert default == []
         assert [p["id"] for p in with_archived] == [team.project_id]
+
+
+class TestProjectStatus:
+    """UI_UX_SPEC §11.1: derived from the newest review and its latest run, never set."""
+
+    @staticmethod
+    def _status(rt: RunTeam) -> str:
+        listed = {p["id"]: p["status"] for p in rt.owner.get(PROJECTS).json()}
+        opened = rt.owner.get(rt.team.path()).json()["status"]
+        assert listed[rt.project_id] == opened
+        return opened
+
+    def test_a_new_project_is_planning(self, team):
+        project = create_project(team.outsider, "Market assessment, Mopti")
+
+        assert project["status"] == "planning"
+        assert team.outsider.get(PROJECTS).json()[0]["status"] == "planning"
+
+    def test_a_review_that_has_not_run_is_planning(self):
+        rt = make_run_team()
+
+        assert self._status(rt) == "planning"
+
+    def test_a_started_run_is_running(self):
+        rt = make_run_team()
+        rt.start_run()
+
+        assert self._status(rt) == "running"
+
+    def test_a_run_waiting_at_a_gate_needs_you(self):
+        rt = make_run_team()
+        rt.start_run(["queries"])
+        run_until_idle(rt.worker({"queries": FakeStage(gate=GateKind.PRIVACY_REVIEW)}))
+
+        assert self._status(rt) == "needs_you"
+
+    def test_a_run_that_wrote_a_brief_is_brief_ready(self):
+        rt = make_run_team()
+        write_brief(rt)
+
+        assert self._status(rt) == "brief_ready"
+
+    def test_a_run_finished_without_the_brief_stage_is_done_with_no_brief(self):
+        rt = make_run_team()
+        rt.start_run(["queries"])
+        run_until_idle(rt.worker(simple_stages("queries")))
+
+        assert self._status(rt) == "done_without_brief"
+
+    def test_a_failed_run_is_failed(self):
+        rt = make_run_team()
+        rt.start_run(["queries"])
+        run_until_idle(rt.worker({"queries": failing_with_message("No source answered.")}))
+
+        assert self._status(rt) == "failed"
+
+    def test_a_cancelled_run_is_cancelled(self):
+        rt = make_run_team()
+        run_id = rt.start_run(["queries"])
+        rt.cancel(run_id)
+
+        assert self._status(rt) == "cancelled"
+
+    def test_the_newest_review_decides_not_an_older_one(self):
+        rt = make_run_team()
+        write_brief(rt)
+        rt.clock.advance(minutes=1)
+        create_review(rt.owner, rt.project_id, "How fast do prices rise after a cash transfer?")
+
+        assert self._status(rt) == "planning"
+
+    def test_an_archived_project_is_archived_whatever_its_review(self):
+        rt = make_run_team()
+        rt.start_run()
+        archived = send(rt.owner, "POST", rt.team.path("/archive"))
+
+        assert archived.json()["status"] == "archived"
+        assert rt.owner.get(rt.team.path()).json()["status"] == "archived"
+
+    def test_unarchiving_gives_back_the_derived_status(self):
+        rt = make_run_team()
+        rt.start_run()
+        send(rt.owner, "POST", rt.team.path("/archive"))
+
+        unarchived = send(rt.owner, "POST", rt.team.path("/unarchive"))
+
+        assert unarchived.json()["status"] == "running"
+
+    def test_a_rename_answers_with_the_status_too(self):
+        rt = make_run_team()
+        rt.start_run()
+
+        renamed = send(rt.owner, "PATCH", rt.team.path(), {"name": "Cash, Marib"})
+
+        assert renamed.json()["status"] == "running"
 
 
 class TestReadProject:

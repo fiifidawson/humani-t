@@ -26,6 +26,7 @@ from app.domain.screening import (
 
 _Status = Literal["screened", "skipped", "failed", "not_screened"]
 _SkipReason = Literal["no_abstract", "not_masked"]
+_SetBy = Literal["model", "rules"]
 
 
 class CriterionAnswerOut(BaseModel):
@@ -40,6 +41,13 @@ class DecisionOut(BaseModel):
     label: ScreeningLabel
     priority: Priority
     tier: ScreeningTier = Field(description="The name shown: Highly relevant, Relevant, …")
+    label_set_by: _SetBy = Field(
+        default="model",
+        description="Who set label, priority and tier: the model, or the review's rules.",
+    )
+    rules_version: int | None = Field(
+        default=None, description="The rules version that set the label, when rules did."
+    )
     score: float
     rationale: str = Field(description="The model's reason, written from masked text.")
     criteria_matched: list[str] = Field(description="Criterion ids (I1, E1…) the paper meets.")
@@ -61,11 +69,16 @@ class DecisionOut(BaseModel):
     )
 
     @classmethod
-    def from_domain(cls, decision: ScreeningDecision) -> DecisionOut:
+    def from_domain(
+        cls, decision: ScreeningDecision, rules_version: int | None = None
+    ) -> DecisionOut:
+        """`rules_version` is set when rules, not the model, gave the label (ADR 0013)."""
         return cls(
             label=decision.label,
             priority=decision.priority,
             tier=decision.tier,
+            label_set_by="model" if rules_version is None else "rules",
+            rules_version=rules_version,
             score=decision.score,
             rationale=decision.rationale,
             criteria_matched=list(decision.criteria_matched),
@@ -103,6 +116,9 @@ class PaperOut(BaseModel):
         ),
     )
     skipped_because: _SkipReason | None = Field(default=None, description="Set when skipped.")
+    is_cited_in_brief: bool = Field(
+        default=False, description="Whether the brief this run wrote cites it, by `tag`."
+    )
 
     @classmethod
     def from_row(cls, row: PaperRow) -> PaperOut:
@@ -118,9 +134,12 @@ class PaperOut(BaseModel):
             source_id=record.source_id,
             found_by=list(row.found_by),
             is_open_access=record.is_open_access,
-            decision=None if row.decision is None else DecisionOut.from_domain(row.decision),
+            decision=None
+            if row.decision is None
+            else DecisionOut.from_domain(row.decision, row.rules_version),
             screening_status=cast(_Status, row.status),
             skipped_because=cast(_SkipReason | None, row.skipped_because),
+            is_cited_in_brief=row.is_cited_in_brief,
         )
 
 
@@ -218,11 +237,20 @@ class ManifestOut(BaseModel):
     vocabulary_versions: list[int]
     criteria_versions: list[int]
     plan_versions: list[int]
+    instructions_versions: list[int] = Field(
+        description="The project's instruction versions the model calls carried."
+    )
     sources: list[str]
     queries: dict[str, str]
     model_ids: list[str]
     prompt_versions: dict[str, str]
     papers_from_runs: list[str] = Field(description="Runs whose discovery this run reused.")
+    masking: Literal["on", "off", "mixed"] | None = Field(
+        description=(
+            "Whether the run's text was masked, as its stages recorded it (ADR 0014): mixed "
+            "when the switch changed during the run; null when no stage recorded it."
+        )
+    )
     stage_facts: list[StageFactsOut]
 
     @classmethod
@@ -239,11 +267,13 @@ class ManifestOut(BaseModel):
             vocabulary_versions=list(manifest.vocabulary_versions),
             criteria_versions=list(manifest.criteria_versions),
             plan_versions=list(manifest.plan_versions),
+            instructions_versions=list(manifest.instructions_versions),
             sources=list(manifest.sources),
             queries=dict(manifest.queries),
             model_ids=list(manifest.model_ids),
             prompt_versions=dict(manifest.prompt_versions),
             papers_from_runs=list(manifest.papers_from_runs),
+            masking=manifest.masking,
             stage_facts=[
                 StageFactsOut(stage=s.stage, seconds=s.seconds, facts=dict(s.facts))
                 for s in manifest.stage_facts

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.domain.masking import EntityType, MaskingRule
 from app.domain.plans import (
     AuthorKind,
     ChangeKind,
@@ -28,7 +29,10 @@ from app.domain.plans import (
     first_stage_to_redo,
     number_criteria,
     parse_strict_vocabulary,
+    plan_text_fields,
+    refuse_rule_terms,
     revision_from_gate,
+    revision_text_fields,
     term_authors,
 )
 from app.domain.query import compile_vocabulary
@@ -479,6 +483,51 @@ class TestGateRevisions:
     def test_a_malformed_concept_is_refused(self):
         with pytest.raises(ValueError, match="term"):
             revision_from_gate({"vocabulary": {"concepts": [{"synonyms": ["x"]}]}})
+
+
+class TestMaskedTermsInPlanText:
+    """Plan text a person writes reaches the model and the paper sources unmasked."""
+
+    CAMP = MaskingRule(uuid.uuid4(), "Hagadera", EntityType.LOCATION)
+
+    def test_a_criterion_holding_a_masked_term_is_refused_naming_it_and_not_the_term(self):
+        criteria = number_criteria(
+            [
+                (CriterionKind.INCLUSION, "Refugee settings"),
+                (CriterionKind.EXCLUSION, "Reports from the hagadera office"),
+            ]
+        )
+
+        with pytest.raises(ValueError, match="Criterion E1") as refused:
+            refuse_rule_terms(plan_text_fields((CASH,), criteria), [self.CAMP])
+
+        assert "agadera" not in str(refused.value)
+
+    @pytest.mark.parametrize(
+        ("concept", "field"),
+        [
+            (Concept("camps", ("Hagadera camp",), theme="setting"), "Concept 2"),
+            (Concept("camps", theme="Hagadera"), "Concept 2"),
+        ],
+        ids=["synonym", "theme"],
+    )
+    def test_a_search_term_or_theme_holding_a_masked_term_is_refused(self, concept, field):
+        with pytest.raises(ValueError, match=field):
+            refuse_rule_terms(plan_text_fields((CASH, concept), CRITERIA), [self.CAMP])
+
+    def test_a_term_inside_a_longer_word_is_not_a_masked_term(self):
+        concepts = (Concept("Hagaderas", theme="setting"),)
+
+        refuse_rule_terms(plan_text_fields(concepts, CRITERIA), [self.CAMP])
+
+    def test_gate_revisions_are_refused_naming_the_path_of_the_text(self):
+        revisions = {
+            "vocabulary": {"concepts": [{"term": "cash", "synonyms": ["vouchers"]}]},
+            "criteria": [{"kind": "inclusion", "text": "RCTs"}, {"text": "Not Hagadera"}],
+        }
+
+        with pytest.raises(ValueError, match=r"revisions\.criteria\[1\]\.text"):
+            refuse_rule_terms(revision_text_fields(revisions), [self.CAMP])
 
 
 class TestReviewStates:

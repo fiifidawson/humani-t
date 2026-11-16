@@ -16,7 +16,7 @@ function briefed(hasBrief = true, state: "running" | "done" = "done") {
 	if (hasBrief) {
 		api.reviews.addBrief(review, run);
 	}
-	return { project, review, run, path: `/p/${project.id}/r/${review.id}` };
+	return { api, project, review, run, path: `/p/${project.id}/r/${review.id}` };
 }
 
 async function openTrace(path: string) {
@@ -132,6 +132,67 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		expect(used).toHaveTextContent(
 			"Prompt versions: answer.writer brief.writer@2",
 		);
+	});
+
+	it("says when masking was off for the run, as the owner chose", async () => {
+		const api = fakeApi();
+		api.signInAs(api.addUser({ hasTotp: true }));
+		const project = api.addProject("Cash vs vouchers, Gao", "owner");
+		const review = api.reviews.add(project.id, "Cash or vouchers in camps?");
+		api.reviews.startPlan(review, "shallow");
+		api.reviews.accept(review);
+		api.reviews.addBrief(review, api.reviews.addRun(review, "done"));
+		const entry = api.reviews.briefs[0];
+		if (entry !== undefined) {
+			entry.trace.is_masked = false;
+		}
+		const { canvas } = await openTrace(`/p/${project.id}/r/${review.id}`);
+
+		const used = within(canvas).getByRole("list", { name: "What this used" });
+		expect(used).toHaveTextContent(
+			"Masking: off for this run (the owner's choice)",
+		);
+	});
+
+	it("says masking was on when it was", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		const used = within(canvas).getByRole("list", { name: "What this used" });
+		expect(used).toHaveTextContent("Masking: on");
+	});
+
+	it("shows the project's instructions as the Writer received them", async () => {
+		const { api, path } = briefed();
+		const entry = api.reviews.briefs[0];
+		if (entry !== undefined) {
+			entry.trace.instructions = {
+				version: 2,
+				text: "Write for [PERSON_1]'s team: short sentences.",
+			};
+		}
+		const { canvas } = await openTrace(path);
+
+		const section = within(canvas).getByRole("region", {
+			name: "Instructions from the project team",
+		});
+		expect(section).toHaveTextContent(
+			"Version 2, as the Writer received them, masked where masking applies.",
+		);
+		expect(section).toHaveTextContent("short sentences.");
+		expect(section).not.toHaveTextContent("[PERSON_1]");
+		expect(section).toHaveTextContent("Person 1");
+	});
+
+	it("says when the Writer had no instructions from the project team", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		expect(
+			within(canvas).getByRole("region", {
+				name: "Instructions from the project team",
+			}),
+		).toHaveTextContent("None. The Writer had only the built-in instructions.");
 	});
 
 	it("shows the steps live while the brief is still being written", async () => {

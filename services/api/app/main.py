@@ -30,8 +30,10 @@ from app.api.routes import (
     briefs,
     documents,
     exports,
+    label_rules,
     masking,
     mfa,
+    model_instructions,
     papers,
     plans,
     projects,
@@ -84,6 +86,13 @@ TAGS_METADATA = [
         "description": (
             "A run's papers and screening decisions with their provenance, PRISMA "
             "counts and the run manifest. Read-only; text is served masked."
+        ),
+    },
+    {
+        "name": "label rules",
+        "description": (
+            "How per-criterion answers become labels: preview and apply a review's "
+            "rules. No model is called; the model's decisions are never changed."
         ),
     },
     {
@@ -236,11 +245,13 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(reviews.router)
     v1.include_router(runs.router)
     v1.include_router(papers.router)
+    v1.include_router(label_rules.router)
     v1.include_router(briefs.router)
     v1.include_router(exports.router)
     v1.include_router(questions.router)
     v1.include_router(plans.router)
     v1.include_router(masking.router)
+    v1.include_router(model_instructions.router)
     v1.include_router(documents.router)
     app.include_router(v1)
 

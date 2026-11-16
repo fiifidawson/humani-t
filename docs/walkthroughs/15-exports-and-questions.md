@@ -1,6 +1,6 @@
 # 15 — Exports and follow-up questions
 
-> **Milestones:** P2 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested on memory storage; migration 0014 waits for integration to re-chain it, and answers have not been watched against Ollama) · **Previous:** [12 — Decision brief](12-decision-brief.md) · **Next:** `16` (planned)
+> **Milestones:** P2 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested; answers have not been watched against Ollama) · **Previous:** [12 — Decision brief](12-decision-brief.md) · **Next:** [16 — Documents](16-documents.md)
 
 Before this phase a member could read a review's papers and its brief only on screen, and could not ask anything about them. Now any member can download what the screens show: the screening dataset as CSV or JSON lines, the included papers as RIS for a reference manager, the PRISMA counts, the run manifest, and the brief as Markdown, JSON or a print-ready page the browser saves as PDF. Reviewers and owners can ask follow-up questions in threads; each question is masked before it is stored, answered in the background from the review's own evidence by the brief's machinery, and every claim in the answer cites a passage that was actually retrieved. The brief loop also gains the "no new evidence and no better score" stop that UI_UX_SPEC §6.9 names. This serves UI_UX_SPEC §6.8, §6.9 (downloads), §6.12 and §5.3.9 (ask), [`architecture.md` §4.2](../architecture.md#42-reviews), §5.3 and §5.7.
 
@@ -190,9 +190,9 @@ uv run pytest tests/test_exports_domain.py tests/test_exports_api.py tests/test_
 | --- | --- | --- | --- |
 | G15.1 | No streamed progress for an answer, only its status | The UI shows "answering" without the step in progress | Poll is enough for P2; persist steps as they happen if needed |
 | G15.2 | "Add to brief notes" (UI_UX_SPEC §5.3.9) | Not in the API | Needs a notes model; P3 |
-| G15.3 | Team documents (`D` tags) are not yet evidence for answers | Answers cite papers only | With the documents lane's evidence |
+| G15.3 | ~~Team documents (`D` tags) are not yet evidence for answers~~ | Closed in [16](16-documents.md): approved documents are evidence for answers | Done |
 | G15.4 | Questions are answered one at a time per worker | A busy review waits | Run more workers |
-| G15.5 | Migration 0014 branches from 0011 | Several heads until integration re-chains 0012 to 0014 | Integration |
+| G15.5 | ~~Migration 0014 branches from 0011~~ | Resolved: 0014 follows 0013 | Done |
 
 ## Glossary
 

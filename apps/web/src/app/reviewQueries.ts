@@ -93,6 +93,7 @@ export const papersQuery = (
 							run_id: filter.runId,
 							page: filter.page,
 							...(filter.label === null ? {} : { label: filter.label }),
+							...(filter.tier === null ? {} : { tier: filter.tier }),
 						},
 					},
 				}),
@@ -125,6 +126,18 @@ export const prismaQuery = (api: ApiClient, reviewId: string, runId: string) =>
 			unwrap(
 				api.GET("/api/v1/reviews/{review_id}/prisma", {
 					params: { path: { review_id: reviewId }, query: { run_id: runId } },
+				}),
+			),
+	});
+
+/** The review's label rules: the version in force, and every one before it. */
+export const labelRulesQuery = (api: ApiClient, reviewId: string) =>
+	queryOptions({
+		queryKey: keys.labelRules(reviewId),
+		queryFn: () =>
+			unwrap(
+				api.GET("/api/v1/reviews/{review_id}/label-rules", {
+					params: { path: { review_id: reviewId } },
 				}),
 			),
 	});

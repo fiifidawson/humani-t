@@ -1,4 +1,4 @@
-"""Projects and their members: create, read, rename, archive, share and delete.
+"""Projects and their members: create, read, rename, mask, archive, share and delete.
 
 Each use case checks membership inside its own transaction, even after the HTTP layer
 has: only the check made alongside the write decides. Membership changes take the
@@ -17,6 +17,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
+from app.application.runs import RunService
 from app.domain.accounts import (
     ForbiddenError,
     NotFoundError,
@@ -24,21 +25,27 @@ from app.domain.accounts import (
     normalize_email,
 )
 from app.domain.encryption import EncryptionContext
+from app.domain.masking import MaskingPolicy, is_masking_applied
 from app.domain.projects import (
     Action,
+    MaskingRequiredError,
     Membership,
     NoSuchAccountError,
     Project,
+    ProjectStatus,
     Role,
     can,
     normalize_project_name,
+    project_status,
     require_an_owner_remains,
 )
+from app.domain.reviews import ReviewStatus
 from app.domain.sessions import SessionPolicy
 from app.storage.base import StorageProvider, UnitOfWork
 
 # Table "projects", column "name"; the row is the project itself.
 _NAME_PURPOSE = "projects.name"
+_MASKING_REQUIRED = "This deployment sends text to a hosted model, so masking stays on."
 
 
 def _utc_now() -> datetime:
@@ -46,14 +53,25 @@ def _utc_now() -> datetime:
 
 
 @dataclass(frozen=True, slots=True)
+class MaskingView:
+    """The owner's switch, whether masking applies now, and whether it may be turned off."""
+
+    is_on: bool
+    is_effective: bool
+    can_turn_off: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectView:
-    """A project as one member sees it: its name in the clear and their own role."""
+    """A project as one member sees it: its name in the clear, their own role, its status."""
 
     id: UUID
     name: str
     role: Role
     created_at: datetime
     archived_at: datetime | None
+    status: ProjectStatus
+    masking: MaskingView
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +93,17 @@ class ProjectService:
         encryption: ScopeEncryption,
         audit: AuditLog,
         session_policy: SessionPolicy | None = None,
+        masking: MaskingPolicy | None = None,
+        runs: RunService | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
         self._encryption = encryption
         self._audit = audit
         self._session_policy = session_policy or SessionPolicy()
+        # Unset means the strictest policy: every project masked, and kept masked.
+        self._masking = masking or MaskingPolicy(is_model_hosted=True)
+        self._runs = runs
         self._clock = clock
 
     async def authorize(
@@ -116,13 +139,22 @@ class ProjectService:
                 name_sealed=await self._seal_name(uow, project_id, name),
                 created_at=now,
                 created_by=current.user.id,
+                is_masking_on=self._masking.starts_masked,
             )
             await uow.projects.add(project)
             owner = Membership(project_id, current.user.id, Role.OWNER, now, added_by=None)
             await uow.memberships.add(owner)
             await self._record(uow, current, request_id, "project.created", project_id)
             await uow.commit()
-        return ProjectView(project_id, name, Role.OWNER, now, None)
+        return ProjectView(
+            project_id,
+            name,
+            Role.OWNER,
+            now,
+            None,
+            ProjectStatus.PLANNING,
+            self._masking_view(project),
+        )
 
     async def list_mine(
         self, current: Current, *, include_archived: bool = False
@@ -155,10 +187,50 @@ class ProjectService:
             renamed = project.renamed(await self._seal_name(uow, project_id, name))
             await uow.projects.save(renamed)
             await self._record(uow, current, request_id, "project.renamed", project_id)
+            status = await _status(uow, renamed)
             await uow.commit()
         return ProjectView(
-            project_id, name, membership.role, project.created_at, project.archived_at
+            project_id,
+            name,
+            membership.role,
+            project.created_at,
+            project.archived_at,
+            status,
+            self._masking_view(renamed),
         )
+
+    async def set_masking(
+        self, current: Current, project_id: UUID, *, is_on: bool, request_id: str | None = None
+    ) -> ProjectView:
+        """Switch the project's masking on or off (ADR 0014).
+
+        Turning it off needs a recent sign-in, and raises `MaskingRequiredError` while
+        the deployment requires masking. Turning it off also releases runs waiting for
+        a privacy review: with masking off there is nothing left to review.
+        """
+        async with self._storage.unit_of_work() as uow:
+            project, membership = await self._access(
+                uow, current, project_id, Action.UPDATE_PROJECT, needs_recent_sign_in=not is_on
+            )
+            if not is_on and not self._masking.can_turn_masking_off:
+                raise MaskingRequiredError(_MASKING_REQUIRED)
+            changed = project.with_masking(is_on=is_on)
+            if changed != project:
+                await uow.projects.save(changed)
+                await self._audit.record(
+                    uow,
+                    current.actor(request_id),
+                    "project.masking_changed",
+                    "project",
+                    str(project_id),
+                    scope_id=project_id,
+                    details={"is_masking_on": is_on},
+                )
+                await uow.commit()
+            view = await self._view(uow, changed, membership.role)
+        if not is_on and self._runs is not None:
+            await self._runs.release_privacy_gates(current, project_id, request_id)
+        return view
 
     async def archive(
         self, current: Current, project_id: UUID, request_id: str | None = None
@@ -338,7 +410,22 @@ class ProjectService:
             uow, self._name_context(project.id), project.name_sealed
         )
         return ProjectView(
-            project.id, name.decode(), role, project.created_at, project.archived_at
+            project.id,
+            name.decode(),
+            role,
+            project.created_at,
+            project.archived_at,
+            await _status(uow, project),
+            self._masking_view(project),
+        )
+
+    def _masking_view(self, project: Project) -> MaskingView:
+        return MaskingView(
+            is_on=project.is_masking_on,
+            is_effective=is_masking_applied(
+                is_masking_on=project.is_masking_on, policy=self._masking
+            ),
+            can_turn_off=self._masking.can_turn_masking_off,
         )
 
     @staticmethod
@@ -394,3 +481,17 @@ class ProjectService:
             str(membership.user_id),
             scope_id=membership.project_id,
         )
+
+
+async def _status(uow: UnitOfWork, project: Project) -> ProjectStatus:
+    reviews = await uow.reviews.list_for_project(project.id)
+    latest = reviews[0] if reviews else None
+    has_brief = False
+    if latest is not None and latest.status is ReviewStatus.DONE:
+        runs = await uow.runs.list_for_review(latest.id)
+        has_brief = bool(runs) and await uow.briefs.for_run(runs[0].id) is not None
+    return project_status(
+        is_archived=project.is_archived,
+        latest_review=None if latest is None else latest.status,
+        has_brief=has_brief,
+    )

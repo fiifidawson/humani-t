@@ -25,7 +25,7 @@ from app.privacy.patterns import PatternDetector
 from app.privacy.sanitizer import DetectorSanitizer
 from app.storage.base import UnitOfWork
 from tests.project_support import send
-from tests.run_support import RunTeam, make_run_team, run_until_idle
+from tests.run_support import RunTeam, add_rule, make_run_team, run_until_idle
 
 EMAIL = "amina.yusuf@example.org"
 MRN = "448-1207"
@@ -77,7 +77,7 @@ class Lane:
         providers = rt.harness.providers
         self.rt = rt
         self.texts = texts
-        self.masks = PaperMaskStore(providers.encryption, rt.clock)
+        self.masks = PaperMaskStore(providers.encryption, providers.masking, rt.clock)
         masker = DetectorSanitizer([PatternDetector()], entity_types=PAPER_ENTITY_TYPES)
         self.stage = MaskStage(
             storage=providers.storage,
@@ -141,16 +141,6 @@ def finished_summary(rt: RunTeam, run_id: str) -> dict:
 def outcome(rt: RunTeam, run_id: str) -> dict:
     (job,) = [e for e in rt.events(run_id) if e.name == "job.finished"]
     return job.data
-
-
-def add_rule(rt: RunTeam, term: str, entity_type: str = "PERSON") -> None:
-    response = send(
-        rt.owner,
-        "POST",
-        f"/api/v1/projects/{rt.project_id}/masking-rules",
-        {"term": term, "entity_type": entity_type},
-    )
-    assert response.status_code == 201, response.text
 
 
 @pytest.fixture
@@ -259,6 +249,7 @@ class TestTheSummary:
         summary = finished_summary(rt, Lane(rt, FakeIngestedTexts([])).run())
 
         assert summary["manifest"] == {
+            "is_masked": True,
             "detectors": ["patterns@1"],
             "entity_types": sorted(t.value for t in PAPER_ENTITY_TYPES),
             "masking_rules": 0,

@@ -11,10 +11,20 @@ from uuid import UUID
 
 import pytest
 
+from app.domain.briefs import SourceKind
 from app.domain.encryption import KeyDestroyedError
 from app.domain.inference import ChatRequest
 from app.domain.runs import RunState
+from app.domain.screening import Passage
 from app.inference.fake import FakePromptGuard
+from tests.brief_support import CORPUS as BRIEF_CORPUS
+from tests.brief_support import (
+    RoleScript,
+    answer_stage,
+    critic_answer,
+    planner_answer,
+    writer_answer,
+)
 from tests.pipeline_support import (
     ALL_STAGES,
     CORPUS,
@@ -357,6 +367,49 @@ class TestLinks:
         rows = {r["title"]: r for r in _papers(p).json()["papers"]}
 
         assert rows["Cash transfers in stable urban markets"]["url"] is None
+
+
+class TestCitedInBrief:
+    """The expanded row says whether the run's brief cites the paper, by its tag."""
+
+    def test_a_paper_the_runs_brief_cites_is_marked_as_cited(self):
+        p, _ = _briefed(cite="P2")
+
+        rows = {r["tag"]: r["is_cited_in_brief"] for r in _papers(p).json()["papers"]}
+
+        assert rows == {"P1": False, "P2": True, "P3": False, "P4": False, "P5": False}
+
+    def test_no_paper_is_cited_before_the_run_has_a_brief(self, screened):
+        p, _ = screened
+
+        rows = _papers(p).json()["papers"]
+
+        assert {r["is_cited_in_brief"] for r in rows} == {False}
+
+    def test_one_paper_says_whether_the_brief_cites_it(self):
+        p, _ = _briefed(cite="P2")
+        paper_id = next(r for r in _papers(p).json()["papers"] if r["tag"] == "P2")["paper_id"]
+
+        body = p.rt.owner.get(f"/api/v1/reviews/{p.rt.review_id}/papers/{paper_id}").json()
+
+        assert body["paper"]["is_cited_in_brief"] is True
+
+
+def _briefed(*, cite: str) -> tuple[Pipeline, str]:
+    """A run that screens, then writes a brief whose first benefit cites `cite`."""
+    p = make_pipeline()
+    cited = Passage(
+        cite, UUID(int=99), SourceKind.PAPER, "Cash raised diet diversity.", "abstract"
+    )
+    script = RoleScript(
+        planner=[planner_answer()], writer=[writer_answer(cite=cite)], critic=[critic_answer()]
+    )
+    rig = answer_stage(p.rt, script, passages=(*BRIEF_CORPUS, cited), max_rounds=1)
+    p.extra["answer"] = rig.stage
+    run_id = p.rt.start_run((*ALL_STAGES, "answer"))
+    run_until_idle(p.rt.worker(p.stages()))
+    assert p.rt.stored_run(run_id).state is RunState.DONE, p.failure(run_id)
+    return p, run_id
 
 
 class TestCriterionAnswers:

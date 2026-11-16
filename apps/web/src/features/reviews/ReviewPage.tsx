@@ -49,6 +49,7 @@ import {
 	ReplacedDraftLine,
 	StartPlanCard,
 } from "./PlanCards";
+import { useRulesNotes } from "./RulesEditor";
 import { LatestRunCards, PastRunLine } from "./RunCards";
 import {
 	type Plan,
@@ -211,6 +212,7 @@ function Conversation({
 	const current = plan.current;
 	const pendingChange = change.isPending ? change.variables : undefined;
 	const followUps = useFollowUpTurns();
+	const rulesNotes = useRulesNotes();
 
 	// Drafts and runs in the order they happened: a draft asked for after Run 1
 	// sits below it. Within one draft, its turns keep the order they were added.
@@ -337,6 +339,7 @@ function Conversation({
 							},
 						]),
 				...followUps,
+				...rulesNotes,
 			]
 				.sort((a, b) => a.at.localeCompare(b.at))
 				.map((item) => item.node)}

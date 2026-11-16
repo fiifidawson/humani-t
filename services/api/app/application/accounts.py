@@ -190,6 +190,7 @@ class AccountService:
         self.mfa_policy = mfa_policy or MfaPolicy()
         self._clock = clock
         self._hash_slots = asyncio.Semaphore(_CONCURRENT_HASHES)
+        self._sending: set[asyncio.Task[None]] = set()
         # Verified against when the account does not exist, so the unknown-account
         # path costs the same as the wrong-password path.
         self._dummy_hash = hasher.hash(new_token())
@@ -284,7 +285,6 @@ class AccountService:
         request_id: str | None = None,
     ) -> SignedIn:
         email = normalize_email(email)
-        account_key = f"login:account:{email}"
         # Each attempt is counted atomically *before* the slow password check, so
         # parallel guesses cannot all slip in under the limit. A success resets
         # the count, so the real user is never held back by their own sign-ins.
@@ -293,9 +293,7 @@ class AccountService:
                 f"login:client:{client_ip}", _LOGIN_ATTEMPTS_PER_CLIENT, _LOGIN_WINDOW
             )
         )
-        self._enforce(
-            await self._limiter.hit(account_key, _LOGIN_ATTEMPTS_PER_ACCOUNT, _LOGIN_WINDOW)
-        )
+        account_key = await self._count_password_attempt(email)
 
         async with self._storage.unit_of_work() as uow:
             user = await uow.users.get_by_email(email)
@@ -404,6 +402,7 @@ class AccountService:
         self, current: Current, password: str, request_id: str | None
     ) -> SignedIn:
         """Confirm the password and move this sign-in to new tokens (step-up rotation)."""
+        account_key = await self._count_password_attempt(current.user.email)
         if not await self._verify(current.user.password_hash, password):
             async with self._storage.unit_of_work() as uow:
                 await self._audit.record(
@@ -429,6 +428,7 @@ class AccountService:
                 str(rotated.session.id),
             )
             await uow.commit()
+        await self._reset_quietly(account_key)
         return rotated
 
     async def list_sessions(self, current: Current) -> list[Session]:
@@ -483,8 +483,10 @@ class AccountService:
         """Change the password, end every other session, and rotate this one."""
         if not current.session.is_recently_authenticated(self._clock(), self.session_policy):
             raise ReauthenticationRequiredError("Confirm your password to continue.")
+        account_key = await self._count_password_attempt(current.user.email)
         if not await self._verify(current.user.password_hash, current_password):
             raise CurrentPasswordIncorrectError("The current password is incorrect.")
+        await self._reset_quietly(account_key)
         new_hash = await self._new_hash(
             new_password, context=(current.user.email, current.user.display_name)
         )
@@ -537,7 +539,7 @@ class AccountService:
             )
             await uow.commit()
         if recipient is not None:
-            await self._send_quietly(
+            self._send_later(
                 EmailMessage(
                     to=recipient.email,
                     subject="Reset your Humani-T password",
@@ -716,6 +718,24 @@ class AccountService:
                 "your password now and tell your administrator.\n"
             ),
         )
+
+    def _send_later(self, message: EmailMessage) -> None:
+        # Off the request path: waiting for the mail server only when the account
+        # exists would let a caller time which addresses have one.
+        task = asyncio.create_task(self._send_quietly(message))
+        self._sending.add(task)
+        task.add_done_callback(self._sending.discard)
+
+    async def _count_password_attempt(self, email: str) -> str:
+        """Count a password check against the account's sign-in limit; its key, for a reset.
+
+        Shared with sign-in, so a stolen session cannot guess more often than a stranger.
+        """
+        account_key = f"login:account:{email}"
+        self._enforce(
+            await self._limiter.hit(account_key, _LOGIN_ATTEMPTS_PER_ACCOUNT, _LOGIN_WINDOW)
+        )
+        return account_key
 
     async def _send_quietly(self, message: EmailMessage) -> None:
         # A mail outage must not turn "if the account exists" into an observable

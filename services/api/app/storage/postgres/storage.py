@@ -31,10 +31,12 @@ from app.domain.projects import AlreadyMemberError, Membership, Project, Role
 from app.domain.sessions import Session, SessionPolicy
 from app.storage.postgres.briefs import PostgresDecisionBriefRepository
 from app.storage.postgres.documents import PostgresDocumentRepository
+from app.storage.postgres.label_rules import PostgresLabelRulesRepository
 from app.storage.postgres.masking import (
     PostgresMaskingRuleRepository,
     PostgresPaperMaskRepository,
 )
+from app.storage.postgres.model_instructions import PostgresModelInstructionsRepository
 from app.storage.postgres.papers import PostgresPaperRepository, PostgresScreeningRepository
 from app.storage.postgres.plans import PostgresPlanRepository
 from app.storage.postgres.questions import PostgresQuestionRepository
@@ -638,6 +640,8 @@ class PostgresUnitOfWork:
         self.masking_rules = PostgresMaskingRuleRepository(connection)
         self.paper_masks = PostgresPaperMaskRepository(connection)
         self.documents = PostgresDocumentRepository(connection)
+        self.label_rules = PostgresLabelRulesRepository(connection)
+        self.model_instructions = PostgresModelInstructionsRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

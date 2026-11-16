@@ -1,6 +1,6 @@
 # Builds the images and starts the whole self-hosted stack the way an operator
 # would, then checks it from the outside: the API answers through Caddy over HTTPS,
-# and every response carries the security headers.
+# and every response carries the security headers. It runs on x64 and on Arm.
 
 name: compose
 
@@ -22,8 +22,18 @@ defaults:
 
 jobs:
   smoke:
-    name: compose smoke test
-    runs-on: ubuntu-24.04
+    # The x64 name stays as it was, because the branch rules require it by name.
+    name: compose smoke test${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            suffix: ""
+          # Arm, as on the Oracle Always Free machines: proves every image runs there.
+          - runner: ubuntu-24.04-arm
+            suffix: " (arm64)"
     timeout-minutes: 25
     permissions:
       contents: read

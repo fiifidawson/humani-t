@@ -32,6 +32,17 @@ const WORDS: Readonly<Record<EntityType, [string, string]>> = {
 const isEntityType = (value: string): value is EntityType =>
 	Object.hasOwn(WORDS, value);
 
+/** Every type, in the order a menu offers them. */
+export const ENTITY_TYPES: readonly EntityType[] =
+	Object.keys(WORDS).filter(isEntityType);
+
+/** "Person", "Email address": a type's name on its own, as a menu shows it. */
+export function entityTypeName(type: EntityType): string {
+	const [one] = WORDS[type];
+	const name = type === "COORDINATES" ? "coordinates" : one;
+	return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+}
+
 const PLACEHOLDER = /\[([A-Z]+(?:_[A-Z]+)*)_(\d+)\]/g;
 
 /** The text in order: plain strings, and a placeholder wherever one stood. */

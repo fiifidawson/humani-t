@@ -13,9 +13,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import structlog
+
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
+from app.application.masking import MaskingRuleService
 from app.application.membership import require_member, require_review_member
 from app.application.run_log import (
     QUEUE_CHANNEL,
@@ -27,12 +30,14 @@ from app.application.run_log import (
 )
 from app.domain.accounts import NotFoundError
 from app.domain.encryption import KeyDestroyedError
+from app.domain.plans import refuse_rule_terms, revision_text_fields
 from app.domain.projects import Action, can
 from app.domain.reviews import ReviewStatus, ReviewTrigger
 from app.domain.runs import (
     EventName,
     Gate,
     GateDecision,
+    GateKind,
     JsonValue,
     Run,
     RunConflictError,
@@ -58,8 +63,13 @@ SESSION_RECHECK_INTERVAL = timedelta(minutes=1)
 _POLL_INTERVAL = timedelta(seconds=2)
 _READ_BATCH = 500
 
+# The stage that raises the privacy_review gate (`application/masking.py`).
+MASK_STAGE = "mask"
+
 _RUN_NOT_FOUND = "No such run."
 _GATE_NOT_FOUND = "No such gate."
+
+_log = structlog.get_logger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -83,6 +93,7 @@ class RunService:
         audit: AuditLog,
         signals: Signals,
         available_stages: Collection[str],
+        rules: MaskingRuleService,
         session_policy: SessionPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,
         poll_interval: timedelta = _POLL_INTERVAL,
@@ -92,6 +103,7 @@ class RunService:
         self._audit = audit
         self._signals = signals
         self._available = frozenset(available_stages)
+        self._rules = rules
         self._session_policy = session_policy or SessionPolicy()
         self._clock = clock
         self._poll_interval = poll_interval
@@ -181,7 +193,10 @@ class RunService:
         revisions: Mapping[str, JsonValue] | None,
         request_id: str | None = None,
     ) -> Gate:
-        """Decide a gate and queue the rest of the run. The first decision wins; then 409."""
+        """Decide a gate and queue the rest of the run. The first decision wins; then 409.
+
+        `ValueError` when a vocabulary edit holds a term the project always masks.
+        """
         now = self._clock()
         async with self._storage.unit_of_work() as uow:
             gate = await self._gate(uow, current, gate_id)
@@ -190,6 +205,11 @@ class RunService:
                 raise RunConflictError("Someone already decided this. Showing their decision.")
             if run is None or run.state is not RunState.WAITING:
                 raise RunConflictError("This run is no longer waiting for a decision.")
+            if gate.kind is GateKind.VOCABULARY and revisions is not None:
+                refuse_rule_terms(
+                    revision_text_fields(dict(revisions)),
+                    await self._rules.rules_for(uow, gate.project_id),
+                )
             sealed = None
             if revisions is not None:
                 sealed = await self._encryption.encrypt(
@@ -213,6 +233,31 @@ class RunService:
         await self._signals.publish(run_channel(run.id))
         await self._signals.publish(QUEUE_CHANNEL)
         return resolved
+
+    async def release_privacy_gates(
+        self, current: Current, project_id: UUID, request_id: str | None = None
+    ) -> None:
+        """Approve the project's open privacy-review gates, as `current`.
+
+        Uses the gate route's conditional write, so a person deciding a gate at the
+        same moment wins or loses cleanly.
+        """
+        async with self._storage.unit_of_work() as uow:
+            gate_ids: list[UUID] = []
+            for review in await uow.reviews.list_for_project(project_id):
+                for run in await uow.runs.list_for_review(review.id):
+                    if run.state is not RunState.WAITING:
+                        continue
+                    gate = await uow.gates.find(run.id, MASK_STAGE, GateKind.PRIVACY_REVIEW)
+                    if gate is not None and not gate.is_resolved:
+                        gate_ids.append(gate.id)
+        for gate_id in gate_ids:
+            try:
+                await self.resolve_gate(
+                    current, gate_id, GateDecision.APPROVE, None, request_id
+                )
+            except RunConflictError:
+                _log.info("privacy_review_gate_already_decided", gate_id=str(gate_id))
 
     async def open_stream(
         self, current: Current, run_id: UUID, last_event_id: str | None

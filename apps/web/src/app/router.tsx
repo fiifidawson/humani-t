@@ -30,6 +30,7 @@ import {
 import { sessionQuery } from "./queries";
 
 type PaperLabel = "include" | "exclude" | "uncertain" | "unscreened";
+type PaperTier = "skipped" | "failed" | "not_screened";
 
 export interface RouterContext {
 	api: ApiClient;
@@ -114,6 +115,25 @@ const enrolRoute = createRoute({
 	component: lazyRouteComponent(
 		() => import("../features/auth/EnrolPage"),
 		"EnrolPage",
+	),
+});
+
+// Opened from emailed links, signed in or not; the token travels in the fragment.
+const acceptInvitationRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "accept-invitation",
+	component: lazyRouteComponent(
+		() => import("../features/auth/AcceptInvitationPage"),
+		"AcceptInvitationPage",
+	),
+});
+
+const resetPasswordRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "reset-password",
+	component: lazyRouteComponent(
+		() => import("../features/auth/ResetPasswordPage"),
+		"ResetPasswordPage",
 	),
 });
 
@@ -208,6 +228,7 @@ export interface DraftSearch {
 export interface PapersSearch {
 	run?: string | undefined;
 	label?: PaperLabel | undefined;
+	tier?: PaperTier | undefined;
 	page?: number | undefined;
 }
 
@@ -217,6 +238,8 @@ const PAPER_LABELS: readonly PaperLabel[] = [
 	"uncertain",
 	"unscreened",
 ];
+
+const PAPER_TIERS: readonly PaperTier[] = ["skipped", "failed", "not_screened"];
 
 /** A whole number from 1, or undefined: search values are input like any other. */
 function positiveInteger(value: unknown): number | undefined {
@@ -253,6 +276,7 @@ const papersRoute = createRoute({
 	validateSearch: (search: Record<string, unknown>): PapersSearch => ({
 		run: typeof search["run"] === "string" ? search["run"] : undefined,
 		label: PAPER_LABELS.find((label) => label === search["label"]),
+		tier: PAPER_TIERS.find((tier) => tier === search["tier"]),
 		page: positiveInteger(search["page"]),
 	}),
 	component: lazyRouteComponent(
@@ -339,6 +363,8 @@ const documentsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
+	acceptInvitationRoute,
+	resetPasswordRoute,
 	signedInRoute.addChildren([
 		homeRoute,
 		projectsRoute,

@@ -20,11 +20,14 @@ from app.domain.projects import (
     LastOwnerError,
     Membership,
     Project,
+    ProjectStatus,
     Role,
     can,
     normalize_project_name,
+    project_status,
     require_an_owner_remains,
 )
+from app.domain.reviews import ReviewStatus
 
 NOW = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
 
@@ -264,3 +267,54 @@ class TestLastOwnerRule:
                 members[target] = members[target].with_role(new_role)
 
         assert any(m.role is OWNER for m in members.values())
+
+
+# UI_UX_SPEC §11.1, one row per review status. A cancelled run is not in the spec's table;
+# it gets its own status rather than borrowing one that would say something untrue.
+STATUS_BY_REVIEW: dict[ReviewStatus, ProjectStatus] = {
+    ReviewStatus.NEW: ProjectStatus.PLANNING,
+    ReviewStatus.CLARIFYING: ProjectStatus.PLANNING,
+    ReviewStatus.DRAFTING: ProjectStatus.PLANNING,
+    ReviewStatus.CHANGES_REQUESTED: ProjectStatus.PLANNING,
+    ReviewStatus.ACCEPTED: ProjectStatus.PLANNING,
+    ReviewStatus.RUNNING: ProjectStatus.RUNNING,
+    ReviewStatus.WAITING: ProjectStatus.NEEDS_YOU,
+    ReviewStatus.FAILED: ProjectStatus.FAILED,
+    ReviewStatus.CANCELLED: ProjectStatus.CANCELLED,
+}
+
+
+class TestProjectStatus:
+    def test_every_review_status_decides_a_project_status(self):
+        assert set(STATUS_BY_REVIEW) | {ReviewStatus.DONE} == set(ReviewStatus)
+
+    @pytest.mark.parametrize(("review", "expected"), STATUS_BY_REVIEW.items())
+    def test_the_latest_reviews_state_is_the_projects_status(self, review, expected):
+        assert (
+            project_status(is_archived=False, latest_review=review, has_brief=False) is expected
+        )
+
+    def test_a_finished_run_with_a_brief_is_brief_ready(self):
+        status = project_status(
+            is_archived=False, latest_review=ReviewStatus.DONE, has_brief=True
+        )
+
+        assert status is ProjectStatus.BRIEF_READY
+
+    def test_a_finished_run_without_the_brief_stage_is_done_with_no_brief(self):
+        status = project_status(
+            is_archived=False, latest_review=ReviewStatus.DONE, has_brief=False
+        )
+
+        assert status is ProjectStatus.DONE_WITHOUT_BRIEF
+
+    def test_a_project_with_no_review_yet_is_planning(self):
+        status = project_status(is_archived=False, latest_review=None, has_brief=False)
+
+        assert status is ProjectStatus.PLANNING
+
+    @pytest.mark.parametrize("review", [None, *ReviewStatus])
+    def test_archived_wins_over_every_review_state(self, review):
+        status = project_status(is_archived=True, latest_review=review, has_brief=True)
+
+        assert status is ProjectStatus.ARCHIVED

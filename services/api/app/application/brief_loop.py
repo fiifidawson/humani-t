@@ -2,7 +2,8 @@
 
 Planner, then per round Writer, checks and Critic, retrieving what the Critic asks for.
 The model roles are one `GuardedInference` call each; retrieval and checks are code. Only
-masked text goes in. Storage and the run belong to `application/briefs.py`.
+masked text goes in, and only the Writer gets the project's writing instructions. Storage
+and the run belong to `application/briefs.py`.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any
 
@@ -50,6 +51,7 @@ from app.domain.inference import (
     InvalidStructuredOutputError,
     PromptRefusedError,
 )
+from app.domain.model_instructions import SentInstructions, with_instructions
 from app.domain.runs import JsonValue
 from app.domain.screening import Passage
 
@@ -235,6 +237,12 @@ class LoopPrompt:
     system: str
     schema: Mapping[str, Any]
 
+    def instructed(self, instructions: SentInstructions | None) -> LoopPrompt:
+        """This prompt with the project's instructions after it; itself when there are none."""
+        if instructions is None:
+            return self
+        return replace(self, system=with_instructions(self.system, instructions.text))
+
 
 _PLANNER = LoopPrompt(
     AgentRole.PLANNER, PLANNER_PROMPT_VERSION, _PLANNER_PROMPT, PLANNER_SCHEMA
@@ -343,6 +351,7 @@ class LoopResult:
     evidence: tuple[RetrievedPassage, ...]
     steps: tuple[AgentStep, ...]
     manifest: dict[str, JsonValue]
+    instructions: SentInstructions | None = None
 
 
 type StepSink = Callable[[AgentStep], Awaitable[None]]
@@ -369,10 +378,15 @@ class BriefLoop:
         return self._max_rounds
 
     async def run(
-        self, question: str, corpus: Sequence[Passage], on_step: StepSink
+        self,
+        question: str,
+        corpus: Sequence[Passage],
+        on_step: StepSink,
+        instructions: SentInstructions | None = None,
     ) -> LoopResult:
         """Write a brief for the masked `question` from `corpus`, reporting each step.
 
+        `instructions` are the project's writing instructions as sent, for the Writer.
         Raises `LoopFailedError` when no draft could be kept at all. Anything
         `on_step` raises (a cancelled run) ends the loop where it is.
         """
@@ -381,7 +395,7 @@ class BriefLoop:
         runner = LoopRunner(
             self._inference, self._retriever, self._timer, tuple(corpus), on_step
         )
-        session = _Session(runner, self._max_rounds, question)
+        session = _Session(runner, self._max_rounds, question, instructions)
         return await session.run()
 
 
@@ -561,6 +575,7 @@ class _Session:
     runner: LoopRunner
     max_rounds: int
     question: str
+    instructions: SentInstructions | None
 
     async def run(self) -> LoopResult:
         runner = self.runner
@@ -585,6 +600,18 @@ class _Session:
         runner = self.runner
         roles = (AgentRole.PLANNER, AgentRole.WRITER, AgentRole.CRITIC)
         model_ids: dict[str, JsonValue] = {r.value: runner.model_id_of(r) for r in roles}
+        manifest: dict[str, JsonValue] = {
+            "model_ids": model_ids,
+            "prompt_versions": {
+                "planner": PLANNER_PROMPT_VERSION,
+                "writer": WRITER_PROMPT_VERSION,
+                "critic": CRITIC_PROMPT_VERSION,
+            },
+            "retriever": runner.retriever.retriever_id,
+            "max_rounds": self.max_rounds,
+        }
+        if self.instructions is not None:
+            manifest["instructions_version"] = self.instructions.version
         return LoopResult(
             body=kept.body,
             model_id=runner.model_id,
@@ -595,16 +622,8 @@ class _Session:
             quality=kept.scores,
             evidence=tuple(runner.evidence.values()),
             steps=tuple(runner.steps),
-            manifest={
-                "model_ids": model_ids,
-                "prompt_versions": {
-                    "planner": PLANNER_PROMPT_VERSION,
-                    "writer": WRITER_PROMPT_VERSION,
-                    "critic": CRITIC_PROMPT_VERSION,
-                },
-                "retriever": runner.retriever.retriever_id,
-                "max_rounds": self.max_rounds,
-            },
+            manifest=manifest,
+            instructions=self.instructions,
         )
 
     async def _write(
@@ -618,7 +637,7 @@ class _Session:
             "feedback": list(feedback),
         }
         return await self.runner.ask(
-            _WRITER,
+            _WRITER.instructed(self.instructions),
             round_number,
             payload,
             lambda answer: _parse_body(answer, kinds),

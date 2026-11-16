@@ -18,11 +18,14 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from app.application.briefs import StoredBriefCitations
 from app.application.inference import GuardedInference
+from app.application.label_rules import LabelRulesService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.screening import ScreenStage
 from app.domain.inference import ChatRequest, ChatResult, InferenceUnavailableError
+from app.domain.masking import MaskingPolicy
 from app.domain.paper import PaperRecord
 from app.domain.plans import (
     Criterion,
@@ -42,6 +45,7 @@ from app.search.base import DEFAULT_LIMIT
 from app.search.fake import FakePaperSearchProvider
 from app.storage.base import UnitOfWork
 from tests.run_support import RunTeam, make_run_team
+from tests.support import MASKED_BY_DEPLOYMENT
 
 # Sensitive on purpose: a place name the fake masker hides. It may appear in
 # stored, sealed text, and never in anything sent to a model or to a member.
@@ -151,6 +155,13 @@ class FakePlans:
 
     async def accepted_plan(self, uow: UnitOfWork, review_id: UUID) -> ReviewPlan | None:
         return self.plans.get(review_id)
+
+    async def criteria(
+        self, uow: UnitOfWork, review_id: UUID, version: int
+    ) -> tuple[Criterion, ...] | None:
+        """`CriteriaSource`: the accepted plan's criteria, when it is that version."""
+        plan = self.plans.get(review_id)
+        return plan.criteria if plan is not None and plan.version == version else None
 
 
 class FakeMaskedTexts:
@@ -356,6 +367,8 @@ class Pipeline:
                 plans=self.plans,
                 inference=inference,
                 masked=self.masked,
+                rules=providers.masking_rules,
+                instructions=providers.model_instructions,
                 audit=providers.audit,
                 concurrency=self.concurrency,
                 clock=clock,
@@ -367,7 +380,7 @@ class Pipeline:
 
     @property
     def evidence(self) -> ScreenedEvidence:
-        return ScreenedEvidence(self.store, self.masked)
+        return ScreenedEvidence(self.store, self.masked, self.plans)
 
     @property
     def service(self) -> PaperService:
@@ -377,6 +390,19 @@ class Pipeline:
             store=self.store,
             masked=self.masked,
             encryption=providers.encryption,
+            citations=StoredBriefCitations(providers.encryption),
+            criteria=self.plans,
+        )
+
+    @property
+    def label_rules(self) -> LabelRulesService:
+        providers = self.rt.harness.providers
+        return LabelRulesService(
+            storage=providers.storage,
+            store=self.store,
+            criteria=self.plans,
+            audit=providers.audit,
+            clock=self.rt.clock,
         )
 
     def summary(self, run_id: str, stage: str) -> dict[str, Any]:
@@ -407,8 +433,9 @@ def make_pipeline(
     script: Callable[[ChatRequest], Mapping[str, Any]] = reasonable_answer,
     concurrency: int = 2,
     accept_plan: bool = True,
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
 ) -> Pipeline:
-    rt = make_run_team()
+    rt = make_run_team(masking_policy)
     providers = rt.harness.providers
     store = PaperStore(providers.encryption, rt.clock)
     masked = FakeMaskedTexts()
@@ -431,7 +458,9 @@ def make_pipeline(
         concurrency=concurrency,
     )
     # The routes read masked text through the same fake the stages do.
-    rt.harness.providers = dataclasses.replace(providers, papers=pipeline.service)
+    rt.harness.providers = dataclasses.replace(
+        providers, papers=pipeline.service, label_rules=pipeline.label_rules
+    )
     rt.harness.app.state.providers = rt.harness.providers
     return pipeline
 

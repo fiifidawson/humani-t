@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from app.domain.reviews import ReviewStatus
 from app.domain.timestamps import require_aware
 
 MAX_PROJECT_NAME_LENGTH = 200
@@ -92,6 +93,51 @@ def normalize_project_name(name: str) -> str:
     return trimmed
 
 
+class ProjectStatus(StrEnum):
+    """What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand."""
+
+    PLANNING = "planning"
+    RUNNING = "running"
+    NEEDS_YOU = "needs_you"
+    BRIEF_READY = "brief_ready"
+    DONE_WITHOUT_BRIEF = "done_without_brief"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    ARCHIVED = "archived"
+
+
+# A draft waiting for accept stays Planning: the review alone cannot tell a draft the
+# person has not read from one they are still editing, so it is not called "Needs you".
+_STATUS_BY_REVIEW: Mapping[ReviewStatus, ProjectStatus] = {
+    ReviewStatus.NEW: ProjectStatus.PLANNING,
+    ReviewStatus.CLARIFYING: ProjectStatus.PLANNING,
+    ReviewStatus.DRAFTING: ProjectStatus.PLANNING,
+    ReviewStatus.CHANGES_REQUESTED: ProjectStatus.PLANNING,
+    ReviewStatus.ACCEPTED: ProjectStatus.PLANNING,
+    ReviewStatus.RUNNING: ProjectStatus.RUNNING,
+    ReviewStatus.WAITING: ProjectStatus.NEEDS_YOU,
+    ReviewStatus.FAILED: ProjectStatus.FAILED,
+    ReviewStatus.CANCELLED: ProjectStatus.CANCELLED,
+}
+
+
+def project_status(
+    *, is_archived: bool, latest_review: ReviewStatus | None, has_brief: bool
+) -> ProjectStatus:
+    """The project's status from its newest review; `None` when it has no review yet.
+
+    `has_brief` says whether that review's latest run wrote a brief; it matters only
+    once the run is done.
+    """
+    if is_archived:
+        return ProjectStatus.ARCHIVED
+    if latest_review is None:
+        return ProjectStatus.PLANNING
+    if latest_review is ReviewStatus.DONE:
+        return ProjectStatus.BRIEF_READY if has_brief else ProjectStatus.DONE_WITHOUT_BRIEF
+    return _STATUS_BY_REVIEW[latest_review]
+
+
 @dataclass(frozen=True, slots=True)
 class Project:
     """A project's record. A deleted project stays as a tombstone row.
@@ -108,6 +154,9 @@ class Project:
     deleted_at: datetime | None = None
     # Optimistic locking, as for users: a stale copy can never overwrite a newer one.
     version: int = 0
+    # The owner's switch only. Whether text is masked is decided when it is sent
+    # (`domain.masking.is_masking_applied`), because the operator's policy can overrule it.
+    is_masking_on: bool = True
 
     def __post_init__(self) -> None:
         require_aware(
@@ -129,6 +178,9 @@ class Project:
 
     def renamed(self, name_sealed: bytes) -> Project:
         return replace(self, name_sealed=name_sealed)
+
+    def with_masking(self, *, is_on: bool) -> Project:
+        return replace(self, is_masking_on=is_on)
 
     def archived(self, at: datetime) -> Project:
         """Archive; archiving again keeps the first date."""
@@ -171,6 +223,10 @@ class AlreadyMemberError(ProjectError):
 
 class NoSuchAccountError(ProjectError):
     """No active account uses the email given for a new member."""
+
+
+class MaskingRequiredError(ProjectError):
+    """The deployment sends text to a hosted model and does not let owners turn masking off."""
 
 
 def require_an_owner_remains(

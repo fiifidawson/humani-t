@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
+from typing import Literal
 from uuid import UUID
 
 from app.domain.runs import JsonValue, Run
@@ -66,6 +67,11 @@ class RunManifest:
         return self._versions("plan_version")
 
     @property
+    def instructions_versions(self) -> tuple[int, ...]:
+        """The project's instruction versions its calls carried; empty when none did."""
+        return self._versions("instructions_version")
+
+    @property
     def sources(self) -> tuple[str, ...]:
         """Every source any stage named, in the order first named."""
         seen: dict[str, None] = {}
@@ -106,6 +112,20 @@ class RunManifest:
                     {f"{stage.stage}.{k}": v for k, v in named.items() if isinstance(v, str)}
                 )
         return MappingProxyType(dict(sorted(found.items())))
+
+    @property
+    def masking(self) -> Literal["on", "off", "mixed"] | None:
+        """Whether the stages that masked or sent text masked it; `None` if none recorded it."""
+        recorded = {
+            value
+            for facts in self._facts()
+            if isinstance(value := facts.get("is_masked"), bool)
+        }
+        if not recorded:
+            return None
+        if len(recorded) > 1:
+            return "mixed"
+        return "on" if recorded == {True} else "off"
 
     @property
     def papers_from_runs(self) -> tuple[str, ...]:

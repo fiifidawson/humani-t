@@ -270,6 +270,7 @@ def answer_stage(
             entity_types=QUESTION_ENTITY_TYPES,
         ),
         rules=providers.masking_rules,
+        instructions=providers.model_instructions,
         max_rounds=max_rounds,
         clock=rt.clock,
     )
