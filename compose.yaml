@@ -283,7 +283,7 @@ services:
   mailpit:
     <<: *hardened
     profiles: [local-mail]
-    image: axllent/mailpit:v1.27.11@sha256:e22dce5b36f93c77082e204a3942fb6b283b7896e057458400a4c88344c3df68
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     user: "10001:10001"
     tmpfs:
       - /tmp:uid=10001,gid=10001,size=64m
@@ -307,7 +307,7 @@ services:
   ollama:
     <<: *hardened
     profiles: [local-model]
-    image: ollama/ollama:0.40.13@sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429
+    image: ollama/ollama:0.40.15@sha256:0e59999e0e8f9fd4e704bd788a89b7e4cad399367fb1365f8c102ac662288761
     user: "10001:10001"
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
@@ -338,7 +338,7 @@ services:
   # hands the volume's top directory over, with CHOWN as its only capability.
   ollama-volume:
     profiles: [local-model]
-    image: ollama/ollama:0.40.13@sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429
+    image: ollama/ollama:0.40.15@sha256:0e59999e0e8f9fd4e704bd788a89b7e4cad399367fb1365f8c102ac662288761
     user: "0:0"
     entrypoint: ["chown", "10001:10001", "/models"]
     read_only: true
