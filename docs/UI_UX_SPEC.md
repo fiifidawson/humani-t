@@ -1081,7 +1081,7 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
 - Signed-in devices: list with browser, place (approximate, from IP if the deployment allows), last active; "Sign out" per device and "Sign out all others".
 - Password change; passkeys and TOTP (add, rename, remove; the last one can't be removed); recovery codes (regenerate, with re-auth).
-- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)).
+- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)). Built: theme, and the **Reduce motion** switch under Appearance ("Turns animations off in this browser. Your computer's own setting turns them off too.").
 
 ---
 
@@ -1484,9 +1484,12 @@ Both fonts are self-hosted from Fontsource packages and bundled with the app, so
 
 ### 9.5 Motion
 
-- Hover and state changes fade in 0.2 s, as on the lab site. Panels (the drawer) slide in 0.2 s. Nothing bounces.
-- Cards enter with a fade and 6 px rise, 350 ms. The run strip updates without motion except its spinner.
-- `prefers-reduced-motion` cuts every animation and transition to nothing (a global rule in the system), and Account preferences can force it.
+- Hover and state changes fade in 0.2 s, as on the lab site. Panels (the drawer) slide in 0.2 s. Nothing bounces: every easing decelerates without overshooting (`cubic-bezier(0.2, 0, 0, 1)`).
+- Cards enter with a fade and 6 px rise, 350 ms: chat cards, one-line chat entries and an opened screening row (`animationStyle="rise-in"`). The run strip updates without motion except its spinner.
+- A section a disclosure opens slides open in 200 ms (`ui/Reveal.tsx`, its rows growing from 0 to their height); closing is immediate, so nothing closed lingers for a screen reader to find.
+- Pages cross-fade in 0.2 s where the browser has view transitions (the router's `defaultViewTransition`); elsewhere the page simply changes.
+- A pressed button shrinks to 98% for 0.1 s, so a click is felt before anything loads.
+- `prefers-reduced-motion` cuts every animation and transition to nothing, page transitions included (a global rule in the system), and Account → Appearance → **Reduce motion** does the same for this browser (`data-motion="reduced"` on `<html>`, kept in localStorage).
 - The streaming of an answer is not typed out letter by letter; text appears in sentences, which is easier to read and cheaper on slow links.
 
 ### 9.6 Icons

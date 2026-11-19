@@ -83,12 +83,17 @@ export function BriefCard({ live }: { live: LiveRun }) {
 				listStyleType="none"
 				p="0"
 				display="flex"
-				flexWrap="wrap"
-				columnGap="4"
+				flexDirection="column"
+				gap="1"
 			>
 				{data.options.map((option) => (
 					<li key={option.name}>
-						{`${option.name} · ${STRENGTHS[option.strength].word}`}
+						<Text as="span" fontWeight="medium">
+							{option.name}
+						</Text>
+						<Text as="span" color="fg.muted">
+							{` · ${STRENGTHS[option.strength].word}`}
+						</Text>
 					</li>
 				))}
 			</chakra.ul>

@@ -116,4 +116,4 @@ class TestWiring:
         processor = build_providers(settings).document_processor
 
         assert "dates@1" in processor._detector_sources
-        assert "patterns@1" in processor._detector_sources
+        assert "patterns@2" in processor._detector_sources

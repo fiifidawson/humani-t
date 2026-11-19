@@ -84,6 +84,30 @@ function madeBy(sources: readonly string[]): string {
 		: "Found automatically";
 }
 
+/** `text` in paragraphs: the ranges between blank lines, which are left out. */
+function paragraphs(text: string): Range[] {
+	const found: Range[] = [];
+	let start = 0;
+	for (const blank of text.matchAll(/\n[^\S\n]*\n\s*/g)) {
+		found.push({ start, end: blank.index });
+		start = blank.index + blank[0].length;
+	}
+	found.push({ start, end: text.length });
+	return found;
+}
+
+/**
+ * The original's and the masked text's paragraphs, side by side. Masking keeps
+ * paragraph breaks, so they pair up; if they ever do not, each side is one block.
+ */
+function pairedParagraphs(raw: string, masked: string): [Range[], Range[]] {
+	const left = paragraphs(raw);
+	const right = paragraphs(masked);
+	return left.length === right.length
+		? [left, right]
+		: [[{ start: 0, end: raw.length }], [{ start: 0, end: masked.length }]];
+}
+
 /** The original cut into plain and masked runs; overlapping masks join, as in the API. */
 function runs(raw: string, spans: readonly Span[]) {
 	const masked: Range[] = [];
@@ -124,17 +148,51 @@ function offsetIn(
 	return Number(start) + offset;
 }
 
-function Pane({ title, children }: { title: string; children: ReactNode }) {
+// On wide screens both panes share the outer grid's rows (subgrid), so a
+// paragraph and its masked version always start level, however each one wraps.
+function Pane({
+	title,
+	rows,
+	children,
+}: {
+	title: string;
+	rows: number;
+	children: ReactNode;
+}) {
 	const headingId = useId();
 	return (
-		<Stack as="section" aria-labelledby={headingId} gap="2" minW="0">
-			<Heading id={headingId} as="h4" fontSize="md" fontWeight="semibold">
+		<Box
+			as="section"
+			aria-labelledby={headingId}
+			minW="0"
+			display={{ base: "flex", lg: "grid" }}
+			flexDirection="column"
+			gridRow={{ lg: `1 / span ${rows + 1}` }}
+			gridTemplateRows={{ lg: "subgrid" }}
+		>
+			<Heading
+				id={headingId}
+				as="h4"
+				fontSize="md"
+				fontWeight="semibold"
+				mb="2"
+			>
 				{title}
 			</Heading>
-			<Box p="4" rounded="card" borderWidth="1px" borderColor="border" bg="bg">
+			<Box
+				p="4"
+				rounded="card"
+				borderWidth="1px"
+				borderColor="border"
+				bg="bg"
+				display={{ lg: "grid" }}
+				gridRow={{ lg: `2 / span ${rows}` }}
+				gridTemplateRows={{ lg: "subgrid" }}
+				css={{ "& [data-paragraph]:not(:last-child)": { pb: "4" } }}
+			>
 				{children}
 			</Box>
-		</Stack>
+		</Box>
 	);
 }
 
@@ -147,7 +205,7 @@ export function MaskingCorrections({
 }) {
 	const api = useApi();
 	const queryClient = useQueryClient();
-	const original = useRef<HTMLParagraphElement>(null);
+	const original = useRef<HTMLDivElement>(null);
 	const typeId = useId();
 	const [selected, setSelected] = useState<Range | null>(null);
 	const [type, setType] = useState<EntityType>("PERSON");
@@ -246,33 +304,65 @@ export function MaskingCorrections({
 	};
 
 	const masks = masksOf(review.spans);
+	const allRuns = runs(raw, review.spans);
+	const [rawParagraphs, maskedParagraphs] = pairedParagraphs(
+		raw,
+		review.masked_text,
+	);
+	// A run that crosses a paragraph break is cut in two, one piece per paragraph.
+	const runsIn = (paragraph: Range) =>
+		allRuns
+			.filter((run) => run.end > paragraph.start && run.start < paragraph.end)
+			.map((run) => ({
+				...run,
+				start: Math.max(run.start, paragraph.start),
+				end: Math.min(run.end, paragraph.end),
+			}));
 
 	return (
 		<Stack gap="5">
-			<Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap="4">
-				<Pane title="Original text">
-					<Text
+			<Grid
+				templateColumns={{ base: "1fr", lg: "1fr 1fr" }}
+				columnGap="4"
+				rowGap={{ base: "4", lg: "0" }}
+			>
+				<Pane title="Original text" rows={rawParagraphs.length}>
+					<Box
 						ref={original}
-						whiteSpace="pre-wrap"
-						overflowWrap="anywhere"
+						display="contents"
 						onMouseUp={readSelection}
 						onKeyUp={readSelection}
 					>
-						{runs(raw, review.spans).map((run) =>
-							run.isMasked ? (
-								<Mark key={run.start}>
-									<span data-offset={run.start}>{quoted(run)}</span>
-								</Mark>
-							) : (
-								<span key={run.start} data-offset={run.start}>
-									{quoted(run)}
-								</span>
-							),
-						)}
-					</Text>
+						{rawParagraphs.map((paragraph) => (
+							<Text
+								key={paragraph.start}
+								data-paragraph=""
+								whiteSpace="pre-wrap"
+								overflowWrap="anywhere"
+							>
+								{runsIn(paragraph).map((run) =>
+									run.isMasked ? (
+										<Mark key={run.start}>
+											<span data-offset={run.start}>{quoted(run)}</span>
+										</Mark>
+									) : (
+										<span key={run.start} data-offset={run.start}>
+											{quoted(run)}
+										</span>
+									),
+								)}
+							</Text>
+						))}
+					</Box>
 				</Pane>
-				<Pane title="What the model will see">
-					<MaskedText text={review.masked_text} />
+				<Pane title="What the model will see" rows={maskedParagraphs.length}>
+					{maskedParagraphs.map((paragraph) => (
+						<Box key={paragraph.start} data-paragraph="">
+							<MaskedText
+								text={review.masked_text.slice(paragraph.start, paragraph.end)}
+							/>
+						</Box>
+					))}
 				</Pane>
 			</Grid>
 

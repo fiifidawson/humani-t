@@ -184,6 +184,44 @@ class TestDetectorSanitizer:
 
         assert result.masked == ("Amina Yusuf studied Marib from 12 March; write to [EMAIL_1].")
 
+    async def test_a_mask_inside_another_is_not_listed_as_one_of_its_own(self):
+        # The name model calls digit groups inside a phone number dates.
+        digits = FakeDetector({"76 12": EntityType.DATE}, name="digits")
+        masker = DetectorSanitizer(
+            [PatternDetector(), digits], entity_types=DOCUMENT_ENTITY_TYPES
+        )
+        text = "Call +223 76 12 34 56 today."
+
+        result = await masker.mask(text, rules=[])
+
+        assert [(text[s.start : s.end], s.entity_type) for s in result.spans] == [
+            ("+223 76 12 34 56", EntityType.PHONE)
+        ]
+        assert result.masked == "Call [PHONE_1] today."
+
+    async def test_where_two_detectors_mask_the_same_words_the_first_listed_names_it(self):
+        # Patterns come first: an exact format beats the name model's guess.
+        digits = FakeDetector({"448812": EntityType.DATE}, name="digits")
+        masker = DetectorSanitizer(
+            [PatternDetector(), digits], entity_types=DOCUMENT_ENTITY_TYPES
+        )
+        text = "MRN 448812 was shared."
+
+        result = await masker.mask(text, rules=[])
+
+        assert [(text[s.start : s.end], s.entity_type) for s in result.spans] == [
+            ("448812", EntityType.MEDICAL_RECORD)
+        ]
+
+    async def test_a_project_rule_is_kept_even_inside_a_detectors_mask(self):
+        text = "Call +223 76 12 34 56 today."
+
+        result = await sanitizer(DOCUMENT_ENTITY_TYPES).mask(
+            text, rules=[rule("76 12", EntityType.ID_NUMBER)]
+        )
+
+        assert any(s.source.startswith("rule:") for s in result.spans)
+
     async def test_the_document_list_also_masks_dates(self):
         result = await sanitizer(DOCUMENT_ENTITY_TYPES).mask("Seen on 12 March.", rules=[])
 
@@ -191,8 +229,8 @@ class TestDetectorSanitizer:
 
     def test_its_sources_name_only_the_detectors_its_list_needs(self):
         """The manifest must say which detectors actually looked at the text."""
-        assert sanitizer(PAPER_ENTITY_TYPES).sources == ("patterns@1",)
-        assert sanitizer(QUESTION_ENTITY_TYPES).sources == ("fake@1", "patterns@1")
+        assert sanitizer(PAPER_ENTITY_TYPES).sources == ("patterns@2",)
+        assert sanitizer(QUESTION_ENTITY_TYPES).sources == ("fake@1", "patterns@2")
 
     async def test_a_detector_outside_the_list_is_never_run(self):
         calls: list[str] = []

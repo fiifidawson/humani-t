@@ -34,6 +34,7 @@ import { useApi } from "../../app/api-context";
 import { planVersionQuery } from "../../app/reviewQueries";
 import { DisclosureButton } from "../../ui/DisclosureButton";
 import { linkStyle } from "../../ui/LinkButton";
+import { Reveal } from "../../ui/Reveal";
 import { PendingReply } from "../chat/PendingReply";
 import { PIPELINE } from "../runs/runEvents";
 import { ChatCard, ChatLine } from "./ChatCard";
@@ -92,9 +93,11 @@ export function ErrorCard({
 					: userMessage(known)}
 			</Text>
 			{known !== null && isOpen ? (
-				<Text id={detailsId} fontSize="xs" color="fg.muted">
-					Status {known.status} · Request id {known.requestId ?? "none"}
-				</Text>
+				<Reveal>
+					<Text id={detailsId} fontSize="xs" color="fg.muted">
+						Status {known.status} · Request id {known.requestId ?? "none"}
+					</Text>
+				</Reveal>
 			) : null}
 		</ChatCard>
 	);
@@ -164,58 +167,60 @@ export function PrivacyReceipt({
 				</span>
 			</ChatLine>
 			{isOpen ? (
-				<Box
-					as="section"
-					id={`${id}-sent`}
-					aria-labelledby={`${id}-title`}
-					mt="2"
-					rounded="card"
-					borderWidth="1px"
-					borderColor="border"
-					bg="bg.panel"
-					fontSize="sm"
-					overflow="hidden"
-				>
-					<Flex
-						align="center"
-						justify="space-between"
-						gap="3"
-						wrap="wrap"
-						px="4"
-						py="2"
-						bg="bg.subtle"
-						borderBottomWidth="1px"
+				<Reveal>
+					<Box
+						as="section"
+						id={`${id}-sent`}
+						aria-labelledby={`${id}-title`}
+						mt="2"
+						rounded="card"
+						borderWidth="1px"
 						borderColor="border"
+						bg="bg.panel"
+						fontSize="sm"
+						overflow="hidden"
 					>
-						<Text id={`${id}-title`} fontWeight="semibold">
-							What the model received
-						</Text>
-						<Text fontSize="xs" color="fg.muted">
-							Sent to {receipt.model_id}
-						</Text>
-					</Flex>
-					<Stack gap="3" px="4" py="3">
-						<Box
-							ps="3"
-							borderStartWidth="3px"
-							borderColor="border.emphasized"
-							color="fg"
+						<Flex
+							align="center"
+							justify="space-between"
+							gap="3"
+							wrap="wrap"
+							px="4"
+							py="2"
+							bg="bg.subtle"
+							borderBottomWidth="1px"
+							borderColor="border"
 						>
-							<MaskedText text={item.sent} />
-						</Box>
-						{total > 0 ? <MaskedCounts counts={item.counts} /> : null}
-						{total > 0 ? (
-							<Note icon={<Info size={14} />}>
-								Double-check codes and numbers.
-							</Note>
-						) : null}
-						{receipt.delivered ? null : (
-							<Note icon={<CircleAlert size={14} />}>
-								Sent, but no answer came back.
-							</Note>
-						)}
-					</Stack>
-				</Box>
+							<Text id={`${id}-title`} fontWeight="semibold">
+								What the model received
+							</Text>
+							<Text fontSize="xs" color="fg.muted">
+								Sent to {receipt.model_id}
+							</Text>
+						</Flex>
+						<Stack gap="3" px="4" py="3">
+							<Box
+								ps="3"
+								borderStartWidth="3px"
+								borderColor="border.emphasized"
+								color="fg"
+							>
+								<MaskedText text={item.sent} />
+							</Box>
+							{total > 0 ? <MaskedCounts counts={item.counts} /> : null}
+							{total > 0 ? (
+								<Note icon={<Info size={14} />}>
+									Double-check codes and numbers.
+								</Note>
+							) : null}
+							{receipt.delivered ? null : (
+								<Note icon={<CircleAlert size={14} />}>
+									Sent, but no answer came back.
+								</Note>
+							)}
+						</Stack>
+					</Box>
+				</Reveal>
 			) : null}
 		</Box>
 	);
@@ -454,23 +459,25 @@ export function AnsweredLine({ receipts }: { receipts: readonly Receipt[] }) {
 				</span>
 			</ChatLine>
 			{isOpen ? (
-				<chakra.ul id={id} mt="2" pl="6" fontSize="sm">
-					{plan.questions.map((q) => {
-						const item = sent.find((s) => s.ref === q.id);
-						const masked = item === undefined ? 0 : totalMasked(item.counts);
-						return (
-							<li key={q.id}>
-								{q.text} — {q.answer ?? "Skipped"}
-								{masked > 0 ? (
-									<Text as="span" color="fg.muted">
-										{" "}
-										· sent with {plural(masked, "item")} masked
-									</Text>
-								) : null}
-							</li>
-						);
-					})}
-				</chakra.ul>
+				<Reveal>
+					<chakra.ul id={id} mt="2" pl="6" fontSize="sm">
+						{plan.questions.map((q) => {
+							const item = sent.find((s) => s.ref === q.id);
+							const masked = item === undefined ? 0 : totalMasked(item.counts);
+							return (
+								<li key={q.id}>
+									{q.text} — {q.answer ?? "Skipped"}
+									{masked > 0 ? (
+										<Text as="span" color="fg.muted">
+											{" "}
+											· sent with {plural(masked, "item")} masked
+										</Text>
+									) : null}
+								</li>
+							);
+						})}
+					</chakra.ul>
+				</Reveal>
 			) : null}
 		</Box>
 	);

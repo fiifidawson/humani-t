@@ -29,10 +29,6 @@ function Dots() {
 			aria-hidden="true"
 			gap="1"
 			css={{
-				"@keyframes reply-dot": {
-					"0%, 80%, 100%": { opacity: 0.25, transform: "translateY(0)" },
-					"40%": { opacity: 1, transform: "translateY(-2px)" },
-				},
 				"& > span": { animation: "reply-dot 1.2s ease-in-out infinite" },
 				"& > span:nth-of-type(2)": { animationDelay: "0.15s" },
 				"& > span:nth-of-type(3)": { animationDelay: "0.3s" },

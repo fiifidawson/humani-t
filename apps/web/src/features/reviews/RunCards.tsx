@@ -41,6 +41,7 @@ import { useApi } from "../../app/api-context";
 import { papersQuery } from "../../app/reviewQueries";
 import { Dialog } from "../../ui/Dialog";
 import { linkStyle } from "../../ui/LinkButton";
+import { Reveal } from "../../ui/Reveal";
 import { BriefCard } from "../briefs/BriefCard";
 import { RunStrip } from "../runs/RunStrip";
 import type { RunState, StageId } from "../runs/runEvents";
@@ -181,45 +182,49 @@ export function RunCard({ live }: { live: LiveRun }) {
 				}
 			>
 				{isOpen ? (
-					<Stack
-						id={`${id}-stages`}
-						gap="3"
-						mt="3"
-						pt="3"
-						borderTopWidth="1px"
-						borderColor="border"
-					>
-						<Flex align="center" gap="3" wrap="wrap" fontSize="sm">
-							<Text flex="1" color="fg.muted">
-								{state.startedAt === null
-									? "Not started yet"
-									: `Started ${clockTime(state.startedAt)}`}
-							</Text>
-							{canManage && !isFinished ? <CancelRunButton run={run} /> : null}
-						</Flex>
-						<Box>
-							<VisuallyHidden id={`${id}-list`}>Stages</VisuallyHidden>
-							<StageList
-								stages={stagesOf(run)}
-								state={state}
-								labelId={`${id}-list`}
-							/>
-						</Box>
-						{state.latestItem === null ? null : (
-							<Text fontSize="sm" color="fg.muted" overflowWrap="anywhere">
-								Latest: {state.latestItem}
-							</Text>
-						)}
-						<Flex gap="3" align="center" wrap="wrap">
-							{canRetry ? <RetryButton live={live} /> : null}
-							<RunLinks run={run} />
-						</Flex>
-						{actions.cancel.isError ? (
-							<Text role="alert" color="fg.error" fontSize="sm">
-								The run couldn't be cancelled. It may have finished already.
-							</Text>
-						) : null}
-					</Stack>
+					<Reveal>
+						<Stack
+							id={`${id}-stages`}
+							gap="3"
+							mt="3"
+							pt="3"
+							borderTopWidth="1px"
+							borderColor="border"
+						>
+							<Flex align="center" gap="3" wrap="wrap" fontSize="sm">
+								<Text flex="1" color="fg.muted">
+									{state.startedAt === null
+										? "Not started yet"
+										: `Started ${clockTime(state.startedAt)}`}
+								</Text>
+								{canManage && !isFinished ? (
+									<CancelRunButton run={run} />
+								) : null}
+							</Flex>
+							<Box>
+								<VisuallyHidden id={`${id}-list`}>Stages</VisuallyHidden>
+								<StageList
+									stages={stagesOf(run)}
+									state={state}
+									labelId={`${id}-list`}
+								/>
+							</Box>
+							{state.latestItem === null ? null : (
+								<Text fontSize="sm" color="fg.muted" overflowWrap="anywhere">
+									Latest: {state.latestItem}
+								</Text>
+							)}
+							<Flex gap="3" align="center" wrap="wrap">
+								{canRetry ? <RetryButton live={live} /> : null}
+								<RunLinks run={run} />
+							</Flex>
+							{actions.cancel.isError ? (
+								<Text role="alert" color="fg.error" fontSize="sm">
+									The run couldn't be cancelled. It may have finished already.
+								</Text>
+							) : null}
+						</Stack>
+					</Reveal>
 				) : null}
 			</RunStrip>
 		</Box>

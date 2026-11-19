@@ -26,6 +26,7 @@ import {
 } from "react";
 import { HEADER_HEIGHT } from "../../shell/railStyles";
 import { DisclosureButton } from "../../ui/DisclosureButton";
+import { Reveal } from "../../ui/Reveal";
 import { useMediaQuery, WIDE_SCREEN } from "../../ui/useMediaQuery";
 import { useCanvasWidth } from "./canvasWidth";
 import type { Download } from "./exports";
@@ -163,39 +164,45 @@ export function Canvas({
 				</IconButton>
 			</Flex>
 			{downloads !== undefined && isDownloadsOpen ? (
-				<chakra.ul
-					id={`${id}-downloads`}
-					role="list"
-					aria-label="Downloads"
-					display="flex"
-					flexWrap="wrap"
-					gap="2"
-					listStyleType="none"
-					m="0"
-					px={{ base: "4", md: "6" }}
-					py="3"
-					borderBottomWidth="1px"
-					borderColor="border"
-					bg="bg.subtle"
-				>
-					{downloads.map((file) => (
-						<li key={file.href}>
-							<Button asChild size="xs" variant="outline">
-								{file.isPrintable ? (
-									<a href={file.href} target="_blank" rel="noopener noreferrer">
-										<Printer />
-										{file.label}
-									</a>
-								) : (
-									<a href={file.href} download>
-										<FileDown />
-										{file.label}
-									</a>
-								)}
-							</Button>
-						</li>
-					))}
-				</chakra.ul>
+				<Reveal>
+					<chakra.ul
+						id={`${id}-downloads`}
+						role="list"
+						aria-label="Downloads"
+						display="flex"
+						flexWrap="wrap"
+						gap="2"
+						listStyleType="none"
+						m="0"
+						px={{ base: "4", md: "6" }}
+						py="3"
+						borderBottomWidth="1px"
+						borderColor="border"
+						bg="bg.subtle"
+					>
+						{downloads.map((file) => (
+							<li key={file.href}>
+								<Button asChild size="xs" variant="outline">
+									{file.isPrintable ? (
+										<a
+											href={file.href}
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											<Printer />
+											{file.label}
+										</a>
+									) : (
+										<a href={file.href} download>
+											<FileDown />
+											{file.label}
+										</a>
+									)}
+								</Button>
+							</li>
+						))}
+					</chakra.ul>
+				</Reveal>
 			) : null}
 			{/* position: relative keeps visually hidden text, which is absolutely
 			    positioned, inside this scroller; without it the page itself scrolls. */}

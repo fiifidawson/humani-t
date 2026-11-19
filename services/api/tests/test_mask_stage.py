@@ -173,7 +173,7 @@ class TestMaskingPapers:
 
         spans = lane.open_spans(ABSTRACT_WITH_CONTACT)
         assert {ABSTRACT_WITH_CONTACT[s["start"] : s["end"]] for s in spans} == {EMAIL, MRN}
-        assert {s["source"] for s in spans} == {"patterns@1"}
+        assert {s["source"] for s in spans} == {"patterns@2"}
 
     def test_texts_are_read_for_this_run_in_this_project(self, rt):
         lane = Lane(rt, FakeIngestedTexts([PLAIN_ABSTRACT]))
@@ -250,7 +250,7 @@ class TestTheSummary:
 
         assert summary["manifest"] == {
             "is_masked": True,
-            "detectors": ["patterns@1"],
+            "detectors": ["patterns@2"],
             "entity_types": sorted(t.value for t in PAPER_ENTITY_TYPES),
             "masking_rules": 0,
         }
