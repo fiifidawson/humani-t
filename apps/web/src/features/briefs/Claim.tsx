@@ -53,9 +53,12 @@ const Chip = chakra("button", {
 		display: "inline-flex",
 		alignItems: "center",
 		gap: "1",
-		minH: "6",
+		// Shorter than the line of text it sits in, so it never reaches the line above.
+		// A target inside a sentence is exempt from the 24 px minimum (WCAG 2.5.8).
 		px: "1.5",
+		py: "0",
 		mx: "0.5",
+		lineHeight: "1.5",
 		rounded: "card",
 		borderWidth: "1px",
 		borderColor: "border.emphasized",

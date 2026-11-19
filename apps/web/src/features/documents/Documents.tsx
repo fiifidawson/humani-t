@@ -669,7 +669,9 @@ export function DocumentsPage() {
 	const isProcessing = listing.data?.documents.some(isInProgress) ?? false;
 
 	return (
-		<Box flex="1" minH="0" overflowY="auto" bg="bg.subtle">
+		// Relative, so text hidden for screen readers (absolutely positioned) stays in
+		// this scroll area; otherwise it stretches the shell and adds a second scrollbar.
+		<Box flex="1" minH="0" overflowY="auto" position="relative" bg="bg.subtle">
 			<Page>
 				<Stack as="section" aria-labelledby="documents-title" gap="5">
 					<SectionHeading id="documents-title">Documents</SectionHeading>
