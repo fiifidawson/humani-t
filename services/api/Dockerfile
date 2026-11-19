@@ -11,9 +11,9 @@
 # Base images are pinned by digest so a rebuild cannot silently pick up a different
 # image under the same tag. Dependabot proposes the new digest when the tag moves.
 
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
-FROM python:3.13.18-slim-trixie@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc AS build
+FROM python:3.13.18-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
 
 COPY --from=uv /uv /usr/local/bin/uv
 
@@ -44,7 +44,7 @@ COPY app ./app
 RUN python -m compileall -q app migrations
 
 
-FROM python:3.13.18-slim-trixie@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc AS runtime
+FROM python:3.13.18-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS runtime
 
 LABEL org.opencontainers.image.title="humani-t API" \
       org.opencontainers.image.description="Privacy-preserving evidence synthesis for humanitarian decisions." \
