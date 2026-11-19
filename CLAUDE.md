@@ -199,6 +199,8 @@ Skip docstrings on obvious properties and private helpers. `def is_frozen(self)`
 
 Biome formats and lints; tabs, double quotes. `pnpm lint`, `pnpm format`.
 
+`pnpm --filter @humani-t/web test:e2e` runs the Playwright tests in a real browser, against the API's in-memory demo mode. Layout, scrolling and animation are checked there, since jsdom does none of them.
+
 TypeScript is type-checked as strictly as Python: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. `pnpm typecheck` runs in pre-commit and CI. No `any`, no `@ts-ignore`; `@ts-expect-error` only with a reason.
 
 API types are **generated**, never hand-written:
