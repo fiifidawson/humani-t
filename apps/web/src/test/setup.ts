@@ -48,6 +48,7 @@ beforeEach(() => {
 	clearCookies();
 	window.localStorage.clear();
 	document.documentElement.removeAttribute("data-theme");
+	document.documentElement.removeAttribute("data-motion");
 	// jsdom has no EventSource. Any screen that follows a run gets the fake,
 	// which a test drives with FakeEventSource.latest().
 	FakeEventSource.reset();

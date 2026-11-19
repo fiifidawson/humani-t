@@ -45,6 +45,7 @@ import {
 } from "../../app/reviewQueries";
 import { DisclosureButton } from "../../ui/DisclosureButton";
 import { linkStyle } from "../../ui/LinkButton";
+import { Reveal } from "../../ui/Reveal";
 import {
 	type ChipSource,
 	type Claim,
@@ -316,57 +317,60 @@ export function ThreadList() {
 					{plural(all.length, "thread")}
 				</DisclosureButton>
 				{isOpenList ? (
-					<chakra.ul
-						id={`${id}-threads`}
-						aria-label="Threads"
-						listStyleType="none"
-						maxH="48"
-						overflowY="auto"
-						pb="2"
-					>
-						{all.map((thread) => (
-							<Flex as="li" key={thread.id} align="center" gap="2">
-								<chakra.button
-									type="button"
-									display="block"
-									flex="1"
-									minW="0"
-									textAlign="start"
-									px="2"
-									py="1.5"
-									rounded="card"
-									fontSize="sm"
-									cursor="pointer"
-									_hover={{ bg: "bg.muted" }}
-									onClick={() => jump(thread.id)}
-								>
-									<Text as="span" display="block" truncate>
-										<MaskedText
-											text={thread.questions[0]?.question_sent ?? ""}
-											isInline
-										/>
-									</Text>
-									<Text
-										as="span"
+					<Reveal>
+						<chakra.ul
+							id={`${id}-threads`}
+							aria-label="Threads"
+							listStyleType="none"
+							maxH="48"
+							overflowY="auto"
+							position="relative"
+							pb="2"
+						>
+							{all.map((thread) => (
+								<Flex as="li" key={thread.id} align="center" gap="2">
+									<chakra.button
+										type="button"
 										display="block"
-										fontSize="xs"
-										color="fg.muted"
+										flex="1"
+										minW="0"
+										textAlign="start"
+										px="2"
+										py="1.5"
+										rounded="card"
+										fontSize="sm"
+										cursor="pointer"
+										_hover={{ bg: "bg.muted" }}
+										onClick={() => jump(thread.id)}
 									>
-										{plural(thread.questions.length, "question")} ·{" "}
-										<When at={thread.created_at} />
-									</Text>
-								</chakra.button>
-								<ChakraLink asChild css={linkStyle} fontSize="sm" px="2">
-									<Link
-										to="/p/$projectId/ask/$threadId"
-										params={{ projectId: project.id, threadId: thread.id }}
-									>
-										Open
-									</Link>
-								</ChakraLink>
-							</Flex>
-						))}
-					</chakra.ul>
+										<Text as="span" display="block" truncate>
+											<MaskedText
+												text={thread.questions[0]?.question_sent ?? ""}
+												isInline
+											/>
+										</Text>
+										<Text
+											as="span"
+											display="block"
+											fontSize="xs"
+											color="fg.muted"
+										>
+											{plural(thread.questions.length, "question")} ·{" "}
+											<When at={thread.created_at} />
+										</Text>
+									</chakra.button>
+									<ChakraLink asChild css={linkStyle} fontSize="sm" px="2">
+										<Link
+											to="/p/$projectId/ask/$threadId"
+											params={{ projectId: project.id, threadId: thread.id }}
+										>
+											Open
+										</Link>
+									</ChakraLink>
+								</Flex>
+							))}
+						</chakra.ul>
+					</Reveal>
 				) : null}
 			</Box>
 		</Box>

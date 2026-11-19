@@ -42,6 +42,9 @@ POSITIVES: list[tuple[EntityType, str, str]] = [
     (EntityType.PHONE, "mobile 0712345678", "0712345678"),
     (EntityType.PHONE, "phone (020) 7946 0958 please", "(020) 7946 0958"),
     (EntityType.PHONE, "US line 555-123-4567.", "555-123-4567"),
+    # A bracket belongs to the number only when the number opened it.
+    (EntityType.PHONE, "(kofi@example.org, +223 76 12 34 56) said", "+223 76 12 34 56"),
+    (EntityType.PHONE, "Call +1 (555) 123 4567 today", "+1 (555) 123 4567"),
     # Medical record numbers: brief rule 5's example and its variants.
     (EntityType.MEDICAL_RECORD, "MRN 448-1207 was referred", "448-1207"),
     (EntityType.MEDICAL_RECORD, "MRN: 4481207", "4481207"),
@@ -106,7 +109,7 @@ NEGATIVES: list[str] = [
 
 class TestPatternDetector:
     def test_the_source_names_the_detector_and_its_version(self):
-        assert DETECTOR.source == "patterns@1"
+        assert DETECTOR.source == "patterns@2"
 
     def test_it_covers_exactly_the_structured_identifiers(self):
         assert DETECTOR.entity_types == {
@@ -134,7 +137,7 @@ class TestPatternDetector:
     def test_every_span_names_the_pattern_detector(self):
         spans = asyncio.run(DETECTOR.detect("MRN 448-1207, amina@example.org"))
 
-        assert {s.source for s in spans} == {"patterns@1"}
+        assert {s.source for s in spans} == {"patterns@2"}
 
     def test_an_mrn_is_masked_but_its_label_is_kept_for_the_reader(self):
         assert found("MRN 448-1207") == [(EntityType.MEDICAL_RECORD, "448-1207")]

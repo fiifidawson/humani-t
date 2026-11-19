@@ -399,6 +399,8 @@ export function createAppRouter({
 		defaultErrorComponent: RouteErrorPage,
 		defaultPendingComponent: RoutePending,
 		defaultPendingMs: 400,
+		// Browsers without view transitions simply change the page.
+		defaultViewTransition: true,
 		// Guards read the session from the query cache, which knows when it
 		// is stale; the router's own cache would only add a second answer.
 		defaultPreloadStaleTime: 0,

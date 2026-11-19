@@ -25,6 +25,7 @@ import { keys } from "../../app/queries";
 import { labelRulesQuery } from "../../app/reviewQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
+import { Reveal } from "../../ui/Reveal";
 import { plural, TIERS } from "./format";
 import { useReview } from "./reviewContext";
 
@@ -265,25 +266,27 @@ export function RulesEditor() {
 				</Text>
 			)}
 			{isOpen ? (
-				current.isError ? (
-					<ErrorNotice error={current.error} />
-				) : current.data === undefined ? null : (
-					<RulesForm
-						id={id}
-						initial={
-							inForce == null
-								? DEFAULTS
-								: {
-										possibly_min_met: inForce.possibly_min_met,
-										unclear_counts_as: inForce.unclear_counts_as,
-									}
-						}
-						onApplied={(moved) => {
-							setOpen(false);
-							setApplied(moved);
-						}}
-					/>
-				)
+				<Reveal>
+					{current.isError ? (
+						<ErrorNotice error={current.error} />
+					) : current.data === undefined ? null : (
+						<RulesForm
+							id={id}
+							initial={
+								inForce == null
+									? DEFAULTS
+									: {
+											possibly_min_met: inForce.possibly_min_met,
+											unclear_counts_as: inForce.unclear_counts_as,
+										}
+							}
+							onApplied={(moved) => {
+								setOpen(false);
+								setApplied(moved);
+							}}
+						/>
+					)}
+				</Reveal>
 			) : null}
 		</Box>
 	);

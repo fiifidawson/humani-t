@@ -12,6 +12,7 @@ import {
 	HStack,
 	RadioGroup,
 	Stack,
+	Switch,
 	Text,
 } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,11 @@ import { unwrap, unwrapEmpty } from "../../api/client";
 import { isApiError, userMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
-import { type ThemeChoice, useTheme } from "../../app/preferences";
+import {
+	type ThemeChoice,
+	useReducedMotion,
+	useTheme,
+} from "../../app/preferences";
 import { devicesQuery, keys, mfaQuery } from "../../app/queries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
@@ -401,7 +406,7 @@ function MethodsSection() {
 					gap="3"
 					align={{ base: "stretch", sm: "flex-end" }}
 					direction={{ base: "column", sm: "row" }}
-					css={{ "& > :first-of-type": { flex: "1" } }}
+					css={{ "& > :first-child": { flex: "1" } }}
 				>
 					<Field
 						label="Name for the new passkey"
@@ -458,6 +463,28 @@ function AppearanceSection() {
 	);
 }
 
+function MotionSwitch() {
+	const [isReduced, setReduced] = useReducedMotion();
+	return (
+		<Stack gap="1">
+			<Switch.Root
+				checked={isReduced}
+				onCheckedChange={(details) => setReduced(details.checked)}
+			>
+				<Switch.HiddenInput />
+				<Switch.Control>
+					<Switch.Thumb />
+				</Switch.Control>
+				<Switch.Label>Reduce motion</Switch.Label>
+			</Switch.Root>
+			<Text fontSize="sm" color="fg.muted">
+				Turns animations off in this browser. Your computer's own setting turns
+				them off too.
+			</Text>
+		</Stack>
+	);
+}
+
 export function AccountPage() {
 	return (
 		<Page isNarrow>
@@ -469,7 +496,10 @@ export function AccountPage() {
 				<MethodsSection />
 			</Section>
 			<Section title="Appearance">
-				<AppearanceSection />
+				<Stack gap="6">
+					<AppearanceSection />
+					<MotionSwitch />
+				</Stack>
 			</Section>
 		</Page>
 	);

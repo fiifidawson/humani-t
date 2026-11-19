@@ -22,7 +22,7 @@ from app.domain.masking import (
 NAME = "patterns"
 # Bump whenever a pattern changes what it finds: stored maskings record this
 # version, and a re-run masks again every text masked with an older one.
-VERSION = "1"
+VERSION = "2"
 
 _IDENTIFIER_VALUE = r"(?P<value>[A-Z0-9](?:[A-Z0-9]|[-/ ](?=[A-Z0-9])){3,24})"
 # Minutes and seconds are written with ' and ", or with the primes U+2032 and
@@ -219,8 +219,9 @@ _PATTERNS: tuple[_Pattern, ...] = (
     _Pattern(
         EntityType.PHONE,
         re.compile(
-            r"(?<![\w+])(?:\+|00)[1-9]\d{0,2}(?:[ .-]?\(0\))?(?:[ .-]?\(?\d{1,4}\)?){2,6}"
-            r"(?![\d-])"
+            # A bracket only around a group: "+223 76 12)" must leave the sentence's ")".
+            r"(?<![\w+])(?:\+|00)[1-9]\d{0,2}(?:[ .-]?\(0\))?"
+            r"(?:[ .-]?(?:\(\d{1,4}\)|\d{1,4})){2,6}(?![\d-])"
         ),
         _international_digits,
     ),

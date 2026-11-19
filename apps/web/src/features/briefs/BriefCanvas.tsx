@@ -31,6 +31,7 @@ import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
+import { Reveal } from "../../ui/Reveal";
 import { Canvas } from "../reviews/Canvas";
 import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
@@ -237,23 +238,25 @@ function StrengthHelp() {
 				What the strengths mean
 			</DisclosureButton>
 			{isOpen ? (
-				<Box id={id} mt="2" color="fg.muted">
-					<chakra.ul pl="5">
-						{STRENGTH_ORDER.map((strength) => (
-							<li key={strength}>
-								{`${STRENGTHS[strength].word}: ${STRENGTHS[strength].meaning}`}
-							</li>
-						))}
-					</chakra.ul>
-					<Text mt="1">
-						The scale follows the spirit of GRADE's certainty levels. It is not
-						a GRADE rating.
-					</Text>
-					<Text mt="1">
-						+ benefit · − risk · a chip is a cited source · reasoning is marked
-						as not a source
-					</Text>
-				</Box>
+				<Reveal>
+					<Box id={id} mt="2" color="fg.muted">
+						<chakra.ul pl="5">
+							{STRENGTH_ORDER.map((strength) => (
+								<li key={strength}>
+									{`${STRENGTHS[strength].word}: ${STRENGTHS[strength].meaning}`}
+								</li>
+							))}
+						</chakra.ul>
+						<Text mt="1">
+							The scale follows the spirit of GRADE's certainty levels. It is
+							not a GRADE rating.
+						</Text>
+						<Text mt="1">
+							+ benefit · − risk · a chip is a cited source · reasoning is
+							marked as not a source
+						</Text>
+					</Box>
+				</Reveal>
 			) : null}
 		</Box>
 	);
@@ -665,30 +668,32 @@ function Quality({ quality }: { quality: NonNullable<Brief["quality"]> }) {
 				Show quality checks
 			</DisclosureButton>
 			{isOpen ? (
-				<Box id={id} mt="2">
-					<Text color="fg.muted" mb="2">
-						The model's own review of this brief.
-					</Text>
-					<chakra.ul
-						listStyleType="none"
-						p="0"
-						display="flex"
-						flexWrap="wrap"
-						columnGap="5"
-						rowGap="1"
-					>
-						{SCORES.map(([key, name]) => (
-							<li key={key}>
-								{`${name}: ${scoreWord(quality[key])} (${quality[key]} of 2)`}
-							</li>
-						))}
-					</chakra.ul>
-					<Text mt="2" fontSize="xs" color="fg.muted">
-						These scores come from the same model that wrote the brief. They
-						catch gaps and weak citations, not every error. They are not a
-						verification.
-					</Text>
-				</Box>
+				<Reveal>
+					<Box id={id} mt="2">
+						<Text color="fg.muted" mb="2">
+							The model's own review of this brief.
+						</Text>
+						<chakra.ul
+							listStyleType="none"
+							p="0"
+							display="flex"
+							flexWrap="wrap"
+							columnGap="5"
+							rowGap="1"
+						>
+							{SCORES.map(([key, name]) => (
+								<li key={key}>
+									{`${name}: ${scoreWord(quality[key])} (${quality[key]} of 2)`}
+								</li>
+							))}
+						</chakra.ul>
+						<Text mt="2" fontSize="xs" color="fg.muted">
+							These scores come from the same model that wrote the brief. They
+							catch gaps and weak citations, not every error. They are not a
+							verification.
+						</Text>
+					</Box>
+				</Reveal>
 			) : null}
 		</Box>
 	);

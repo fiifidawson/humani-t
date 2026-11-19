@@ -63,3 +63,53 @@ jobs:
           # check:api's one `uv run` installs the API's environment, which fetches the
           # spaCy model from GitHub. uv retries only transient failures, with backoff.
           UV_HTTP_RETRIES: "8"
+
+  # The pages in a real browser: layout, scrolling and animation, which jsdom
+  # cannot check. Playwright starts the API in its in-memory demo mode, so this
+  # needs no database and calls no model.
+  e2e:
+    name: web (e2e)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+
+      - name: Install (exactly what pnpm-lock.yaml says)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium and the system libraries it needs
+        run: pnpm --filter @humani-t/web exec playwright install --with-deps chromium
+
+      - name: pnpm test:e2e
+        run: pnpm --filter @humani-t/web test:e2e
+        env:
+          UV_HTTP_RETRIES: "8"
+
+      # Screenshots and traces of a failure. The saved sign-in is left out: it
+      # belongs to a demo server that is already gone, but it is still a session.
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            !apps/web/test-results/.auth
+          retention-days: 7

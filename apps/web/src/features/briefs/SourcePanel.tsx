@@ -30,6 +30,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
+import { Reveal } from "../../ui/Reveal";
 import { MEDIUM_SCREEN, useMediaQuery } from "../../ui/useMediaQuery";
 import { MaskedText } from "../reviews/MaskedText";
 import type { BriefSource } from "./Claim";
@@ -157,10 +158,12 @@ function Found({ evidence }: { evidence: Evidence }) {
 						Why it was included
 					</DisclosureButton>
 					{isWhyOpen ? (
-						<Text id={`${id}-why`} mt="1.5">
-							{details.rationale ??
-								"No screening reason was recorded for this source."}
-						</Text>
+						<Reveal>
+							<Text id={`${id}-why`} mt="1.5">
+								{details.rationale ??
+									"No screening reason was recorded for this source."}
+							</Text>
+						</Reveal>
 					) : null}
 				</Box>
 			)}
