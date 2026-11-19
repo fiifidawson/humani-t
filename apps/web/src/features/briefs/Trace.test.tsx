@@ -5,6 +5,16 @@ import { FakeEventSource } from "../../test/fakeEventSource";
 import { currentPath, renderApp } from "../../test/render";
 import { fakeApi } from "../../test/server";
 
+/** The value "What this used" gives for `name`: the definition after its term. */
+function used(canvas: HTMLElement, name: string): HTMLElement {
+	const term = within(canvas).getByText(name, { selector: "dt" });
+	const value = term.nextElementSibling;
+	if (!(value instanceof HTMLElement) || value.tagName !== "DD") {
+		throw new Error(`No value after "${name}"`);
+	}
+	return value;
+}
+
 function briefed(hasBrief = true, state: "running" | "done" = "done") {
 	const api = fakeApi();
 	api.signInAs(api.addUser({ hasTotp: true }));
@@ -127,11 +137,22 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		expect(canvas).toHaveTextContent(
 			"Model: qwen3.5:9b · 9 calls · 61,200 tokens in, 8,900 out",
 		);
-		const used = within(canvas).getByRole("list", { name: "What this used" });
-		expect(used).toHaveTextContent("Retriever: bm25");
-		expect(used).toHaveTextContent(
-			"Prompt versions: answer.writer brief.writer@2",
-		);
+		expect(used(canvas, "Round limit")).toHaveTextContent("3");
+		const retriever = within(used(canvas, "Retriever")).getByText("bm25");
+		expect(retriever.tagName).toBe("CODE");
+	});
+
+	it("sets what the run recorded apart from the names, one line per role", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		const models = used(canvas, "Models");
+		const writer = within(models).getByText("Writer");
+		expect(writer.tagName).not.toBe("CODE");
+		expect(within(models).getByText("qwen3.5:9b").tagName).toBe("CODE");
+		expect(models).not.toHaveTextContent(",");
+		const prompts = used(canvas, "Prompt versions");
+		expect(within(prompts).getByText("brief.writer@2").tagName).toBe("CODE");
 	});
 
 	it("says when masking was off for the run, as the owner chose", async () => {
@@ -148,9 +169,8 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		}
 		const { canvas } = await openTrace(`/p/${project.id}/r/${review.id}`);
 
-		const used = within(canvas).getByRole("list", { name: "What this used" });
-		expect(used).toHaveTextContent(
-			"Masking: off for this run (the owner's choice)",
+		expect(used(canvas, "Masking")).toHaveTextContent(
+			"Off for this run (the owner's choice)",
 		);
 	});
 
@@ -158,8 +178,7 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		const { path } = briefed();
 		const { canvas } = await openTrace(path);
 
-		const used = within(canvas).getByRole("list", { name: "What this used" });
-		expect(used).toHaveTextContent("Masking: on");
+		expect(used(canvas, "Masking")).toHaveTextContent(/^On$/);
 	});
 
 	it("shows the project's instructions as the Writer received them", async () => {

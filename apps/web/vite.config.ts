@@ -11,7 +11,9 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { cspNonce } from "./csp.config.ts";
 
-const API_TARGET = "http://127.0.0.1:8731";
+// Playwright points its own Vite at its own API (playwright.config.ts).
+const API_TARGET =
+	process.env["HUMANI_T_API_TARGET"] ?? "http://127.0.0.1:8731";
 
 const apiProxy = {
 	"/api": {

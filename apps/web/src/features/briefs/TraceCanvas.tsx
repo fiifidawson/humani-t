@@ -6,17 +6,26 @@
  * anything unexpected is simply not shown.
  */
 
-import { Box, chakra, Flex, Heading, Stack, Text } from "@chakra-ui/react";
+import {
+	Box,
+	Code,
+	chakra,
+	Flex,
+	Heading,
+	Stack,
+	Text,
+} from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { Check, X } from "lucide-react";
-import { useId, useState } from "react";
+import { Fragment, type ReactNode, useId, useState } from "react";
 import { isApiError } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import { briefQuery, traceQuery } from "../../app/briefQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
+import { Reveal } from "../../ui/Reveal";
 import { Canvas, CanvasHeading } from "../reviews/Canvas";
 import { duration, plural } from "../reviews/format";
 import { useLiveRun } from "../reviews/liveRun";
@@ -189,9 +198,11 @@ function StepRow({ step }: { step: Step }) {
 				{summaryOf(step)}
 			</chakra.button>
 			{isOpen ? (
-				<Box id={id}>
-					<Detail step={step} />
-				</Box>
+				<Reveal>
+					<Box id={id}>
+						<Detail step={step} />
+					</Box>
+				</Reveal>
 			) : null}
 		</Box>
 	);
@@ -201,16 +212,36 @@ function roundName(round: number): string {
 	return round === 0 ? "Before the first draft" : `Round ${round}`;
 }
 
-function manifestValue(value: unknown): string {
+/** A value the run recorded: identifiers in code type, so they stand apart from the names. */
+function Recorded({ value }: { value: unknown }) {
+	if (typeof value === "number" || typeof value === "boolean") {
+		return <>{String(value)}</>;
+	}
 	if (Array.isArray(value)) {
-		return value.map(manifestValue).join(", ");
+		return (
+			<Stack gap="1">
+				{value.map((inner, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: the run's order, never reordered
+					<Recorded key={index} value={inner} />
+				))}
+			</Stack>
+		);
 	}
 	if (typeof value === "object" && value !== null) {
-		return Object.entries(value)
-			.map(([key, inner]) => `${key} ${manifestValue(inner)}`)
-			.join(", ");
+		return (
+			<Stack gap="1">
+				{Object.entries(value).map(([key, inner]) => (
+					<Flex key={key} gap="2" align="baseline" wrap="wrap">
+						<Text as="span" color="fg.muted" minW="16">
+							{key in ROLES ? ROLES[key as keyof typeof ROLES] : key}
+						</Text>
+						<Recorded value={inner} />
+					</Flex>
+				))}
+			</Stack>
+		);
 	}
-	return String(value);
+	return <Code fontSize="xs">{String(value)}</Code>;
 }
 
 const MANIFEST_NAMES: Readonly<Record<string, string>> = {
@@ -220,6 +251,14 @@ const MANIFEST_NAMES: Readonly<Record<string, string>> = {
 	max_rounds: "Round limit",
 	instructions_version: "Instructions version",
 };
+
+function UsedName({ children }: { children: ReactNode }) {
+	return (
+		<chakra.dt color="fg.muted" fontWeight="medium">
+			{children}
+		</chakra.dt>
+	);
+}
 
 /** The project's writing instructions as the Writer got them (ADR 0015). */
 function InstructionsUsed({ trace }: { trace: Trace }) {
@@ -282,21 +321,34 @@ function TraceView({ trace }: { trace: Trace }) {
 			</Text>
 			<InstructionsUsed trace={trace} />
 			<CanvasHeading id={`${id}-used`}>What this used</CanvasHeading>
-			<chakra.ul aria-labelledby={`${id}-used`} pl="5">
+			<chakra.dl
+				aria-labelledby={`${id}-used`}
+				display="grid"
+				gridTemplateColumns={{ base: "1fr", sm: "max-content 1fr" }}
+				columnGap="6"
+				rowGap={{ base: "1", sm: "3" }}
+				fontSize="sm"
+				css={{ "& dd": { margin: "0", mb: { base: "2", sm: "0" } } }}
+			>
 				{trace.is_masked === null ? null : (
-					<li>
-						{trace.is_masked
-							? "Masking: on"
-							: "Masking: off for this run (the owner's choice)"}
-					</li>
+					<>
+						<UsedName>Masking</UsedName>
+						<dd>
+							{trace.is_masked ? "On" : "Off for this run (the owner's choice)"}
+						</dd>
+					</>
 				)}
 				{Object.entries(trace.manifest).map(([key, value]) => (
-					<li key={key}>
-						{MANIFEST_NAMES[key] ?? key.replaceAll("_", " ")}:{" "}
-						{manifestValue(value)}
-					</li>
+					<Fragment key={key}>
+						<UsedName>
+							{MANIFEST_NAMES[key] ?? key.replaceAll("_", " ")}
+						</UsedName>
+						<dd>
+							<Recorded value={value} />
+						</dd>
+					</Fragment>
 				))}
-			</chakra.ul>
+			</chakra.dl>
 		</Canvas>
 	);
 }

@@ -21,6 +21,27 @@ from app.domain.masking import (
 from app.privacy.base import Detector
 
 
+def _outermost(spans: Sequence[MaskSpan], among: Sequence[MaskSpan]) -> list[MaskSpan]:
+    """Keep one span per masked region: drop those inside a larger one, and repeats.
+
+    The name model calls the digit groups of a phone number dates; listed, each would ask
+    the owner about text already masked. On the same words the first detector wins, and
+    patterns come first: an exact format beats a guess.
+    """
+    kept: list[MaskSpan] = []
+    for span in spans:
+        inside = any(
+            other.start <= span.start
+            and span.end <= other.end
+            and (other.start, other.end) != (span.start, span.end)
+            for other in among
+        )
+        repeated = any((k.start, k.end) == (span.start, span.end) for k in kept)
+        if not inside and not repeated:
+            kept.append(span)
+    return kept
+
+
 class DetectorSanitizer:
     def __init__(
         self,
@@ -57,7 +78,8 @@ class DetectorSanitizer:
             for span in await detector.detect(text)
             if span.entity_type in self._entity_types and not self._is_kept(text, span)
         ]
-        return apply_spans(text, [*spans, *rule_spans(text, rules)])
+        ruled = rule_spans(text, rules)
+        return apply_spans(text, [*_outermost(spans, [*spans, *ruled]), *ruled])
 
     def _is_kept(self, text: str, span: MaskSpan) -> bool:
         # Whatever the detector called it: the name model labels "Sahel" a person.

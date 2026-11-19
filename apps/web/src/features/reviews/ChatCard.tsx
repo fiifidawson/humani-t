@@ -113,6 +113,7 @@ export function ChatCard({
 			py="3"
 			rounded="card"
 			borderWidth="1px"
+			animationStyle="rise-in"
 			{...look}
 		>
 			<Flex as="header" align="baseline" gap="2" wrap="wrap" mb="1.5">
@@ -174,6 +175,7 @@ export function ChatLine({
 			px="1"
 			fontSize="sm"
 			color="fg.muted"
+			animationStyle="rise-in"
 			css={{ "& > *": { alignSelf: "center" }, "& > svg": { flex: "none" } }}
 		>
 			{icon}

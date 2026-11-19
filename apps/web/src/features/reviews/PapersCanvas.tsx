@@ -43,6 +43,7 @@ import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
+import { Reveal } from "../../ui/Reveal";
 import { Canvas, CanvasHeading } from "./Canvas";
 import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { paperDownloads } from "./exports";
@@ -176,19 +177,21 @@ function ScreenedText({ paper, runId }: { paper: Paper; runId: string }) {
 				Show the text that was screened
 			</DisclosureButton>
 			{isOpen ? (
-				<Box id={id} mt="2" p="3" rounded="card" bg="bg.subtle">
-					{detail.isError ? (
-						<ErrorNotice error={detail.error} />
-					) : detail.data === undefined ? (
-						<Loading what="the text" />
-					) : detail.data.masked_text === null ? (
-						<Text color="fg.muted">
-							This paper's text hasn't been masked yet, so it isn't shown.
-						</Text>
-					) : (
-						<MaskedText text={detail.data.masked_text} />
-					)}
-				</Box>
+				<Reveal>
+					<Box id={id} mt="2" p="3" rounded="card" bg="bg.subtle">
+						{detail.isError ? (
+							<ErrorNotice error={detail.error} />
+						) : detail.data === undefined ? (
+							<Loading what="the text" />
+						) : detail.data.masked_text === null ? (
+							<Text color="fg.muted">
+								This paper's text hasn't been masked yet, so it isn't shown.
+							</Text>
+						) : (
+							<MaskedText text={detail.data.masked_text} />
+						)}
+					</Box>
+				</Reveal>
 			) : null}
 		</Box>
 	);
@@ -337,7 +340,7 @@ function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 				<Table.Cell>{sourceName(paper.source_id)}</Table.Cell>
 			</Table.Row>
 			{isOpen ? (
-				<Table.Row id={id}>
+				<Table.Row id={id} animationStyle="rise-in">
 					<Table.Cell colSpan={4} bg="bg.subtle">
 						<Why paper={paper} runId={runId} />
 					</Table.Cell>

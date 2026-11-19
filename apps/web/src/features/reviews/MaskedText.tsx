@@ -9,8 +9,8 @@ import { shownPlaceholder, splitMasked, spokenPlaceholder } from "./masking";
 const Pill = chakra("span", {
 	base: {
 		display: "inline-block",
-		px: "1.5",
-		mx: "0.5",
+		// No outer margin: a tag sits against punctuation, as the word it replaced did.
+		px: "1",
 		rounded: "sm",
 		bg: "masked.bg",
 		color: "masked.fg",

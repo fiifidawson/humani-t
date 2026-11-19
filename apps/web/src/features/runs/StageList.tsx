@@ -118,8 +118,7 @@ export function StageList({ stages, state, labelId }: StageListProps) {
 			p="0"
 			m="0"
 			css={{
-				"@keyframes stage-spin": { to: { transform: "rotate(360deg)" } },
-				"& .stage-spin": { animation: "stage-spin 1s linear infinite" },
+				"& .stage-spin": { animation: "spin 1s linear infinite" },
 			}}
 		>
 			{stages.map((stage, index) => {

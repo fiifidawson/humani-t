@@ -43,8 +43,15 @@ export function ProjectSettingsPage() {
 	}
 	const { name, role } = project.data;
 	return (
-		<Box flex="1" minH="0" overflowY="auto" px={{ base: "4", md: "6" }} py="6">
-			<Stack gap="6" maxW="2xl">
+		<Box
+			flex="1"
+			minH="0"
+			overflowY="auto"
+			position="relative"
+			px={{ base: "4", md: "6" }}
+			py="6"
+		>
+			<Stack gap="6" maxW="2xl" mx="auto">
 				<SettingsSection title="General">
 					{role === "owner" ? (
 						<Stack gap="5">
