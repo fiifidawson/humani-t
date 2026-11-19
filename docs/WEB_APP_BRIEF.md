@@ -1,12 +1,14 @@
 # CHITCHAT workflow: brief for a web app
 
-This brief describes what CHITCHAT does today, as a command-line pipeline, so it can be rebuilt as a secure web app. It covers the workflow, the data, and the security rules the web app must keep. For full detail see [PIPELINE.md](PIPELINE.md).
+This brief describes what CHITCHAT does today, as a command-line pipeline, so it can be rebuilt as a secure web app. It covers the workflow, the data, and the security rules the web app must keep. For full detail see CHITCHAT's [PIPELINE.md](https://github.com/fiifidawson/CHITCHAT/blob/main/docs/PIPELINE.md). The technical reference for building it (services, the agent loop, the decision-brief screens, the API) is CHITCHAT's [WEB_APP_REFERENCE.md](https://github.com/fiifidawson/CHITCHAT/blob/main/docs/WEB_APP_REFERENCE.md).
+
+This is the only copy of the brief: CHITCHAT links here.
 
 The web interface, including the decision brief that CHITCHAT now produces at the end of a run, is specified in [UI_UX_SPEC.md](UI_UX_SPEC.md).
 
 ## What it does
 
-A researcher asks a research question. CHITCHAT finds relevant papers, adds the researcher's own documents, removes personal data, screens the papers against review criteria with an LLM, produces a dataset and a PRISMA report, and answers follow-up questions with cited sources.
+A researcher asks a research question. CHITCHAT finds relevant papers, adds the researcher's own documents, can mask personal data (off by default in CHITCHAT), screens the papers against criteria drafted for the question, produces a dataset and a PRISMA report, answers the original question with a decision brief (options, benefits and risks, trade-offs, conflicting evidence, gaps), and answers follow-up questions with cited sources.
 
 It is built on [mmore](https://github.com/EPFLiGHT/mmore), which provides paper discovery, document reading, privacy masking, indexing and retrieval.
 
@@ -18,16 +20,18 @@ It is built on [mmore](https://github.com/EPFLiGHT/mmore), which provides paper 
 | 2 | **Clarify** (deep mode): the LLM asks about 4 questions on scope, population, setting, years | User + LLM | Interactive | 1 to 2 min | Answers |
 | 3 | **Draft the search**: concepts with synonyms, grouped into categories | LLM | Interactive | seconds | A search plan |
 | 4 | **Review the draft**: accept, ask for changes in plain words, or quit. Repeatable | User + LLM | Interactive, multi-turn | minutes | The accepted plan |
-| 5 | **Discover**: search OpenAlex, Europe PMC and arXiv, download PDFs | System | Background job | 5 to 60 min | Papers with text |
-| 6 | **Add own documents** (optional): PDF, Word, Excel, email, web pages, text | User uploads, system reads | Upload + background job | 2 to 5 min | Documents with text |
-| 7 | **Mask personal data** in papers and documents, locally, with no LLM | System | Background job | 1 to 30 min | Masked text + privacy report |
-| 8 | **Screen** each paper: the LLM answers the criteria with evidence quotes, fixed rules set the label (HIGH, MEDIUM, LOW, EXCLUDE) | System + LLM | Background job | 1 to 20 min | A label and evidence per paper |
-| 9 | **Review results**: read labels and evidence, change rules and relabel without new LLM calls | User | Interactive | as long as needed | Final labels |
-| 10 | **Export**: dataset (CSV and JSON) and PRISMA report | System | Background job | seconds | Files to download |
-| 11 | **Index** included papers and own documents for questions | System | Background job | 1 to 5 min | A search index per project |
-| 12 | **Ask**: questions answered from the index, citing `[P0012]` (papers) and `[D0003]` (documents) | User + LLM | Interactive | seconds | Answer + sources |
+| 5 | **Draft the screening criteria** from the question and answers: questions a paper must pass, questions that rule it out, questions that make it stronger, and what to pull from each paper. Accept, change or quit, as for the search | User + LLM | Interactive, multi-turn | 1 to 2 min | The criteria for this review |
+| 6 | **Discover**: search OpenAlex, Europe PMC and arXiv, download PDFs | System | Background job | 5 to 60 min | Papers with text |
+| 7 | **Add own documents** (optional): PDF, Word, Excel, email, web pages, text | User uploads, system reads | Upload + background job | 2 to 5 min | Documents with text |
+| 8 | **Mask personal data** in papers and documents, locally, with no LLM. In CHITCHAT this is a switch, off by default, with a notice when it is off | System | Background job | 1 to 30 min | Masked text + privacy report |
+| 9 | **Screen** each paper: the LLM answers the criteria with evidence quotes, fixed rules set the label (HIGH, MEDIUM, LOW, EXCLUDE) | System + LLM | Background job | 1 to 20 min | A label and evidence per paper |
+| 10 | **Review results**: read labels and evidence, change rules and relabel without new LLM calls | User | Interactive | as long as needed | Final labels |
+| 11 | **Export**: dataset (CSV and JSON) and PRISMA report | System | Background job | seconds | Files to download |
+| 12 | **Index** included papers and own documents for questions | System | Background job | 1 to 5 min | A search index per project |
+| 13 | **Answer the question**: four agents (Planner, Retriever, Writer, Critic) write a decision brief, in up to 3 rounds | System + LLM | Background job | 2 to 15 min | A decision brief with sources |
+| 14 | **Ask**: follow-up questions answered from the index, citing `[P0012]` (papers) and `[D0003]` (documents) | User + LLM | Interactive | seconds | Answer + sources |
 
-Steps 5, 7, 8, 10 and 11 run in order as one job. Each can be rerun on its own. Finished screening results are reused, so a rerun only pays for new or failed papers.
+Steps 6, 8, 9, 11, 12 and 13 run in order as one job. Each can be rerun on its own. A stopped job carries on where it stopped: finished steps are skipped, and finished screening results are reused, so a rerun only pays for new or failed papers.
 
 ### The two modes
 
@@ -53,6 +57,7 @@ One **project** per search (today: one run folder).
 | Screening results | Per paper: answers, evidence quotes, label, model, cost | Low |
 | Dataset and PRISMA report | Exports for the review | Low |
 | Search index | Chunks of masked text, each tagged with its source | Lower (masked only) |
+| Decision brief | Options, claims with sources, trade-offs, conflicts, gaps, the Critic's scores, every agent step | Low to medium |
 | Answers | Questions, answers, sources, privacy summary | Low to medium |
 | Run history and logs | Each job: stages, durations, outcome, errors | Low |
 
@@ -106,10 +111,13 @@ These are already enforced by the pipeline. The web app must not weaken them.
 | `chitchat ask`, `--no-privacy`, `--review` | A chat screen with sources as links, a privacy summary per answer, and an optional "review before sending" step |
 | `chitchat status`, history and logs | A project overview: stages, durations, recent jobs, errors |
 | `my_docs/` folder | A "Your documents" upload area per project |
+| The criteria box, `a` / `c` / `q` | An editable criteria view next to the search view, with the same Accept and change-in-chat controls |
+| The `answer` stage, `answer/brief.md` | A decision-brief screen: option cards, a trade-off table, conflicts, "if this matters most", gaps, each citation opening its passage |
+| `chitchat evaluate` | An admin screen to compare systems on a question set, blind |
 
 ## What a first version can leave out
 
 - Google Scholar as a source (it hits captchas).
 - The predefined legacy search (keep it as an admin-only template).
 - Choosing LLM providers per user (one organisation-wide provider is enough).
-- Editing the screening questions in the browser (start with fixed criteria plus rule editing).
+- Editing the screening questions by hand in the browser (start with drafted criteria, changes asked in chat, plus rule editing).
