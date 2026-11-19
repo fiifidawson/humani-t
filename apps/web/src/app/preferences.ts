@@ -1,5 +1,5 @@
 /**
- * Per-browser display preferences: theme, the folded rail and panel widths.
+ * Per-browser display preferences: theme, reduced motion, the folded rail and panel widths.
  *
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
@@ -11,6 +11,7 @@ export type ThemeChoice = "system" | "light" | "dark";
 
 const THEME_KEY = "humani-t:theme";
 const RAIL_KEY = "humani-t:rail-folded";
+const MOTION_KEY = "humani-t:reduce-motion";
 const listeners = new Set<() => void>();
 // Where a preference lives when storage refuses it: for this page view only.
 const unsaved = new Map<string, string | null>();
@@ -93,6 +94,29 @@ export function useTheme(): [ThemeChoice, (choice: ThemeChoice) => void] {
 		write(THEME_KEY, choice === "system" ? null : choice);
 	}, []);
 	return [theme, setTheme];
+}
+
+export function readReducedMotion(): boolean {
+	return read(MOTION_KEY) === "true";
+}
+
+/** The system's own reduced-motion setting applies regardless (theme/system.ts). */
+export function applyReducedMotion(isReduced: boolean): void {
+	const root = document.documentElement;
+	if (isReduced) {
+		root.setAttribute("data-motion", "reduced");
+	} else {
+		root.removeAttribute("data-motion");
+	}
+}
+
+export function useReducedMotion(): [boolean, (isReduced: boolean) => void] {
+	const isReduced = useSyncExternalStore(subscribe, readReducedMotion);
+	const setReduced = useCallback((value: boolean) => {
+		applyReducedMotion(value);
+		write(MOTION_KEY, value ? "true" : null);
+	}, []);
+	return [isReduced, setReduced];
 }
 
 export function useRailFolded(): [boolean, (isFolded: boolean) => void] {

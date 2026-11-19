@@ -48,6 +48,16 @@ const BRAND = {
 	eggshell: "#FEFFF7",
 } as const;
 
+/** Decelerates and never overshoots: nothing bounces (UI_UX_SPEC §9.5). */
+const SETTLE = "cubic-bezier(0.2, 0, 0, 1)";
+
+// Both ways of asking for less motion: the computer's setting, and Account's switch.
+const NO_MOTION = {
+	animationDuration: "0.01ms !important",
+	animationIterationCount: "1 !important",
+	transitionDuration: "0.01ms !important",
+};
+
 /** Light and dark values for one semantic colour. */
 function mode(light: string, dark: string) {
 	return { value: { base: light, _dark: dark } };
@@ -99,20 +109,64 @@ const config = defineConfig({
 			outlineOffset: "2px",
 		},
 		"[tabindex='-1']:focus:not(:focus-visible)": { outline: "none" },
-		"*, *::before, *::after": {
-			_motionReduce: {
-				animationDuration: "0.01ms !important",
-				animationIterationCount: "1 !important",
-				transitionDuration: "0.01ms !important",
-			},
+		"*, *::before, *::after": { _motionReduce: NO_MOTION },
+		"html[data-motion=reduced] *, html[data-motion=reduced] *::before, html[data-motion=reduced] *::after":
+			NO_MOTION,
+		"::view-transition-old(root), ::view-transition-new(root)": {
+			animationDuration: "0.2s",
+			animationTimingFunction: SETTLE,
 		},
+		"::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*)":
+			{ _motionReduce: { animation: "none !important" } },
+		"html[data-motion=reduced]::view-transition-group(*), html[data-motion=reduced]::view-transition-old(*), html[data-motion=reduced]::view-transition-new(*)":
+			{ animation: "none !important" },
 	},
 	theme: {
 		breakpoints,
-		keyframes,
+		keyframes: {
+			...keyframes,
+			// The three dots while a reply is on the way (PendingReply).
+			"reply-dot": {
+				"0%, 80%, 100%": { opacity: "0.25", transform: "translateY(0)" },
+				"40%": { opacity: "1", transform: "translateY(-2px)" },
+			},
+			"rise-in": {
+				from: { opacity: "0", transform: "translateY(6px)" },
+				to: { opacity: "1", transform: "none" },
+			},
+			// Rows from 0fr to 1fr: the height eases open without measuring the content.
+			reveal: {
+				from: { gridTemplateRows: "0fr", opacity: "0" },
+				to: { gridTemplateRows: "1fr", opacity: "1" },
+			},
+			// Clips the content only while it opens, so focus rings show afterwards.
+			"reveal-clip": {
+				from: { overflow: "hidden" },
+				to: { overflow: "hidden" },
+			},
+		},
 		layerStyles,
 		textStyles,
-		animationStyles,
+		animationStyles: {
+			...animationStyles,
+			"rise-in": {
+				value: {
+					animationName: "rise-in",
+					animationDuration: "350ms",
+					animationTimingFunction: SETTLE,
+				},
+			},
+			reveal: {
+				value: {
+					animationName: "reveal",
+					animationDuration: "200ms",
+					animationTimingFunction: SETTLE,
+				},
+			},
+			"reveal-clip": {
+				value: { animationName: "reveal-clip", animationDuration: "200ms" },
+			},
+		},
 		tokens: {
 			...tokens,
 			colors: {
@@ -233,6 +287,7 @@ const config = defineConfig({
 		recipes: {
 			badge: badgeRecipe,
 			// Pill-shaped, Manrope Medium, a 0.2 s transition: the buttons on LiGHT's site.
+			// A press shrinks it slightly, so a click is felt even before anything loads.
 			button: {
 				...buttonRecipe,
 				base: {
@@ -240,7 +295,8 @@ const config = defineConfig({
 					borderRadius: "pill",
 					fontWeight: "medium",
 					transition:
-						"background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease",
+						"background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.1s ease",
+					_active: { transform: "scale(0.98)" },
 				},
 			},
 			code: codeRecipe,

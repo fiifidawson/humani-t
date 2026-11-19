@@ -248,6 +248,25 @@ describe("appearance", () => {
 
 		expect(document.documentElement).toHaveAttribute("data-theme", "dark");
 	});
+
+	it("reduces motion in this browser at once, and remembers it (UI_UX_SPEC §9.5)", async () => {
+		signedIn();
+		const { user } = renderApp("/settings");
+		const appearance = await section("Appearance");
+		const reduce = within(appearance).getByRole("checkbox", {
+			name: "Reduce motion",
+		});
+
+		expect(reduce).not.toBeChecked();
+		await user.click(reduce);
+
+		expect(reduce).toBeChecked();
+		expect(document.documentElement).toHaveAttribute("data-motion", "reduced");
+		expect(window.localStorage.getItem("humani-t:reduce-motion")).toBe("true");
+		await user.click(reduce);
+		expect(document.documentElement).not.toHaveAttribute("data-motion");
+		expect(window.localStorage.getItem("humani-t:reduce-motion")).toBeNull();
+	});
 });
 
 describe("the account page", () => {

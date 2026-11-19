@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { expectNoAccessibilityViolations } from "../test/axe";
 import { currentPath, renderApp } from "../test/render";
 import { fakeApi } from "../test/server";
@@ -113,6 +113,28 @@ describe("the app shell (UI_UX_SPEC §4)", () => {
 		await user.keyboard("gp");
 
 		await waitFor(() => expect(currentPath(router)).toBe("/projects"));
+	});
+
+	it("cross-fades between pages where the browser can (UI_UX_SPEC §9.5)", async () => {
+		signedIn();
+		type Update = () => unknown;
+		const startViewTransition = vi.fn((arg: Update | { update: Update }) => {
+			const update = typeof arg === "function" ? arg : arg.update;
+			const done = Promise.resolve(update()).then(() => undefined);
+			return { finished: done, ready: done, updateCallbackDone: done };
+		});
+		Object.assign(document, { startViewTransition });
+		try {
+			const { user, router } = renderApp("/");
+			await screen.findByRole("navigation", { name: "Main" });
+
+			await user.keyboard("gp");
+
+			await waitFor(() => expect(currentPath(router)).toBe("/projects"));
+			expect(startViewTransition).toHaveBeenCalled();
+		} finally {
+			Reflect.deleteProperty(document, "startViewTransition");
+		}
 	});
 
 	it("opens the rail as a drawer from the menu button on small screens", async () => {
