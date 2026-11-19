@@ -75,6 +75,14 @@ Migration `0010` creates both, after `0009` creates `papers`. `paper_masks.paper
 - **Where:** [`app/domain/masking.py`](../../services/api/app/domain/masking.py) (`MaskingPolicy`, `is_masking_applied`, `mask_rules_only`), [`app/application/masking.py`](../../services/api/app/application/masking.py) (`MaskingChoice`, `mask_as_chosen`), [`app/application/inference.py`](../../services/api/app/application/inference.py) (`for_project`), [`app/application/projects.py`](../../services/api/app/application/projects.py) (`set_masking`), [`app/settings.py`](../../services/api/app/settings.py) (`is_inference_hosted`, `allow_unmasked_hosted_inference`), migration 0016, [`apps/web/src/features/projects/MaskingSwitch.tsx`](../../apps/web/src/features/projects/MaskingSwitch.tsx).
 - **Proven by:** `tests/test_masking_domain.py::TestMaskingChoice`, `::TestMaskingOff`, `tests/test_settings.py::TestUnmaskedHostedInference`, `tests/test_outbound_wiring.py::TestMaskingPolicy`, `tests/test_masking_choice.py`, `apps/web/src/features/projects/MaskingSwitch.test.tsx`.
 
+### D10.7 One mask per region, and brackets only when the number opened them (2026-11-19)
+
+- **Decision:** the sanitizer keeps one detector span per masked region. A span wholly inside a larger one is dropped, and on the same words the first detector wins (patterns come first). The project's rules are always kept. The international phone pattern takes a bracket only around a digit group, so "(…, +223 76 12 34 56) said" leaves the sentence's ")". The pattern detector is now `patterns@2`, so a rerun masks earlier texts again.
+- **Why:** the name model called the digit groups of a phone number and a record number dates. The masks list then asked the owner about text already masked, and labelled a record number "Date". The phone mask also swallowed punctuation the model needs to read the sentence.
+- **Not fixed here:** the small name model still labels some unfamiliar towns as people ("Gao"). The text is masked either way; a larger model is G10.2.
+- **Where:** [`app/privacy/sanitizer.py`](../../services/api/app/privacy/sanitizer.py) (`_outermost`), [`app/privacy/patterns.py`](../../services/api/app/privacy/patterns.py).
+- **Proven by:** `tests/test_privacy_sanitizer.py::TestDetectorSanitizer` (`test_a_mask_inside_another_…`, `test_where_two_detectors_…`, `test_a_project_rule_is_kept_…`), and the bracket cases in `tests/test_privacy_patterns.py`.
+
 ## Libraries
 
 ### spaCy 3.8.18 and en_core_web_sm 3.8.0 (optional `ner` extra)

@@ -235,7 +235,7 @@ class TestReview:
 
         email = _span(review, EMAIL)
         date = _span(review, "12 March 2024")
-        assert email["source"] == "patterns@1"
+        assert email["source"] == "patterns@2"
         assert email["can_remove"] is False
         assert date["can_remove"] is True
         assert "recorded" in review["notice"]
@@ -641,4 +641,4 @@ class TestMaskVersionsAreBound:
         detail = _detail(team, document_id)
 
         assert detail["masked_page_starts"] == [0]
-        assert {s["source"] for s in detail["spans"]} >= {"patterns@1", "dates@1"}
+        assert {s["source"] for s in detail["spans"]} >= {"patterns@2", "dates@1"}
