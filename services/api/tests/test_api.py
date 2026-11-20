@@ -104,6 +104,12 @@ class TestOpenAPI:
             "/api/v1/admin/invitations",
             "/api/v1/admin/users/{user_id}/disable",
             "/api/v1/admin/users/{user_id}/enable",
+            "/api/v1/collections",
+            "/api/v1/collections/{collection_id}",
+            "/api/v1/projects/{project_id}/collection",
+            "/api/v1/projects/{project_id}/tags",
+            "/api/v1/projects/{project_id}/pin",
+            "/api/v1/project-actions",
         }
 
     def test_request_bodies_carry_a_worked_example(self, client):

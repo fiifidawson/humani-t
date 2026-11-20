@@ -21,6 +21,7 @@ import type { components } from "../api/schema.gen";
 import { safeRedirect } from "../features/auth/redirect";
 import { SignInPage } from "../features/auth/SignInPage";
 import { HomePage } from "../features/projects/HomePage";
+import { parseProjectsSearch } from "../features/projects/projectListView";
 import { AppShell } from "../shell/AppShell";
 import {
 	NotFoundPage,
@@ -161,10 +162,23 @@ const homeRoute = createRoute({
 const projectsRoute = createRoute({
 	getParentRoute: () => signedInRoute,
 	path: "projects",
+	validateSearch: parseProjectsSearch,
 	component: lazyRouteComponent(
 		() => import("../features/projects/ProjectsPage"),
 		"ProjectsPage",
 	),
+});
+
+/** One collection (§3.2): the All projects page, filtered to it. */
+const collectionRoute = createRoute({
+	getParentRoute: () => signedInRoute,
+	path: "c/$collectionId",
+	beforeLoad: ({ params }) => {
+		throw redirect({
+			to: "/projects",
+			search: { collection: params.collectionId },
+		});
+	},
 });
 
 const newProjectRoute = createRoute({
@@ -368,6 +382,7 @@ const routeTree = rootRoute.addChildren([
 	signedInRoute.addChildren([
 		homeRoute,
 		projectsRoute,
+		collectionRoute,
 		newProjectRoute,
 		workspaceRoute.addChildren([
 			projectHomeRoute,

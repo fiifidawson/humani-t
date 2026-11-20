@@ -6,9 +6,9 @@
 import { Badge } from "@chakra-ui/react";
 import type { Project } from "./format";
 
-type ProjectStatus = Project["status"];
+export type ProjectStatus = Project["status"];
 
-const STATUS_LABELS: Readonly<Record<ProjectStatus, string>> = {
+export const STATUS_LABELS: Readonly<Record<ProjectStatus, string>> = {
 	planning: "Planning",
 	running: "Running",
 	needs_you: "Needs you",

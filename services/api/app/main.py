@@ -28,6 +28,7 @@ from app.api.routes import (
     admin,
     auth,
     briefs,
+    collections,
     documents,
     exports,
     label_rules,
@@ -253,6 +254,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(masking.router)
     v1.include_router(model_instructions.router)
     v1.include_router(documents.router)
+    v1.include_router(collections.router)
     app.include_router(v1)
 
 

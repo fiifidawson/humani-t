@@ -23,6 +23,7 @@ from app.application.briefs import (
     ScreenedSources,
     StoredBriefCitations,
 )
+from app.application.collections import CollectionService
 from app.application.documents import (
     DocumentEvidence,
     DocumentProcessor,
@@ -45,6 +46,7 @@ from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.planning import PlanService
+from app.application.project_list import ProjectListService
 from app.application.projects import ProjectService
 from app.application.queries_stage import QueriesStage, QueryCompiler
 from app.application.questions import QuestionService, QuestionWorker
@@ -143,6 +145,8 @@ class Providers:
     documents: DocumentService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     document_processor: DocumentProcessor
+    collections: CollectionService
+    project_list: ProjectListService
 
     async def close(self) -> None:
         """Release every pool and client: once, at shutdown or at the end of a CLI run."""
@@ -535,6 +539,22 @@ def build_providers(
         clock=clock,
     )
     document_sanitizer = _document_sanitizer(ner)
+    projects = ProjectService(
+        storage=storage,
+        encryption=encryption,
+        audit=audit,
+        masking=policy,
+        runs=runs,
+        clock=clock,
+    )
+    papers = PaperService(
+        storage=storage,
+        store=pipeline.store,
+        masked=pipeline.masked,
+        encryption=encryption,
+        citations=StoredBriefCitations(encryption),
+        criteria=criteria,
+    )
     return Providers(
         storage=storage,
         encryption=encryption,
@@ -551,14 +571,7 @@ def build_providers(
         ),
         email=email,
         rate_limiter=limiter,
-        projects=ProjectService(
-            storage=storage,
-            encryption=encryption,
-            audit=audit,
-            masking=policy,
-            runs=runs,
-            clock=clock,
-        ),
+        projects=projects,
         mfa=MfaService(
             storage=storage,
             encryption=encryption,
@@ -578,14 +591,7 @@ def build_providers(
         stages=stages,
         reviews=ReviewService(storage=storage, encryption=encryption, audit=audit, clock=clock),
         runs=runs,
-        papers=PaperService(
-            storage=storage,
-            store=pipeline.store,
-            masked=pipeline.masked,
-            encryption=encryption,
-            citations=StoredBriefCitations(encryption),
-            criteria=criteria,
-        ),
+        papers=papers,
         label_rules=LabelRulesService(
             storage=storage, store=pipeline.store, criteria=criteria, audit=audit, clock=clock
         ),
@@ -643,6 +649,10 @@ def build_providers(
             worker_id=f"documents-{uuid.uuid4().hex[:12]}",
             clock=clock,
         ),
+        collections=CollectionService(
+            storage=storage, encryption=encryption, audit=audit, projects=projects, clock=clock
+        ),
+        project_list=ProjectListService(storage=storage, projects=projects, papers=papers),
     )
 
 
@@ -763,3 +773,17 @@ def get_documents(providers: ProvidersDep) -> DocumentService:
 
 
 DocumentsDep = Annotated[DocumentService, Depends(get_documents)]
+
+
+def get_collections(providers: ProvidersDep) -> CollectionService:
+    return providers.collections
+
+
+CollectionsDep = Annotated[CollectionService, Depends(get_collections)]
+
+
+def get_project_list(providers: ProvidersDep) -> ProjectListService:
+    return providers.project_list
+
+
+ProjectListDep = Annotated[ProjectListService, Depends(get_project_list)]

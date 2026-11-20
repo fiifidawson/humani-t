@@ -555,3 +555,47 @@ model_instruction_versions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("version >= 1", name="version_counts_from_one"),
 )
+
+# Collections are shared labels (ADR 0016); the name is sealed under the collection's own
+# data key, so the database cannot keep names unique: that is checked under a table lock.
+collections = Table(
+    "collections",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("name_sealed", LargeBinary, nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default="0"),
+)
+
+project_collections = Table(
+    "project_collections",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column(
+        "collection_id",
+        Uuid,
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("moved_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("moved_at", DateTime(timezone=True), nullable=False),
+)
+
+project_tags = Table(
+    "project_tags",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column("tags_sealed", LargeBinary, nullable=False),
+    Column("updated_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+project_pins = Table(
+    "project_pins",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True, index=True),
+    Column("pinned_at", DateTime(timezone=True), nullable=False),
+)

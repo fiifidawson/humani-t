@@ -949,9 +949,148 @@
         "tags": [
           "projects"
         ],
-        "summary": "Projects the caller belongs to, newest first",
+        "summary": "Projects the caller belongs to, filtered and sorted",
+        "description": "Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2).",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSort",
+              "default": "last_activity"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ProjectStatus"
+              },
+              "description": "Any of these; `archived` brings archived ones in.",
+              "title": "Status"
+            },
+            "description": "Any of these; `archived` brings archived ones in."
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "maxItems": 20,
+              "description": "Every one of these, ignoring case.",
+              "title": "Tag"
+            },
+            "description": "Every one of these, ignoring case."
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Projects this person owns.",
+              "title": "Owner"
+            },
+            "description": "Projects this person owns."
+          },
+          {
+            "name": "member",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Projects this person is in.",
+              "title": "Member"
+            },
+            "description": "Projects this person is in."
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, in UTC.",
+              "title": "Created From"
+            },
+            "description": "Inclusive, in UTC."
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, in UTC.",
+              "title": "Created To"
+            },
+            "description": "Inclusive, in UTC."
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "const": "none",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A collection id, or \"none\" for projects in none.",
+              "title": "Collection"
+            },
+            "description": "A collection id, or \"none\" for projects in none."
+          },
           {
             "name": "include_archived",
             "in": "query",
@@ -971,7 +1110,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProjectOut"
+                    "$ref": "#/components/schemas/ProjectSummaryOut"
                   },
                   "title": "Response List Projects Api V1 Projects Get"
                 }
@@ -3995,6 +4134,387 @@
           }
         }
       }
+    },
+    "/api/v1/collections": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Every collection, with the caller's own counts",
+        "operationId": "list_collections_api_v1_collections_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CollectionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Collections Api V1 Collections Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Create a collection",
+        "description": "Any signed-in user. Its name is visible to everyone in the deployment.",
+        "operationId": "create_collection_api_v1_collections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another collection uses this name (`collection_name_taken`)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/collections/{collection_id}": {
+      "patch": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Rename a collection",
+        "operationId": "rename_collection_api_v1_collections__collection_id__patch",
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not its creator or an administrator"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Delete a collection; the projects in it stay, in no collection",
+        "operationId": "delete_collection_api_v1_collections__collection_id__delete",
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/collection": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "File the project in a collection, or in none",
+        "operationId": "move_project_api_v1_projects__project_id__collection_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCollectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "No such collection"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/tags": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Replace the project's tags",
+        "description": "Owners only. Tags are trimmed and repeats dropped, ignoring case.",
+        "operationId": "set_project_tags_api_v1_projects__project_id__tags_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTagsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/pin": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Pin the project for yourself",
+        "operationId": "pin_project_api_v1_projects__project_id__pin_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Unpin the project",
+        "operationId": "unpin_project_api_v1_projects__project_id__pin_delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/project-actions": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Move, tag or archive several projects at once",
+        "description": "Each project the caller owns is changed; every other one is listed in `skipped`.\n\nA project the caller is not in is skipped as `not_found`, exactly like a missing one.\n`422` for an unknown collection, before anything changes.",
+        "operationId": "bulk_project_action_api_v1_project_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MoveProjectsIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TagProjectsIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ArchiveProjectsIn"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4430,6 +4950,32 @@
         ],
         "title": "AnswersIn"
       },
+      "ArchiveProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "archive",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids"
+        ],
+        "title": "ArchiveProjectsIn"
+      },
       "AssessmentOut": {
         "properties": {
           "option": {
@@ -4626,6 +5172,31 @@
         ],
         "title": "BriefOut"
       },
+      "BulkOut": {
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Changed"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedOut"
+            },
+            "type": "array",
+            "title": "Skipped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "changed",
+          "skipped"
+        ],
+        "title": "BulkOut"
+      },
       "ChangeKind": {
         "type": "string",
         "enum": [
@@ -4821,6 +5392,59 @@
           "hypothesis"
         ],
         "title": "ClaimSupport"
+      },
+      "CollectionIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CollectionIn"
+      },
+      "CollectionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "project_count": {
+            "type": "integer",
+            "title": "Project Count",
+            "description": "The caller's own projects in it, archived ones aside. Never anyone else's."
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage",
+            "description": "Whether the caller may rename or delete it."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "project_count",
+          "can_manage",
+          "created_at"
+        ],
+        "title": "CollectionOut"
       },
       "CompiledQueryOut": {
         "properties": {
@@ -6754,6 +7378,29 @@
         ],
         "title": "MemberOut"
       },
+      "MemberRefOut": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "role"
+        ],
+        "title": "MemberRefOut"
+      },
       "MemberRoleIn": {
         "properties": {
           "role": {
@@ -6917,6 +7564,45 @@
           "saved_at"
         ],
         "title": "ModelInstructionsVersionOut"
+      },
+      "MoveProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "move",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids",
+          "collection_id"
+        ],
+        "title": "MoveProjectsIn"
       },
       "OptionOut": {
         "properties": {
@@ -7627,6 +8313,29 @@
         ],
         "title": "ProblemOut"
       },
+      "ProjectCollectionIn": {
+        "properties": {
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "null takes the project out of any."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "collection_id"
+        ],
+        "title": "ProjectCollectionIn"
+      },
       "ProjectIn": {
         "properties": {
           "name": {
@@ -7707,6 +8416,32 @@
             "type": "boolean",
             "title": "Can Turn Masking Off",
             "description": "false while the deployment requires masking for every project."
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "The one collection the project is filed in; null for none (ADR 0016)."
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "The project's tags, in the owner's order."
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "description": "Whether the caller has pinned it. Pins are per user."
           }
         },
         "type": "object",
@@ -7719,7 +8454,10 @@
           "status",
           "is_masking_on",
           "is_masking_effective",
-          "can_turn_masking_off"
+          "can_turn_masking_off",
+          "collection_id",
+          "tags",
+          "is_pinned"
         ],
         "title": "ProjectOut"
       },
@@ -7739,6 +8477,16 @@
         ],
         "title": "ProjectRenameIn"
       },
+      "ProjectSort": {
+        "type": "string",
+        "enum": [
+          "last_activity",
+          "name",
+          "created",
+          "relevant_papers"
+        ],
+        "title": "ProjectSort"
+      },
       "ProjectStatus": {
         "type": "string",
         "enum": [
@@ -7753,6 +8501,186 @@
         ],
         "title": "ProjectStatus",
         "description": "What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand."
+      },
+      "ProjectSummaryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "description": "The caller's own role in this project."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus",
+            "description": "UI_UX_SPEC §11.1: derived from the newest review and its latest run."
+          },
+          "is_masking_on": {
+            "type": "boolean",
+            "title": "Is Masking On",
+            "description": "The owner's switch, as stored (ADR 0014)."
+          },
+          "is_masking_effective": {
+            "type": "boolean",
+            "title": "Is Masking Effective",
+            "description": "Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking."
+          },
+          "can_turn_masking_off": {
+            "type": "boolean",
+            "title": "Can Turn Masking Off",
+            "description": "false while the deployment requires masking for every project."
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "The one collection the project is filed in; null for none (ADR 0016)."
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "The project's tags, in the owner's order."
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "description": "Whether the caller has pinned it. Pins are per user."
+          },
+          "last_activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Activity At",
+            "description": "The latest of: created, archived, its newest review, run or brief."
+          },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRefOut"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "relevant_papers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevant Papers",
+            "description": "Included papers of the newest run with papers, under the latest rules."
+          },
+          "papers_found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Papers Found",
+            "description": "That run's papers after duplicates."
+          },
+          "brief_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "created_at",
+          "archived_at",
+          "status",
+          "is_masking_on",
+          "is_masking_effective",
+          "can_turn_masking_off",
+          "collection_id",
+          "tags",
+          "is_pinned",
+          "last_activity_at",
+          "pinned_at",
+          "members",
+          "relevant_papers",
+          "papers_found",
+          "brief_version"
+        ],
+        "title": "ProjectSummaryOut"
+      },
+      "ProjectTagsIn": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "title": "ProjectTagsIn"
       },
       "ProvenanceOut": {
         "properties": {
@@ -8670,6 +9598,34 @@
         "title": "SignedInOut",
         "description": "Where the sign-in stands. Fields that do not apply are left out.\n\n`mfa_required` carries `methods` and no `user`: the password alone does not\nearn the account's details."
       },
+      "SkipReason": {
+        "type": "string",
+        "enum": [
+          "not_found",
+          "not_allowed",
+          "too_many_tags"
+        ],
+        "title": "SkipReason"
+      },
+      "SkippedOut": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SkipReason",
+            "description": "not_found also covers a project the caller is not in; not_allowed, one where their role may not do this; too_many_tags, one already at the tag limit."
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "reason"
+        ],
+        "title": "SkippedOut"
+      },
       "SourceDetailsOut": {
         "properties": {
           "title": {
@@ -9154,6 +10110,38 @@
           "no_progress"
         ],
         "title": "StopReason"
+      },
+      "TagProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "add_tag",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          },
+          "tag": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Tag"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids",
+          "tag"
+        ],
+        "title": "TagProjectsIn"
       },
       "TermChangeOut": {
         "properties": {

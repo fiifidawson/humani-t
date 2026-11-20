@@ -63,6 +63,11 @@ class ProjectOut(BaseModel):
     can_turn_masking_off: bool = Field(
         description="false while the deployment requires masking for every project."
     )
+    collection_id: UUID | None = Field(
+        description="The one collection the project is filed in; null for none (ADR 0016)."
+    )
+    tags: list[str] = Field(description="The project's tags, in the owner's order.")
+    is_pinned: bool = Field(description="Whether the caller has pinned it. Pins are per user.")
 
     @classmethod
     def from_view(cls, view: ProjectView) -> ProjectOut:
@@ -76,6 +81,9 @@ class ProjectOut(BaseModel):
             is_masking_on=view.masking.is_on,
             is_masking_effective=view.masking.is_effective,
             can_turn_masking_off=view.masking.can_turn_off,
+            collection_id=view.labels.collection_id,
+            tags=list(view.labels.tags),
+            is_pinned=view.labels.is_pinned,
         )
 
 

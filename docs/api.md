@@ -49,7 +49,7 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/admin/users/{id}/disable` | admin | Disable an account |
 | `POST` | `/api/v1/admin/users/{id}/enable` | admin | Let a disabled account sign in again |
 | `POST` | `/api/v1/projects` | projects | Create a project; the caller becomes its owner |
-| `GET` | `/api/v1/projects` | projects | The caller's projects, newest first |
+| `GET` | `/api/v1/projects` | projects | The caller's projects, filtered and sorted, with what grouping needs |
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
 | `PATCH` | `/api/v1/projects/{project_id}` | projects | Rename (owner) |
 | `PUT` | `/api/v1/projects/{project_id}/masking` | projects | Switch masking on or off (owner; recent sign-in to turn it off) |
@@ -60,6 +60,15 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/projects/{project_id}/members` | projects | Give an existing account a role (owner, recent sign-in) |
 | `PATCH` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Change a member's role (owner, recent sign-in) |
 | `DELETE` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Remove a member (owner, recent sign-in), or leave (anyone) |
+| `GET` | `/api/v1/collections` | collections | Every collection, counting the caller's own projects only |
+| `POST` | `/api/v1/collections` | collections | Create a collection (any signed-in user) |
+| `PATCH` | `/api/v1/collections/{collection_id}` | collections | Rename it (its creator or an administrator) |
+| `DELETE` | `/api/v1/collections/{collection_id}` | collections | Delete it; its projects stay, in no collection (its creator or an administrator) |
+| `PUT` | `/api/v1/projects/{project_id}/collection` | collections | File the project in a collection, or in none (owner) |
+| `PUT` | `/api/v1/projects/{project_id}/tags` | collections | Replace the project's tags (owner) |
+| `PUT` | `/api/v1/projects/{project_id}/pin` | collections | Pin it for yourself (any member) |
+| `DELETE` | `/api/v1/projects/{project_id}/pin` | collections | Unpin it (any member) |
+| `POST` | `/api/v1/project-actions` | collections | Move, tag or archive several projects; reports what it skipped |
 | `GET` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | The project's instructions to the model and every version (any member) |
 | `PUT` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | Save them as the next version (owner) |
 | `POST` | `/api/v1/projects/{project_id}/reviews` | reviews | Ask a question in the project (owner, reviewer) |
@@ -151,11 +160,14 @@ The table is the domain function `can(role, action)` in `app/domain/projects.py`
   "status": "brief_ready",
   "is_masking_on": true,
   "is_masking_effective": true,
-  "can_turn_masking_off": false
+  "can_turn_masking_off": false,
+  "collection_id": null,
+  "tags": ["Mali", "cash transfers"],
+  "is_pinned": false
 }
 ```
 
-`role` is the caller's own role. The name is stored encrypted under the project's own key; only members ever see it in the clear.
+`role` is the caller's own role. `collection_id`, `tags` and `is_pinned` are described under [Collections, tags and pins](#collections-tags-and-pins); `is_pinned` is the caller's own pin. The name is stored encrypted under the project's own key; only members ever see it in the clear.
 
 `status` is derived, never set (UI_UX_SPEC §11.1), by `project_status` in `app/domain/projects.py`. It comes from the newest review and that review's latest run:
 
@@ -186,7 +198,33 @@ The masking fields come from the API, so the web app shows them without deciding
 
 ### `GET /api/v1/projects`
 
-The caller's projects, newest first, each with the caller's role. Archived projects are left out unless `?include_archived=true`.
+The caller's projects, each a `ProjectOut` with what the All projects page groups, filters and sorts by (UI_UX_SPEC §7.2). Only projects the caller is a member of are ever read, so no filter can bring in anyone else's.
+
+```json
+{
+  "…": "every ProjectOut field",
+  "last_activity_at": "2026-11-18T10:58:00Z",
+  "pinned_at": null,
+  "members": [{ "user_id": "2b9e…", "display_name": "Kofi Mensah", "role": "reviewer" }],
+  "relevant_papers": 52,
+  "papers_found": 340,
+  "brief_version": 2
+}
+```
+
+`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, and its latest brief. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
+
+Query parameters, all optional, all of which must hold:
+
+| Parameter | Meaning |
+| --- | --- |
+| `sort` | `last_activity` (default, newest first), `name` (A to Z, ignoring case), `created` (newest first), `relevant_papers` (most first, projects with none last). Ties go to the most recent activity. |
+| `status` | Repeatable; any of these `ProjectOut.status` values. `archived` brings archived projects in. |
+| `tag` | Repeatable; every one of these tags, ignoring case. |
+| `owner`, `member` | A user id: projects that person owns, or belongs to. |
+| `created_from`, `created_to` | Dates, inclusive, in UTC. `422` if the range ends before it starts. |
+| `collection` | A collection id, or `none` for projects in no collection. |
+| `include_archived` | `true` to include archived projects. Left out otherwise, unless `status` asks for them. |
 
 ### `GET`, `PATCH /api/v1/projects/{project_id}`, `POST …/archive`, `POST …/unarchive`
 
@@ -224,6 +262,66 @@ The last owner can neither be demoted nor removed, nor leave: `409` with `"last_
 ### Audit
 
 Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
+
+---
+
+## Collections, tags and pins
+
+How people group and find projects (UI_UX_SPEC §7.1 to §7.3; [ADR-0016](adr/0016-collections-are-shared-labels.md)). A **collection** is a label shared across the deployment, one level deep, with no access rules of its own: it grants nothing and reveals no project to anyone outside it. A project is in at most one. **Tags** are a project's own free labels, as many as 20, each up to 40 characters. A **pin** is one person's bookmark.
+
+### `CollectionOut`
+
+```json
+{ "id": "9a0d…", "name": "Sahel 2026", "project_count": 4, "can_manage": true, "created_at": "2026-11-19T09:00:00Z" }
+```
+
+`project_count` counts the caller's own projects in it, archived ones aside; never anyone else's. `can_manage` says whether the caller may rename or delete it: its creator, or an instance administrator.
+
+### `GET /api/v1/collections`
+
+Every collection, by name, to any signed-in user. Collection names are visible to everyone in the deployment; a label meant only for a team belongs in a tag.
+
+### `POST /api/v1/collections`
+
+**Request** `{"name": "Sahel 2026"}`. Any signed-in user. The name is trimmed with its spaces collapsed, 1 to 80 characters, with no control or bidirectional-override characters (`422` otherwise). `409` with `"collection_name_taken": true` if another collection uses the name in any spelling ("sahel  2026" and "Sahel 2026" are one name). **Response** `201` with the `CollectionOut` and `Location`. The collection gets its own data key, and its name is stored only sealed under it.
+
+### `PATCH`, `DELETE /api/v1/collections/{collection_id}`
+
+Its creator or an administrator; anyone else gets `403`, a missing collection `404`. `PATCH` with `{"name": "…"}` renames it for everyone, with the same rules as on create; a collection may take its own name in another case. `DELETE` answers `204`: every project it held, whoever owns it, is then in no collection, and its key is destroyed so its name is unreadable in any copy.
+
+### `PUT /api/v1/projects/{project_id}/collection`
+
+Owner only. **Request** `{"collection_id": "9a0d…"}`, or `null` to take the project out. **Response** `200` with the `ProjectOut`. `422` if the collection does not exist; nothing moves. Moving it where it already is changes and records nothing.
+
+### `PUT /api/v1/projects/{project_id}/tags`
+
+Owner only. **Request** `{"tags": ["Mali", "cash transfers"]}` replaces the project's tags; `[]` removes them all. Each tag is trimmed with its spaces collapsed; a repeat, ignoring case, is dropped and the first spelling kept. `422` for a blank tag, one over 40 characters, more than 20, or control characters. **Response** `200` with the `ProjectOut`. Tags are sealed under the project's key and die with it.
+
+### `PUT`, `DELETE /api/v1/projects/{project_id}/pin`
+
+Any member, for themselves only. `204`. Pinning again keeps the first pin's date. A pin goes when the project is deleted or the person leaves it. Home shows up to 8 pinned projects, newest pin first.
+
+### `POST /api/v1/project-actions`
+
+Bulk actions from the All projects list (UI_UX_SPEC §7.2). One of:
+
+```json
+{ "action": "move", "project_ids": ["…"], "collection_id": "9a0d…" }
+{ "action": "add_tag", "project_ids": ["…"], "tag": "Mali" }
+{ "action": "archive", "project_ids": ["…"] }
+```
+
+`project_ids` holds 1 to 200 ids; `collection_id` may be `null`. **Response** `200`:
+
+```json
+{ "changed": ["…"], "skipped": [{ "project_id": "…", "reason": "not_allowed" }] }
+```
+
+A mixed selection is normal: each project the caller owns is changed, each in its own transaction, and every other is listed in `skipped`, in the order given. `not_found` covers a missing project **and** one the caller is not in, with nothing to tell them apart; `not_allowed` is a project where the caller's role may not do this; `too_many_tags` is one already holding 20 tags. Adding a tag keeps the tags already there. An unknown collection, a blank tag or an unknown action refuses the whole request with `422` before anything changes.
+
+### Audit
+
+`collection.created`, `collection.renamed`, `collection.deleted` (target and `scope_id`: the collection); `project.collection_changed` (sealed details: `{"collection_id": …}`) and `project.tags_changed` (sealed details: `{"count": …}`, never the tags), with the project as target and `scope_id`. Bulk actions record one event per project changed. Pins are not audited: a pin is a bookmark, not a decision about the project.
 
 ---
 

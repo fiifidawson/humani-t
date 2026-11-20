@@ -509,6 +509,14 @@ async def newest_run_with_papers(uow: UnitOfWork, review_id: UUID) -> Run | None
     return None
 
 
+@dataclass(frozen=True, slots=True)
+class PaperTally:
+    """A review's newest run with papers: relevant (included) papers of those found."""
+
+    relevant: int
+    found: int
+
+
 class PaperService:
     """The paper, PRISMA and manifest routes. Each call is one read-only transaction.
 
@@ -633,6 +641,21 @@ class PaperService:
                     ).decisions,
                 ),
             )
+
+    async def tally(self, uow: UnitOfWork, review_id: UUID) -> PaperTally | None:
+        """For project lists, inside the caller's transaction; `None` before any papers.
+
+        The caller has already checked that the reader belongs to the review's project.
+        """
+        run = await newest_run_with_papers(uow, review_id)
+        if run is None:
+            return None
+        decisions = await uow.screening.list_for_run(run.id)
+        labelled = await self._labelled(uow, review_id, decisions)
+        return PaperTally(
+            relevant=sum(d.label is ScreeningLabel.INCLUDE for d in labelled.decisions),
+            found=len(await self._store.run_papers(uow, run)),
+        )
 
     async def manifest(self, current: Current, run_id: UUID) -> RunManifest:
         """The run's manifest from its `stage.finished` events, as stored."""

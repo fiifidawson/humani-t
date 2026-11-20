@@ -11,10 +11,11 @@ from collections.abc import Awaitable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from app.api.access import require
-from app.api.dependencies import ProjectsDep
+from app.api.dependencies import ProjectListDep, ProjectsDep
+from app.api.schemas.collections import ProjectListParams, ProjectSummaryOut
 from app.api.schemas.projects import (
     MemberIn,
     MemberOut,
@@ -62,12 +63,19 @@ async def create_project(
     return created
 
 
-@router.get("", summary="Projects the caller belongs to, newest first")
+@router.get("", summary="Projects the caller belongs to, filtered and sorted")
 async def list_projects(
-    current: CurrentDep, projects: ProjectsDep, include_archived: bool = False
-) -> list[ProjectOut]:
-    views = await projects.list_mine(current, include_archived=include_archived)
-    return [ProjectOut.from_view(view) for view in views]
+    current: CurrentDep,
+    project_list: ProjectListDep,
+    params: Annotated[ProjectListParams, Query()],
+) -> list[ProjectSummaryOut]:
+    """Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2)."""
+    try:
+        query = params.to_domain()
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    summaries = await project_list.list(current, query)
+    return [ProjectSummaryOut.from_summary(s) for s in summaries]
 
 
 @router.get("/{project_id}", summary="One project")

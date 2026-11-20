@@ -34,6 +34,13 @@ from app.domain.runs import Gate, GateKind, Run, RunEvent, RunState
 from app.domain.screening import StoredDecision
 from app.domain.sessions import Session, SessionPolicy
 from app.storage.memory_briefs import BriefState, MemoryDecisionBriefRepository
+from app.storage.memory_collections import (
+    CollectionState,
+    MemoryCollectionRepository,
+    MemoryPinRepository,
+    MemoryProjectPlacementRepository,
+    MemoryProjectTagsRepository,
+)
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
 from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
 from app.storage.memory_masking import (
@@ -83,6 +90,7 @@ class _MemoryState:
         self.document_state = DocumentState()
         self.label_rules_state = LabelRulesState()
         self.model_instructions_state = ModelInstructionsState()
+        self.collection_state = CollectionState()
 
     def copy(self) -> _MemoryState:
         clone = _MemoryState()
@@ -116,6 +124,7 @@ class _MemoryState:
         clone.document_state = self.document_state.copy()
         clone.label_rules_state = self.label_rules_state.copy()
         clone.model_instructions_state = self.model_instructions_state.copy()
+        clone.collection_state = self.collection_state.copy()
         return clone
 
 
@@ -751,6 +760,10 @@ class MemoryUnitOfWork:
         self.model_instructions = MemoryModelInstructionsRepository(
             state.model_instructions_state
         )
+        self.collections = MemoryCollectionRepository(state.collection_state)
+        self.placements = MemoryProjectPlacementRepository(state.collection_state)
+        self.project_tags = MemoryProjectTagsRepository(state.collection_state)
+        self.pins = MemoryPinRepository(state.collection_state)
 
     async def commit(self) -> None:
         self._storage.state = self._staged

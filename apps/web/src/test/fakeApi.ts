@@ -8,6 +8,7 @@
 
 import { HttpResponse, http } from "msw";
 import type { components } from "../api/schema.gen";
+import { FakeCollections } from "./fakeCollections";
 import { FakeDocuments } from "./fakeDocuments";
 import {
 	jsonBody,
@@ -66,13 +67,70 @@ interface FakeProject {
 	is_masking_on: boolean;
 	/** False plays a deployment whose hosted model requires masking (ADR 0014). */
 	can_turn_masking_off: boolean;
+	collection_id: string | null;
+	tags: string[];
+	/** The signed-in person's pin. */
+	pinned_at: string | null;
+	last_activity_at: string;
+	relevant_papers: number | null;
+	papers_found: number | null;
+	brief_version: number | null;
 }
 
 const projectOut = (project: FakeProject) => ({
 	...project,
 	status: project.archived_at === null ? project.status : "archived",
 	is_masking_effective: project.is_masking_on || !project.can_turn_masking_off,
+	is_pinned: project.pinned_at !== null,
 });
+
+type ListedProject = ReturnType<typeof projectOut> & {
+	members: { user_id: string; display_name: string; role: Role }[];
+};
+
+/** The list's filters and sort, as `GET /projects` applies them (domain/project_list.py). */
+function listed(projects: ListedProject[], query: URLSearchParams) {
+	const statuses = query.getAll("status");
+	const tags = query.getAll("tag").map((t) => t.toLowerCase());
+	const owner = query.get("owner");
+	const member = query.get("member");
+	const collection = query.get("collection");
+	const from = query.get("created_from");
+	const to = query.get("created_to");
+	const withArchived =
+		query.get("include_archived") === "true" || statuses.includes("archived");
+	const kept = projects.filter(
+		(p) =>
+			(withArchived || p.status !== "archived") &&
+			(statuses.length === 0 || statuses.includes(p.status)) &&
+			tags.every((t) => p.tags.some((tag) => tag.toLowerCase() === t)) &&
+			(owner === null ||
+				p.members.some((m) => m.user_id === owner && m.role === "owner")) &&
+			(member === null || p.members.some((m) => m.user_id === member)) &&
+			(collection === null ||
+				(collection === "none"
+					? p.collection_id === null
+					: p.collection_id === collection)) &&
+			(from === null || p.created_at.slice(0, 10) >= from) &&
+			(to === null || p.created_at.slice(0, 10) <= to),
+	);
+	const sort = query.get("sort") ?? "last_activity";
+	const byActivity = kept.sort((a, b) =>
+		b.last_activity_at.localeCompare(a.last_activity_at),
+	);
+	if (sort === "name") {
+		return byActivity.sort((a, b) => a.name.localeCompare(b.name));
+	}
+	if (sort === "created") {
+		return byActivity.sort((a, b) => b.created_at.localeCompare(a.created_at));
+	}
+	if (sort === "relevant_papers") {
+		return byActivity.sort(
+			(a, b) => (b.relevant_papers ?? -1) - (a.relevant_papers ?? -1),
+		);
+	}
+	return byActivity;
+}
 const MASKING_REQUIRED =
 	"This deployment sends text to a hosted model, so masking stays on.";
 
@@ -127,6 +185,15 @@ export class FakeApi {
 		roleIn: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
 		userId: () => this.session?.userId ?? null,
+	});
+	/** Collections, tags, pins and bulk actions (fakeCollections.ts). */
+	readonly collections = new FakeCollections({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		projects: () => this.projects,
+		projectOut: (projectId) => {
+			const project = this.projects.find((p) => p.id === projectId);
+			return project === undefined ? null : projectOut(project);
+		},
 	});
 	/** A project's instructions to the model (fakeInstructions.ts). */
 	readonly instructions = new FakeInstructions({
@@ -202,6 +269,13 @@ export class FakeApi {
 			status: "planning",
 			is_masking_on: true,
 			can_turn_masking_off: true,
+			collection_id: null,
+			tags: [],
+			pinned_at: null,
+			last_activity_at: createdAt,
+			relevant_papers: null,
+			papers_found: null,
+			brief_version: null,
 		};
 		this.projects.push(project);
 		return project;
@@ -840,12 +914,18 @@ export class FakeApi {
 				if (refused !== null) {
 					return refused;
 				}
-				const includeArchived =
-					new URL(request.url).searchParams.get("include_archived") === "true";
+				const summaries = this.projects.map((project) => ({
+					...projectOut(project),
+					members: this.memberList(project).map((m) => ({
+						user_id: m.userId,
+						display_name:
+							this.users.find((u) => u.id === m.userId)?.display_name ??
+							"Unknown account",
+						role: m.role,
+					})),
+				}));
 				return HttpResponse.json(
-					this.projects
-						.filter((p) => includeArchived || p.archived_at === null)
-						.map(projectOut),
+					listed(summaries, new URL(request.url).searchParams),
 				);
 			}),
 
@@ -1110,6 +1190,7 @@ export class FakeApi {
 			...this.reviews.handlers(),
 			...this.documents.handlers(),
 			...this.instructions.handlers(),
+			...this.collections.handlers(),
 		];
 	}
 }

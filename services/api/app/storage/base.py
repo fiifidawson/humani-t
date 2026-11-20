@@ -14,9 +14,11 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
+from app.domain import collections as grouping
 from app.domain.accounts import Invitation, PasswordReset, User
 from app.domain.audit import AuditEvent, ChainHead
 from app.domain.briefs import BriefRecord
+from app.domain.collections import Pin, ProjectPlacement, StoredTags
 from app.domain.discovery import PaperSet, PaperText, RunPaper, RunSource, StoredPaper
 from app.domain.documents import Document, DocumentMask, DocumentReview, DocumentText
 from app.domain.encryption import WrappedDataKey
@@ -459,6 +461,81 @@ class ModelInstructionsRepository(Protocol):
         ...
 
 
+class CollectionRepository(Protocol):
+    """Collections shared across the deployment (ADR 0016)."""
+
+    async def get(self, collection_id: UUID) -> grouping.Collection | None: ...
+
+    async def list_all(self) -> list[grouping.Collection]:
+        """Oldest first."""
+        ...
+
+    async def lock_all(self) -> list[grouping.Collection]:
+        """Every collection, holding back other creates and renames until the transaction ends.
+
+        Names are sealed, so the database cannot keep them unique: the check that no other
+        collection uses a name is made under this lock, or two people could both win.
+        """
+        ...
+
+    async def add(self, collection: grouping.Collection, /) -> None: ...
+
+    async def save(self, collection: grouping.Collection, /) -> None:
+        """Store it if its `version` is current, else raise `ConcurrentUpdateError`."""
+        ...
+
+    async def delete(self, collection_id: UUID) -> bool:
+        """Remove it and every placement in it. False if it was not there."""
+        ...
+
+
+class ProjectPlacementRepository(Protocol):
+    """Which collection each project is filed in. Change one under the project's lock."""
+
+    async def get(self, project_id: UUID) -> ProjectPlacement | None: ...
+
+    async def list_for_projects(self, project_ids: Collection[UUID]) -> list[ProjectPlacement]:
+        """The placements of these projects only, in no particular order."""
+        ...
+
+    async def put(self, placement: ProjectPlacement, /) -> None:
+        """File the project, replacing any earlier placement.
+
+        Raise `NoSuchCollectionError` if the collection is gone, deleted meanwhile included.
+        """
+        ...
+
+    async def remove(self, project_id: UUID) -> bool: ...
+
+
+class ProjectTagsRepository(Protocol):
+    """A project's tags, one sealed row per project. Change it under the project's lock."""
+
+    async def get(self, project_id: UUID) -> StoredTags | None: ...
+
+    async def put(self, tags: StoredTags, /) -> None:
+        """Store the project's tags, replacing the earlier list."""
+        ...
+
+    async def remove(self, project_id: UUID) -> bool: ...
+
+
+class PinRepository(Protocol):
+    async def get(self, user_id: UUID, project_id: UUID) -> Pin | None: ...
+
+    async def add(self, pin: Pin, /) -> bool:
+        """False if the user had already pinned the project; the first pin stays."""
+        ...
+
+    async def remove(self, user_id: UUID, project_id: UUID) -> bool: ...
+
+    async def list_for_user(self, user_id: UUID) -> list[Pin]:
+        """Newest first. May name projects the user has since left; callers check."""
+        ...
+
+    async def remove_for_project(self, project_id: UUID) -> int: ...
+
+
 class PlanRepository(Protocol):
     """A review's planning conversation, its plan versions and its privacy receipts."""
 
@@ -759,6 +836,18 @@ class UnitOfWork(Protocol):
 
     @property
     def documents(self) -> DocumentRepository: ...
+
+    @property
+    def collections(self) -> CollectionRepository: ...
+
+    @property
+    def placements(self) -> ProjectPlacementRepository: ...
+
+    @property
+    def project_tags(self) -> ProjectTagsRepository: ...
+
+    @property
+    def pins(self) -> PinRepository: ...
 
     async def commit(self) -> None: ...
 

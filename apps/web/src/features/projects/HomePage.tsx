@@ -1,7 +1,6 @@
 /**
- * Home (UI_UX_SPEC §7.1), the P1 part: recent projects, or how to start.
- * Needs-you, pinned projects and activity need endpoints the API does not
- * have yet, so they are left out rather than faked.
+ * Home (UI_UX_SPEC §7.1): pinned projects, recent projects and collections, or
+ * how to start. Needs you and Recent activity come from the history API.
  */
 
 import {
@@ -21,6 +20,7 @@ import { Loading } from "../../ui/Loading";
 import { Page } from "../../ui/Page";
 import { PageHeading } from "../../ui/PageHeading";
 import { SectionHeading } from "../../ui/SectionHeading";
+import { CollectionsRow, PinnedProjects } from "../collections/HomeSections";
 import {
 	fullDate,
 	newestFirst,
@@ -159,6 +159,7 @@ export function HomePage() {
 				/>
 			) : null}
 			{projects.isSuccess && projects.data.length === 0 ? <StartHere /> : null}
+			{projects.isSuccess ? <PinnedProjects projects={projects.data} /> : null}
 			{projects.isSuccess && projects.data.length > 0 ? (
 				<section aria-labelledby="recent-heading">
 					<SectionHeading id="recent-heading">Recent projects</SectionHeading>
@@ -180,6 +181,7 @@ export function HomePage() {
 					</Grid>
 				</section>
 			) : null}
+			{projects.isSuccess ? <CollectionsRow projects={projects.data} /> : null}
 		</Page>
 	);
 }

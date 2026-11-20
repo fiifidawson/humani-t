@@ -41,6 +41,7 @@ import { PageHeading } from "../../ui/PageHeading";
 
 import { Composer } from "../chat/Composer";
 import { PendingReply } from "../chat/PendingReply";
+import { CollectionBadge, ProjectMenu } from "../collections/ProjectMenu";
 import { ChatCard } from "../reviews/ChatCard";
 import { modeLabel, type PlanMode } from "../reviews/format";
 import { ModeChoice } from "../reviews/ModeChoice";
@@ -278,6 +279,7 @@ export function WorkspacePage() {
 						size="workspace"
 					/>
 				</Box>
+				<CollectionBadge collectionId={project.data.collection_id} />
 				<Badge
 					variant="outline"
 					colorPalette="gray"
@@ -308,6 +310,7 @@ export function WorkspacePage() {
 						<Settings />
 					</Link>
 				</IconButton>
+				<ProjectMenu project={project.data} />
 			</Flex>
 			<Outlet />
 		</Flex>

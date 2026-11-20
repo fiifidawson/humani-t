@@ -519,7 +519,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Projects the caller belongs to, newest first */
+        /**
+         * Projects the caller belongs to, filtered and sorted
+         * @description Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2).
+         */
         get: operations["list_projects_api_v1_projects_get"];
         put?: never;
         /**
@@ -1380,6 +1383,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every collection, with the caller's own counts */
+        get: operations["list_collections_api_v1_collections_get"];
+        put?: never;
+        /**
+         * Create a collection
+         * @description Any signed-in user. Its name is visible to everyone in the deployment.
+         */
+        post: operations["create_collection_api_v1_collections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a collection; the projects in it stay, in no collection */
+        delete: operations["delete_collection_api_v1_collections__collection_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename a collection */
+        patch: operations["rename_collection_api_v1_collections__collection_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** File the project in a collection, or in none */
+        put: operations["move_project_api_v1_projects__project_id__collection_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the project's tags
+         * @description Owners only. Tags are trimmed and repeats dropped, ignoring case.
+         */
+        put: operations["set_project_tags_api_v1_projects__project_id__tags_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Pin the project for yourself */
+        put: operations["pin_project_api_v1_projects__project_id__pin_put"];
+        post?: never;
+        /** Unpin the project */
+        delete: operations["unpin_project_api_v1_projects__project_id__pin_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/project-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move, tag or archive several projects at once
+         * @description Each project the caller owns is changed; every other one is listed in `skipped`.
+         *
+         *     A project the caller is not in is skipped as `not_found`, exactly like a missing one.
+         *     `422` for an unknown collection, before anything changes.
+         */
+        post: operations["bulk_project_action_api_v1_project_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1559,6 +1679,16 @@ export interface components {
              */
             draft_now: boolean;
         };
+        /** ArchiveProjectsIn */
+        ArchiveProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "archive";
+            /** Project Ids */
+            project_ids: string[];
+        };
         /** AssessmentOut */
         AssessmentOut: {
             /** Option */
@@ -1647,6 +1777,13 @@ export interface components {
             /** Max Rounds */
             max_rounds: number;
             stopped_because: components["schemas"]["StopReason"];
+        };
+        /** BulkOut */
+        BulkOut: {
+            /** Changed */
+            changed: string[];
+            /** Skipped */
+            skipped: components["schemas"]["SkippedOut"][];
         };
         /**
          * ChangeKind
@@ -1738,6 +1875,36 @@ export interface components {
          * @enum {string}
          */
         ClaimSupport: "evidence" | "hypothesis";
+        /** CollectionIn */
+        CollectionIn: {
+            /** Name */
+            name: string;
+        };
+        /** CollectionOut */
+        CollectionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Project Count
+             * @description The caller's own projects in it, archived ones aside. Never anyone else's.
+             */
+            project_count: number;
+            /**
+             * Can Manage
+             * @description Whether the caller may rename or delete it.
+             */
+            can_manage: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /**
          * CompiledQueryOut
          * @description A compiled Boolean query, in both structured and readable form.
@@ -2654,6 +2821,17 @@ export interface components {
              */
             email?: string | null;
         };
+        /** MemberRefOut */
+        MemberRefOut: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+        };
         /** MemberRoleIn */
         MemberRoleIn: {
             role: components["schemas"]["Role"];
@@ -2727,6 +2905,18 @@ export interface components {
              * Format: date-time
              */
             saved_at: string;
+        };
+        /** MoveProjectsIn */
+        MoveProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "move";
+            /** Project Ids */
+            project_ids: string[];
+            /** Collection Id */
+            collection_id: string | null;
         };
         /** OptionOut */
         OptionOut: {
@@ -3029,6 +3219,14 @@ export interface components {
              */
             where: string | null;
         };
+        /** ProjectCollectionIn */
+        ProjectCollectionIn: {
+            /**
+             * Collection Id
+             * @description null takes the project out of any.
+             */
+            collection_id: string | null;
+        };
         /** ProjectIn */
         ProjectIn: {
             /** Name */
@@ -3074,6 +3272,21 @@ export interface components {
              * @description false while the deployment requires masking for every project.
              */
             can_turn_masking_off: boolean;
+            /**
+             * Collection Id
+             * @description The one collection the project is filed in; null for none (ADR 0016).
+             */
+            collection_id: string | null;
+            /**
+             * Tags
+             * @description The project's tags, in the owner's order.
+             */
+            tags: string[];
+            /**
+             * Is Pinned
+             * @description Whether the caller has pinned it. Pins are per user.
+             */
+            is_pinned: boolean;
         };
         /** ProjectRenameIn */
         ProjectRenameIn: {
@@ -3081,11 +3294,94 @@ export interface components {
             name: string;
         };
         /**
+         * ProjectSort
+         * @enum {string}
+         */
+        ProjectSort: "last_activity" | "name" | "created" | "relevant_papers";
+        /**
          * ProjectStatus
          * @description What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand.
          * @enum {string}
          */
         ProjectStatus: "planning" | "running" | "needs_you" | "brief_ready" | "done_without_brief" | "failed" | "cancelled" | "archived";
+        /** ProjectSummaryOut */
+        ProjectSummaryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** @description The caller's own role in this project. */
+            role: components["schemas"]["Role"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Archived At */
+            archived_at: string | null;
+            /** @description UI_UX_SPEC §11.1: derived from the newest review and its latest run. */
+            status: components["schemas"]["ProjectStatus"];
+            /**
+             * Is Masking On
+             * @description The owner's switch, as stored (ADR 0014).
+             */
+            is_masking_on: boolean;
+            /**
+             * Is Masking Effective
+             * @description Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking.
+             */
+            is_masking_effective: boolean;
+            /**
+             * Can Turn Masking Off
+             * @description false while the deployment requires masking for every project.
+             */
+            can_turn_masking_off: boolean;
+            /**
+             * Collection Id
+             * @description The one collection the project is filed in; null for none (ADR 0016).
+             */
+            collection_id: string | null;
+            /**
+             * Tags
+             * @description The project's tags, in the owner's order.
+             */
+            tags: string[];
+            /**
+             * Is Pinned
+             * @description Whether the caller has pinned it. Pins are per user.
+             */
+            is_pinned: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             * @description The latest of: created, archived, its newest review, run or brief.
+             */
+            last_activity_at: string;
+            /** Pinned At */
+            pinned_at: string | null;
+            /** Members */
+            members: components["schemas"]["MemberRefOut"][];
+            /**
+             * Relevant Papers
+             * @description Included papers of the newest run with papers, under the latest rules.
+             */
+            relevant_papers: number | null;
+            /**
+             * Papers Found
+             * @description That run's papers after duplicates.
+             */
+            papers_found: number | null;
+            /** Brief Version */
+            brief_version: number | null;
+        };
+        /** ProjectTagsIn */
+        ProjectTagsIn: {
+            /** Tags */
+            tags: string[];
+        };
         /**
          * ProvenanceOut
          * @description Where the terms came from. Travels with every result set.
@@ -3477,6 +3773,21 @@ export interface components {
             /** Methods */
             methods?: string[] | null;
         };
+        /**
+         * SkipReason
+         * @enum {string}
+         */
+        SkipReason: "not_found" | "not_allowed" | "too_many_tags";
+        /** SkippedOut */
+        SkippedOut: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** @description not_found also covers a project the caller is not in; not_allowed, one where their role may not do this; too_many_tags, one already at the tag limit. */
+            reason: components["schemas"]["SkipReason"];
+        };
         /** SourceDetailsOut */
         SourceDetailsOut: {
             /** Title */
@@ -3672,6 +3983,18 @@ export interface components {
          * @enum {string}
          */
         StopReason: "accepted" | "max_rounds" | "invalid_output" | "no_progress";
+        /** TagProjectsIn */
+        TagProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "add_tag";
+            /** Project Ids */
+            project_ids: string[];
+            /** Tag */
+            tag: string;
+        };
         /** TermChangeOut */
         TermChangeOut: {
             /** Theme */
@@ -4951,6 +5274,21 @@ export interface operations {
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: {
+                sort?: components["schemas"]["ProjectSort"];
+                /** @description Any of these; `archived` brings archived ones in. */
+                status?: components["schemas"]["ProjectStatus"][];
+                /** @description Every one of these, ignoring case. */
+                tag?: string[];
+                /** @description Projects this person owns. */
+                owner?: string | null;
+                /** @description Projects this person is in. */
+                member?: string | null;
+                /** @description Inclusive, in UTC. */
+                created_from?: string | null;
+                /** @description Inclusive, in UTC. */
+                created_to?: string | null;
+                /** @description A collection id, or "none" for projects in none. */
+                collection?: string | "none" | null;
                 include_archived?: boolean;
             };
             header?: never;
@@ -4965,7 +5303,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectOut"][];
+                    "application/json": components["schemas"]["ProjectSummaryOut"][];
                 };
             };
             /** @description Validation Error */
@@ -7017,6 +7355,296 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_collections_api_v1_collections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"][];
+                };
+            };
+        };
+    };
+    create_collection_api_v1_collections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"];
+                };
+            };
+            /** @description Another collection uses this name (`collection_name_taken`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_collection_api_v1_collections__collection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_collection_api_v1_collections__collection_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"];
+                };
+            };
+            /** @description Not its creator or an administrator */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_project_api_v1_projects__project_id__collection_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description No such collection */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_project_tags_api_v1_projects__project_id__tags_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectTagsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_project_api_v1_projects__project_id__pin_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_project_api_v1_projects__project_id__pin_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_project_action_api_v1_project_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveProjectsIn"] | components["schemas"]["TagProjectsIn"] | components["schemas"]["ArchiveProjectsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
+                };
             };
             /** @description Validation Error */
             422: {

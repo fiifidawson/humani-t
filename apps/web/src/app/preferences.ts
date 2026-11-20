@@ -1,5 +1,6 @@
 /**
- * Per-browser display preferences: theme, reduced motion, the folded rail and panel widths.
+ * Per-browser display preferences: theme, reduced motion, the folded rail, the
+ * rail's open collections and panel widths.
  *
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
@@ -129,6 +130,47 @@ export function useRailFolded(): [boolean, (isFolded: boolean) => void] {
 		[],
 	);
 	return [isFolded, setFolded];
+}
+
+const OPEN_COLLECTIONS_KEY = "humani-t:open-collections";
+
+function readOpenCollections(): string {
+	return read(OPEN_COLLECTIONS_KEY) ?? "[]";
+}
+
+/** Which of the rail's collections are unfolded: their ids, which name nothing on their own. */
+export function useOpenCollections(): [
+	ReadonlySet<string>,
+	(collectionId: string, isOpen: boolean) => void,
+] {
+	const stored = useSyncExternalStore(subscribe, readOpenCollections);
+	const open = parseIds(stored);
+	const setOpen = useCallback((collectionId: string, isOpen: boolean) => {
+		const next = parseIds(readOpenCollections());
+		if (isOpen) {
+			next.add(collectionId);
+		} else {
+			next.delete(collectionId);
+		}
+		write(
+			OPEN_COLLECTIONS_KEY,
+			next.size === 0 ? null : JSON.stringify([...next]),
+		);
+	}, []);
+	return [open, setOpen];
+}
+
+function parseIds(stored: string): Set<string> {
+	try {
+		const value: unknown = JSON.parse(stored);
+		return new Set(
+			Array.isArray(value)
+				? value.filter((id): id is string => typeof id === "string")
+				: [],
+		);
+	} catch {
+		return new Set();
+	}
 }
 
 export type PanelName = "chat" | "source";

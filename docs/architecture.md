@@ -281,6 +281,12 @@ MaskingPolicy   the operator's side of the masking choice, built from
 Membership      (User, Project, Role) where Role is owner | reviewer | viewer;
                 removed when the project is deleted
 AuditEvent      who did what to which object, when; hash-chained
+Collection      a label shared across the deployment, one level deep, with no
+                access rules of its own (ADR-0016). Its name is sealed under
+                its own data key; deleting it unfiles its projects
+ProjectPlacement  the one Collection a Project is filed in, if any
+Tags            a Project's free labels, sealed together under its key
+Pin             one User's bookmark on a Project they belong to
 ```
 
 A **Project** is what the brief calls a project. It is the boundary for three things:

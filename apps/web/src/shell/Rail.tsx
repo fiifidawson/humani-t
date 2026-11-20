@@ -1,7 +1,6 @@
 /**
- * The left rail (UI_UX_SPEC §4.1): where to go, recent projects, and the
- * person's own controls. Needs-you, pinned projects and collections come with
- * the API that serves them (§15, P3).
+ * The left rail (UI_UX_SPEC §4.1): where to go, recent projects, collections,
+ * and the person's own controls.
  */
 
 import { Box, chakra, Flex, IconButton, Text } from "@chakra-ui/react";
@@ -12,6 +11,7 @@ import type { ReactNode } from "react";
 import { unwrapEmpty } from "../api/client";
 import { useApi } from "../app/api-context";
 import { projectListQuery, sessionQuery } from "../app/queries";
+import { RailCollections } from "../features/collections/RailCollections";
 import { initials } from "../ui/initials";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { rail, railItem } from "./railStyles";
@@ -146,6 +146,7 @@ export function Rail({
 					</chakra.ul>
 				</>
 			)}
+			<RailCollections onNavigate={onNavigate} />
 			<Flex
 				direction="column"
 				gap="1"

@@ -1,5 +1,5 @@
 /**
- * Project settings: name, archiving, members, masking rules, and the danger zone
+ * Project settings: name, archiving, collection and tags, members, masking rules, and the danger zone
  * where anyone may leave and owners may delete.
  *
  * Deleting destroys the project's key (crypto-shredding), so it asks for the name
@@ -20,6 +20,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
+import { OrganiseSection } from "../collections/OrganiseSection";
 import { LeaveControl } from "./LeaveProject";
 import { MaskingRulesSection } from "./MaskingRules";
 import { MaskingSwitch } from "./MaskingSwitch";
@@ -65,6 +66,9 @@ export function ProjectSettingsPage() {
 							<ArchiveStatus project={project.data} />
 						</Stack>
 					)}
+				</SettingsSection>
+				<SettingsSection title="Collection and tags">
+					<OrganiseSection project={project.data} />
 				</SettingsSection>
 				<SettingsSection title="Members">
 					<MembersSection projectId={projectId} isOwner={role === "owner"} />

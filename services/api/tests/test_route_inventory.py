@@ -74,6 +74,23 @@ DOCUMENT_ROUTES = frozenset(
     }
 )
 
+# Collections, tags and pins (walkthrough 17, organise). Collections sit outside any
+# project: they are labels with no access rules of their own (ADR 0016).
+_COLLECTIONS = "/api/v1/collections"
+ORGANISE_ROUTES = frozenset(
+    {
+        ("GET", _COLLECTIONS),
+        ("POST", _COLLECTIONS),
+        ("PATCH", f"{_COLLECTIONS}/{{collection_id}}"),
+        ("DELETE", f"{_COLLECTIONS}/{{collection_id}}"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/collection"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/tags"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/pin"),
+        ("DELETE", f"{PROJECTS}/{{project_id}}/pin"),
+        ("POST", "/api/v1/project-actions"),
+    }
+)
+
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
@@ -146,6 +163,11 @@ class TestInventory:
         app = make_project_harness().app
 
         assert sorted(DOCUMENT_ROUTES - registered_routes(app)) == []
+
+    def test_every_organise_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(ORGANISE_ROUTES - registered_routes(app)) == []
 
     def test_every_route_inside_a_project_names_the_project_in_its_path(self):
         """Membership is checked against the path, never a body or query field."""
