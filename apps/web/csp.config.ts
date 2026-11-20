@@ -19,6 +19,12 @@ export const CADDY_NONCE_PLACEHOLDER = "{http.request.uuid}";
 export const NONCE_TEMPLATE = "{{placeholder `http.request.uuid`}}";
 
 /**
+ * The deployment's own address for the link preview tags in index.html. Caddy fills
+ * it from HUMANI_T_DOMAIN, the domain the operator set, so no address is in the code.
+ */
+export const ORIGIN_TEMPLATE = "https://{{env `HUMANI_T_DOMAIN`}}";
+
+/**
  * The dev server's nonce. Fixed, because the dev server renders index.html
  * without a template step; it is never used outside localhost.
  */
@@ -65,6 +71,11 @@ export function withNonce(html: string, nonce: string): string {
 	return html.replaceAll(NONCE_TEMPLATE, nonce);
 }
 
+/** Put `origin` where index.html has ORIGIN_TEMPLATE: what Caddy's `templates` does. */
+export function withOrigin(html: string, origin: string): string {
+	return html.replaceAll(ORIGIN_TEMPLATE, origin);
+}
+
 function isPageRequest(url: string | undefined): boolean {
 	const path = (url ?? "/").split("?")[0] ?? "/";
 	return (
@@ -89,6 +100,13 @@ export function cspNonce(): Plugin {
 		},
 		configResolved(resolved) {
 			config = resolved;
+		},
+		// The build keeps the template for Caddy; only the dev server fills it in.
+		transformIndexHtml(html, context) {
+			const port = context.server?.config.server.port;
+			return port === undefined
+				? html
+				: withOrigin(html, `http://localhost:${port}`);
 		},
 		configureServer(server) {
 			server.middlewares.use((_request, response, next) => {
@@ -125,7 +143,8 @@ export function cspNonce(): Plugin {
 					);
 					response.setHeader("Content-Type", "text/html; charset=utf-8");
 					response.setHeader("Cache-Control", "no-store");
-					response.end(withNonce(page, nonce));
+					const origin = `http://${request.headers.host ?? "localhost"}`;
+					response.end(withOrigin(withNonce(page, nonce), origin));
 				} catch (error) {
 					next(error);
 				}
