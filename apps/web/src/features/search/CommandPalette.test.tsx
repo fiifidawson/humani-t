@@ -157,9 +157,12 @@ describe("with an empty box", () => {
 		await user.keyboard("{Enter}");
 
 		await waitFor(() => expect(currentPath(router)).toBe(`/p/${project.id}`));
-		expect(
-			screen.queryByRole("dialog", { name: "Search and commands" }),
-		).not.toBeInTheDocument();
+		// Chakra's dialog leaves the page one render after it closes.
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Search and commands" }),
+			).not.toBeInTheDocument(),
+		);
 	});
 });
 
