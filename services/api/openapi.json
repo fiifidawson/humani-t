@@ -4515,6 +4515,378 @@
           }
         }
       }
+    },
+    "/api/v1/needs-you": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "What waits for the caller: gates, drafts, failures, briefs",
+        "description": "Only what the caller's role can act on, from live projects that are not archived.",
+        "operationId": "read_needs_you_api_v1_needs_you_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedsYouOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/needs-you/dismissals": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Hide one Needs you item for the caller until it changes",
+        "operationId": "dismiss_api_v1_needs_you_dismissals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Nothing waiting for the caller has this key"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activity": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Recent activity in the caller's projects, newest first",
+        "operationId": "read_activity_api_v1_activity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/history": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Everything that happened in the project, grouped by review",
+        "operationId": "read_history_api_v1_projects__project_id__history_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectHistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/papers/{paper_id}/seen": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Mark a paper as opened by the caller",
+        "operationId": "see_paper_api_v1_projects__project_id__papers__paper_id__seen_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/papers/{paper_id}/saved": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Add a paper to the caller's saved list",
+        "operationId": "save_paper_api_v1_projects__project_id__papers__paper_id__saved_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Take a paper off the caller's saved list",
+        "operationId": "unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/paper-marks": {
+      "get": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "The caller's seen and saved marks on the project's papers",
+        "operationId": "read_paper_marks_api_v1_projects__project_id__paper_marks_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPaperMarksOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/saved-papers": {
+      "get": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "The caller's saved papers, newest first",
+        "description": "Only from projects the caller still belongs to; a deleted project's are gone.",
+        "operationId": "read_saved_papers_api_v1_saved_papers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedPapersOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/briefs/{brief_id}/seen": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Mark a brief as opened by the caller, so Needs you stops listing it",
+        "operationId": "see_brief_api_v1_briefs__brief_id__seen_put",
+        "parameters": [
+          {
+            "name": "brief_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Brief Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such brief"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4545,6 +4917,282 @@
         },
         "type": "object",
         "title": "AcceptedOut"
+      },
+      "ActivityAction": {
+        "type": "string",
+        "enum": [
+          "review_started",
+          "plan_drafted",
+          "plan_accepted",
+          "labels_changed",
+          "run",
+          "brief_ready",
+          "question_asked",
+          "document_added"
+        ],
+        "title": "ActivityAction"
+      },
+      "ActivityEventOut": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ActivityKind",
+            "description": "The timeline filter this line falls under."
+          },
+          "action": {
+            "$ref": "#/components/schemas/ActivityAction"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id",
+            "description": "Null for a project-wide line: a document."
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who did it; null when the model did."
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Number"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds",
+            "description": "How long the run has taken so far."
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why a run stopped, in plain words. Timeline only."
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Model Ids",
+            "description": "The models a run, brief or answer used."
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageLineOut"
+            },
+            "type": "array",
+            "title": "Stages",
+            "description": "A run's stages. Timeline only."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "brief_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "The question as stored (masked when masking is on), or a document name."
+          },
+          "papers_moved": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Papers Moved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "action",
+          "at",
+          "project",
+          "review_id",
+          "actor",
+          "run_id",
+          "run_number",
+          "run_state",
+          "seconds",
+          "stopped_at",
+          "error",
+          "model_ids",
+          "stages",
+          "version",
+          "brief_id",
+          "thread_id",
+          "document_id",
+          "document_number",
+          "text",
+          "papers_moved"
+        ],
+        "title": "ActivityEventOut"
+      },
+      "ActivityKind": {
+        "type": "string",
+        "enum": [
+          "review",
+          "run",
+          "brief",
+          "question",
+          "document"
+        ],
+        "title": "ActivityKind",
+        "description": "The timeline's \"Show:\" filters: each action falls under exactly one."
+      },
+      "ActivityOut": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityEventOut"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "ActivityOut"
       },
       "AgentRole": {
         "type": "string",
@@ -5923,6 +6571,22 @@
         ],
         "title": "DiffOut"
       },
+      "DismissalIn": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "DismissalIn"
+      },
       "DocumentDecision": {
         "type": "string",
         "enum": [
@@ -6518,6 +7182,14 @@
         ],
         "title": "GateDecisionIn"
       },
+      "GateKind": {
+        "type": "string",
+        "enum": [
+          "vocabulary",
+          "privacy_review"
+        ],
+        "title": "GateKind"
+      },
       "GateRequiredData": {
         "properties": {
           "gate_id": {
@@ -6705,6 +7377,35 @@
         },
         "type": "object",
         "title": "HealthOut"
+      },
+      "HistoryGroupOut": {
+        "properties": {
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for project-wide lines."
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityEventOut"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "review",
+          "events"
+        ],
+        "title": "HistoryGroupOut"
       },
       "InstructionsSentOut": {
         "properties": {
@@ -7604,6 +8305,163 @@
         ],
         "title": "MoveProjectsIn"
       },
+      "NeedsYouItemOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "What `POST /needs-you/dismissals` names. Ids only."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NeedsYouKind"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At",
+            "description": "When it started waiting."
+          },
+          "gate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate Id"
+          },
+          "gate_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GateKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Number",
+            "description": "The run's number in its review, from 1."
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At",
+            "description": "The stage a failed run did not finish."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "The draft's plan version, or the brief's."
+          },
+          "brief_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "project",
+          "review_id",
+          "at",
+          "gate_id",
+          "gate_kind",
+          "run_id",
+          "run_number",
+          "stopped_at",
+          "version",
+          "brief_id"
+        ],
+        "title": "NeedsYouItemOut"
+      },
+      "NeedsYouKind": {
+        "type": "string",
+        "enum": [
+          "gate",
+          "draft",
+          "failed_run",
+          "unread_brief"
+        ],
+        "title": "NeedsYouKind"
+      },
+      "NeedsYouOut": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "How many items; the rail shows it."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NeedsYouItemOut"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "items"
+        ],
+        "title": "NeedsYouOut"
+      },
       "OptionOut": {
         "properties": {
           "name": {
@@ -7684,6 +8542,40 @@
           "masked_text"
         ],
         "title": "PaperDetailOut"
+      },
+      "PaperMarksOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "is_seen": {
+            "type": "boolean",
+            "title": "Is Seen",
+            "description": "Opened here or in another project, by this person."
+          },
+          "is_saved": {
+            "type": "boolean",
+            "title": "Is Saved"
+          },
+          "seen_in_other_projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRefOut"
+            },
+            "type": "array",
+            "title": "Seen In Other Projects",
+            "description": "Only projects the caller is a member of."
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "is_seen",
+          "is_saved",
+          "seen_in_other_projects"
+        ],
+        "title": "PaperMarksOut"
       },
       "PaperOut": {
         "properties": {
@@ -8336,6 +9228,23 @@
         ],
         "title": "ProjectCollectionIn"
       },
+      "ProjectHistoryOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryGroupOut"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "By latest activity, newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "ProjectHistoryOut"
+      },
       "ProjectIn": {
         "properties": {
           "name": {
@@ -8460,6 +9369,42 @@
           "is_pinned"
         ],
         "title": "ProjectOut"
+      },
+      "ProjectPaperMarksOut": {
+        "properties": {
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/PaperMarksOut"
+            },
+            "type": "array",
+            "title": "Papers",
+            "description": "Only papers with a mark."
+          }
+        },
+        "type": "object",
+        "required": [
+          "papers"
+        ],
+        "title": "ProjectPaperMarksOut"
+      },
+      "ProjectRefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ProjectRefOut"
       },
       "ProjectRenameIn": {
         "properties": {
@@ -9057,6 +10002,31 @@
         ],
         "title": "ReviewOut"
       },
+      "ReviewRefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question",
+          "started_at"
+        ],
+        "title": "ReviewRefOut"
+      },
       "ReviewStatus": {
         "type": "string",
         "enum": [
@@ -9335,6 +10305,94 @@
             "stage.started": "#/components/schemas/StageStartedEvent"
           }
         }
+      },
+      "SavedPaperOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "saved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Saved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "project",
+          "review_id",
+          "title",
+          "year",
+          "doi",
+          "link",
+          "saved_at"
+        ],
+        "title": "SavedPaperOut"
+      },
+      "SavedPapersOut": {
+        "properties": {
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPaperOut"
+            },
+            "type": "array",
+            "title": "Papers",
+            "description": "Newest saved first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "papers"
+        ],
+        "title": "SavedPapersOut"
       },
       "ScreenedItemData": {
         "properties": {
@@ -9928,6 +10986,35 @@
         ],
         "title": "StageFinishedEvent"
       },
+      "StageLineOut": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StageState"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "seconds"
+        ],
+        "title": "StageLineOut"
+      },
       "StageProgressData": {
         "properties": {
           "stage": {
@@ -10090,6 +11177,17 @@
           "data"
         ],
         "title": "StageStartedEvent"
+      },
+      "StageState": {
+        "type": "string",
+        "enum": [
+          "done",
+          "running",
+          "waiting",
+          "stopped",
+          "not_run"
+        ],
+        "title": "StageState"
       },
       "StepStatus": {
         "type": "string",

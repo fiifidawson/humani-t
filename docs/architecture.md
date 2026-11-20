@@ -501,6 +501,29 @@ POST /api/v1/runs/{run_id}/cancel
 
 Retrofitting a pause into a synchronous endpoint is a breaking change. Designing for it now costs nothing.
 
+### 4.5 History, Needs you and marks
+
+What happened in a project, and what waits for a person, are derived each time from the records above; only a person's own choices are stored ([ADR-0017](adr/0017-history-is-derived-and-marks-die-with-their-project.md)):
+
+```text
+NeedsYouItem    one thing in one review waiting for a person: an open gate, a
+                draft waiting for accept, a failed latest run, or a newest
+                brief they have not opened. Derived, never stored; its key
+                names the gate, run, plan version or brief, so a new one is
+                a new item
+Dismissal       (User, item key, when): a person hid one NeedsYouItem
+ActivityEvent   one L0 line: review started, plan drafted or accepted, labels
+                changed, a run at its latest state (with its stages and
+                models), brief ready, question asked, document added. Derived
+PaperMark       (User, paper, seen | saved): the paper's identity (DOI, else
+                title and year) sealed under the paper's project key, so the
+                same paper is recognised in the person's other projects and
+                the mark dies with its project
+BriefRead       (User, brief): the person opened the brief
+```
+
+Every read starts from the projects the person is a member of now, so a line, a count or a "seen in" can never name another project.
+
 ---
 
 ## 5. Security model

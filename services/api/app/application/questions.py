@@ -125,6 +125,18 @@ def _context(record: QuestionRecord, purpose: str) -> EncryptionContext:
     return EncryptionContext(record.project_id, purpose, str(record.id))
 
 
+async def asked_text(
+    encryption: ScopeEncryption, uow: UnitOfWork, record: QuestionRecord
+) -> str:
+    """The question as stored: masked when masking was on as it was asked."""
+    asked = json.loads(
+        await encryption.decrypt(
+            uow, _context(record, _QUESTION_PURPOSE), record.question_sealed
+        )
+    )
+    return str(asked["text"])
+
+
 class _QuestionSeal:
     def __init__(self, encryption: ScopeEncryption) -> None:
         self._encryption = encryption

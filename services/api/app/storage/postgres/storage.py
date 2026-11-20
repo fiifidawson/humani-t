@@ -38,6 +38,7 @@ from app.storage.postgres.collections import (
 )
 from app.storage.postgres.documents import PostgresDocumentRepository
 from app.storage.postgres.label_rules import PostgresLabelRulesRepository
+from app.storage.postgres.marks import PostgresDismissalRepository, PostgresMarkRepository
 from app.storage.postgres.masking import (
     PostgresMaskingRuleRepository,
     PostgresPaperMaskRepository,
@@ -652,6 +653,8 @@ class PostgresUnitOfWork:
         self.placements = PostgresProjectPlacementRepository(connection)
         self.project_tags = PostgresProjectTagsRepository(connection)
         self.pins = PostgresPinRepository(connection)
+        self.marks = PostgresMarkRepository(connection)
+        self.dismissals = PostgresDismissalRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

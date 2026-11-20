@@ -91,6 +91,23 @@ ORGANISE_ROUTES = frozenset(
     }
 )
 
+# Needs you, activity, the timeline, and seen and saved marks (walkthrough 17, history).
+_PAPER_MARK = f"{PROJECTS}/{{project_id}}/papers/{{paper_id}}"
+HISTORY_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/needs-you"),
+        ("POST", "/api/v1/needs-you/dismissals"),
+        ("GET", "/api/v1/activity"),
+        ("GET", f"{PROJECTS}/{{project_id}}/history"),
+        ("GET", f"{PROJECTS}/{{project_id}}/paper-marks"),
+        ("PUT", f"{_PAPER_MARK}/seen"),
+        ("PUT", f"{_PAPER_MARK}/saved"),
+        ("DELETE", f"{_PAPER_MARK}/saved"),
+        ("GET", "/api/v1/saved-papers"),
+        ("PUT", "/api/v1/briefs/{brief_id}/seen"),
+    }
+)
+
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
@@ -168,6 +185,11 @@ class TestInventory:
         app = make_project_harness().app
 
         assert sorted(ORGANISE_ROUTES - registered_routes(app)) == []
+
+    def test_every_history_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(HISTORY_ROUTES - registered_routes(app)) == []
 
     def test_every_route_inside_a_project_names_the_project_in_its_path(self):
         """Membership is checked against the path, never a body or query field."""

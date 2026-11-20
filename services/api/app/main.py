@@ -31,7 +31,9 @@ from app.api.routes import (
     collections,
     documents,
     exports,
+    history,
     label_rules,
+    marks,
     masking,
     mfa,
     model_instructions,
@@ -255,6 +257,8 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(model_instructions.router)
     v1.include_router(documents.router)
     v1.include_router(collections.router)
+    v1.include_router(history.router)
+    v1.include_router(marks.router)
     app.include_router(v1)
 
 

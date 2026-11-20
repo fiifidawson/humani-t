@@ -32,6 +32,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Reveal } from "../../ui/Reveal";
+import { useBriefSeen } from "../history/PaperMarks";
 import { Canvas } from "../reviews/Canvas";
 import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
@@ -875,6 +876,7 @@ export function BriefCanvas() {
 	const { review } = useReview();
 	const search = useSearch({ from: FROM });
 	const brief = useQuery(briefQuery(api, review.id, search.run));
+	useBriefSeen(brief.data?.id);
 
 	if (isApiError(brief.error, "not-found")) {
 		return (

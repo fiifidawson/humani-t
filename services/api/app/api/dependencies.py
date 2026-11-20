@@ -32,8 +32,10 @@ from app.application.documents import (
 )
 from app.application.encryption import ScopeEncryption
 from app.application.exports import ExportService
+from app.application.history import HistoryService
 from app.application.inference import GuardedInference
 from app.application.label_rules import LabelRulesService, PlanCriteria
+from app.application.marks import MarkService
 from app.application.masking import (
     DocumentsAwaitingReview,
     MaskingChoice,
@@ -147,6 +149,8 @@ class Providers:
     document_processor: DocumentProcessor
     collections: CollectionService
     project_list: ProjectListService
+    history: HistoryService
+    marks: MarkService
 
     async def close(self) -> None:
         """Release every pool and client: once, at shutdown or at the end of a CLI run."""
@@ -653,6 +657,10 @@ def build_providers(
             storage=storage, encryption=encryption, audit=audit, projects=projects, clock=clock
         ),
         project_list=ProjectListService(storage=storage, projects=projects, papers=papers),
+        history=HistoryService(storage=storage, encryption=encryption, clock=clock),
+        marks=MarkService(
+            storage=storage, encryption=encryption, store=pipeline.store, clock=clock
+        ),
     )
 
 
@@ -787,3 +795,17 @@ def get_project_list(providers: ProvidersDep) -> ProjectListService:
 
 
 ProjectListDep = Annotated[ProjectListService, Depends(get_project_list)]
+
+
+def get_history(providers: ProvidersDep) -> HistoryService:
+    return providers.history
+
+
+HistoryDep = Annotated[HistoryService, Depends(get_history)]
+
+
+def get_marks(providers: ProvidersDep) -> MarkService:
+    return providers.marks
+
+
+MarksDep = Annotated[MarkService, Depends(get_marks)]

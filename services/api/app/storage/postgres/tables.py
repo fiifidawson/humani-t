@@ -599,3 +599,34 @@ project_pins = Table(
     Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True, index=True),
     Column("pinned_at", DateTime(timezone=True), nullable=False),
 )
+
+# A person's own marks (UI_UX_SPEC §7.5). Ids and times in the clear; the paper's identity
+# sealed under its project's key, so a mark is unreadable once the project is deleted.
+paper_marks = Table(
+    "paper_marks",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("paper_id", Uuid, ForeignKey("papers.id"), primary_key=True),
+    Column("kind", String(16), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("identity_sealed", LargeBinary, nullable=False),
+    Column("marked_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("kind IN ('seen', 'saved')", name="kind_is_known"),
+)
+
+brief_reads = Table(
+    "brief_reads",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("brief_id", Uuid, ForeignKey("decision_briefs.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("read_at", DateTime(timezone=True), nullable=False),
+)
+
+needs_you_dismissals = Table(
+    "needs_you_dismissals",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("item_key", String(120), primary_key=True),
+    Column("dismissed_at", DateTime(timezone=True), nullable=False),
+)

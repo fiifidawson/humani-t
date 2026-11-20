@@ -22,7 +22,9 @@ from app.domain.collections import Pin, ProjectPlacement, StoredTags
 from app.domain.discovery import PaperSet, PaperText, RunPaper, RunSource, StoredPaper
 from app.domain.documents import Document, DocumentMask, DocumentReview, DocumentText
 from app.domain.encryption import WrappedDataKey
+from app.domain.history import Dismissal
 from app.domain.label_rules import LabelRulesVersion
+from app.domain.marks import BriefRead, PaperMark, PaperMarkKind
 from app.domain.masking import MaskingRuleRecord, PaperMask
 from app.domain.mfa import (
     ChallengePurpose,
@@ -754,6 +756,40 @@ class DocumentRepository(Protocol):
         ...
 
 
+class MarkRepository(Protocol):
+    """A person's own marks: papers they opened or saved, and briefs they opened."""
+
+    async def add_paper_mark(self, mark: PaperMark, /) -> bool:
+        """False if the person already has this mark on the paper; the first one stays."""
+        ...
+
+    async def remove_paper_mark(
+        self, user_id: UUID, paper_id: UUID, kind: PaperMarkKind
+    ) -> bool:
+        """False if there was no such mark."""
+        ...
+
+    async def list_paper_marks(self, user_id: UUID) -> list[PaperMark]:
+        """Every paper mark of the person, in any project, oldest first."""
+        ...
+
+    async def add_brief_read(self, read: BriefRead, /) -> bool:
+        """False if the person had already opened the brief; the first time stays."""
+        ...
+
+    async def list_brief_reads(self, user_id: UUID) -> list[BriefRead]: ...
+
+
+class DismissalRepository(Protocol):
+    """Needs you items a person dismissed, by key: inserted, never updated."""
+
+    async def add(self, dismissal: Dismissal, /) -> bool:
+        """False if the person had already dismissed this item."""
+        ...
+
+    async def list_for_user(self, user_id: UUID) -> list[Dismissal]: ...
+
+
 class UnitOfWork(Protocol):
     """One transaction. Nothing is visible to others until `commit`."""
 
@@ -848,6 +884,12 @@ class UnitOfWork(Protocol):
 
     @property
     def pins(self) -> PinRepository: ...
+
+    @property
+    def marks(self) -> MarkRepository: ...
+
+    @property
+    def dismissals(self) -> DismissalRepository: ...
 
     async def commit(self) -> None: ...
 

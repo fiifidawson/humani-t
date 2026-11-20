@@ -25,7 +25,7 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
-import { Folder, Settings, ShieldCheck } from "lucide-react";
+import { Folder, History, Settings, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
@@ -293,6 +293,12 @@ export function WorkspacePage() {
 					<Link to="/p/$projectId/documents" params={{ projectId }}>
 						<Folder />
 						Documents
+					</Link>
+				</Button>
+				<Button asChild variant="outline" size="sm" flex="none">
+					<Link to="/p/$projectId/history" params={{ projectId }}>
+						<History />
+						History
 					</Link>
 				</Button>
 				<IconButton

@@ -10,6 +10,7 @@ import { HttpResponse, http } from "msw";
 import type { components } from "../api/schema.gen";
 import { FakeCollections } from "./fakeCollections";
 import { FakeDocuments } from "./fakeDocuments";
+import { FakeHistory } from "./fakeHistory";
 import {
 	jsonBody,
 	nextId,
@@ -206,6 +207,12 @@ export class FakeApi {
 				? null
 				: { id: user.id, display_name: user.display_name };
 		},
+	});
+	/** Needs you, activity, timelines and marks (fakeHistory.ts). */
+	readonly history = new FakeHistory({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		projectName: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.name ?? null,
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -1191,6 +1198,7 @@ export class FakeApi {
 			...this.documents.handlers(),
 			...this.instructions.handlers(),
 			...this.collections.handlers(),
+			...this.history.handlers(),
 		];
 	}
 }

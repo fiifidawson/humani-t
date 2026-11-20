@@ -1,6 +1,6 @@
 /**
- * Home (UI_UX_SPEC §7.1): pinned projects, recent projects and collections, or
- * how to start. Needs you and Recent activity come from the history API.
+ * Home (UI_UX_SPEC §7.1): Needs you, pinned projects, recent projects, recent
+ * activity and collections, or how to start.
  */
 
 import {
@@ -21,6 +21,8 @@ import { Page } from "../../ui/Page";
 import { PageHeading } from "../../ui/PageHeading";
 import { SectionHeading } from "../../ui/SectionHeading";
 import { CollectionsRow, PinnedProjects } from "../collections/HomeSections";
+import { NeedsYou } from "../history/NeedsYou";
+import { RecentActivity } from "../history/RecentActivity";
 import {
 	fullDate,
 	newestFirst,
@@ -151,6 +153,7 @@ export function HomePage() {
 	return (
 		<Page>
 			<PageHeading title="Home" />
+			<NeedsYou />
 			{projects.isPending ? <Loading what="projects" /> : null}
 			{projects.isError ? (
 				<ErrorNotice
@@ -180,6 +183,9 @@ export function HomePage() {
 							))}
 					</Grid>
 				</section>
+			) : null}
+			{projects.isSuccess && projects.data.length > 0 ? (
+				<RecentActivity />
 			) : null}
 			{projects.isSuccess ? <CollectionsRow projects={projects.data} /> : null}
 		</Page>

@@ -1500,6 +1500,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/needs-you": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What waits for the caller: gates, drafts, failures, briefs
+         * @description Only what the caller's role can act on, from live projects that are not archived.
+         */
+        get: operations["read_needs_you_api_v1_needs_you_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/needs-you/dismissals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hide one Needs you item for the caller until it changes */
+        post: operations["dismiss_api_v1_needs_you_dismissals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent activity in the caller's projects, newest first */
+        get: operations["read_activity_api_v1_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everything that happened in the project, grouped by review */
+        get: operations["read_history_api_v1_projects__project_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/papers/{paper_id}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a paper as opened by the caller */
+        put: operations["see_paper_api_v1_projects__project_id__papers__paper_id__seen_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/papers/{paper_id}/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Add a paper to the caller's saved list */
+        put: operations["save_paper_api_v1_projects__project_id__papers__paper_id__saved_put"];
+        post?: never;
+        /** Take a paper off the caller's saved list */
+        delete: operations["unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/paper-marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's seen and saved marks on the project's papers */
+        get: operations["read_paper_marks_api_v1_projects__project_id__paper_marks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's saved papers, newest first
+         * @description Only from projects the caller still belongs to; a deleted project's are gone.
+         */
+        get: operations["read_saved_papers_api_v1_saved_papers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/briefs/{brief_id}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a brief as opened by the caller, so Needs you stops listing it */
+        put: operations["see_brief_api_v1_briefs__brief_id__seen_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1519,6 +1679,88 @@ export interface components {
              * @default If an account exists for that email, a reset link has been sent.
              */
             status: string;
+        };
+        /**
+         * ActivityAction
+         * @enum {string}
+         */
+        ActivityAction: "review_started" | "plan_drafted" | "plan_accepted" | "labels_changed" | "run" | "brief_ready" | "question_asked" | "document_added";
+        /** ActivityEventOut */
+        ActivityEventOut: {
+            /** @description The timeline filter this line falls under. */
+            kind: components["schemas"]["ActivityKind"];
+            action: components["schemas"]["ActivityAction"];
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * @description Null for a project-wide line: a document.
+             */
+            review_id: string | null;
+            /** @description Who did it; null when the model did. */
+            actor: components["schemas"]["UserRefOut"] | null;
+            /** Run Id */
+            run_id: string | null;
+            /** Run Number */
+            run_number: number | null;
+            run_state: components["schemas"]["RunState"] | null;
+            /**
+             * Seconds
+             * @description How long the run has taken so far.
+             */
+            seconds: number | null;
+            /** Stopped At */
+            stopped_at: string | null;
+            /**
+             * Error
+             * @description Why a run stopped, in plain words. Timeline only.
+             */
+            error: string | null;
+            /**
+             * Model Ids
+             * @description The models a run, brief or answer used.
+             */
+            model_ids: string[];
+            /**
+             * Stages
+             * @description A run's stages. Timeline only.
+             */
+            stages: components["schemas"]["StageLineOut"][];
+            /** Version */
+            version: number | null;
+            /** Brief Id */
+            brief_id: string | null;
+            /** Thread Id */
+            thread_id: string | null;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Number */
+            document_number: number | null;
+            /**
+             * Text
+             * @description The question as stored (masked when masking is on), or a document name.
+             */
+            text: string | null;
+            /** Papers Moved */
+            papers_moved: number | null;
+        };
+        /**
+         * ActivityKind
+         * @description The timeline's "Show:" filters: each action falls under exactly one.
+         * @enum {string}
+         */
+        ActivityKind: "review" | "run" | "brief" | "question" | "document";
+        /** ActivityOut */
+        ActivityOut: {
+            /**
+             * Events
+             * @description Newest first.
+             */
+            events: components["schemas"]["ActivityEventOut"][];
         };
         /**
          * AgentRole
@@ -2111,6 +2353,11 @@ export interface components {
             /** Criteria */
             criteria: components["schemas"]["CriterionChangeOut"][];
         };
+        /** DismissalIn */
+        DismissalIn: {
+            /** Key */
+            key: string;
+        };
         /**
          * DocumentDecision
          * @enum {string}
@@ -2387,6 +2634,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * GateKind
+         * @enum {string}
+         */
+        GateKind: "vocabulary" | "privacy_review";
         /** GateRequiredData */
         GateRequiredData: {
             /**
@@ -2488,6 +2740,16 @@ export interface components {
              * @default ok
              */
             status: string;
+        };
+        /** HistoryGroupOut */
+        HistoryGroupOut: {
+            /** @description Null for project-wide lines. */
+            review: components["schemas"]["ReviewRefOut"] | null;
+            /**
+             * Events
+             * @description Newest first.
+             */
+            events: components["schemas"]["ActivityEventOut"][];
         };
         /** InstructionsSentOut */
         InstructionsSentOut: {
@@ -2918,6 +3180,67 @@ export interface components {
             /** Collection Id */
             collection_id: string | null;
         };
+        /** NeedsYouItemOut */
+        NeedsYouItemOut: {
+            /**
+             * Key
+             * @description What `POST /needs-you/dismissals` names. Ids only.
+             */
+            key: string;
+            kind: components["schemas"]["NeedsYouKind"];
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /**
+             * At
+             * Format: date-time
+             * @description When it started waiting.
+             */
+            at: string;
+            /** Gate Id */
+            gate_id: string | null;
+            gate_kind: components["schemas"]["GateKind"] | null;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Run Number
+             * @description The run's number in its review, from 1.
+             */
+            run_number: number | null;
+            /**
+             * Stopped At
+             * @description The stage a failed run did not finish.
+             */
+            stopped_at: string | null;
+            /**
+             * Version
+             * @description The draft's plan version, or the brief's.
+             */
+            version: number | null;
+            /** Brief Id */
+            brief_id: string | null;
+        };
+        /**
+         * NeedsYouKind
+         * @enum {string}
+         */
+        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief";
+        /** NeedsYouOut */
+        NeedsYouOut: {
+            /**
+             * Count
+             * @description How many items; the rail shows it.
+             */
+            count: number;
+            /**
+             * Items
+             * @description Newest first.
+             */
+            items: components["schemas"]["NeedsYouItemOut"][];
+        };
         /** OptionOut */
         OptionOut: {
             /** Name */
@@ -2945,6 +3268,26 @@ export interface components {
              * @description The kept text, masked; None until masked.
              */
             masked_text: string | null;
+        };
+        /** PaperMarksOut */
+        PaperMarksOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /**
+             * Is Seen
+             * @description Opened here or in another project, by this person.
+             */
+            is_seen: boolean;
+            /** Is Saved */
+            is_saved: boolean;
+            /**
+             * Seen In Other Projects
+             * @description Only projects the caller is a member of.
+             */
+            seen_in_other_projects: components["schemas"]["ProjectRefOut"][];
         };
         /** PaperOut */
         PaperOut: {
@@ -3227,6 +3570,14 @@ export interface components {
              */
             collection_id: string | null;
         };
+        /** ProjectHistoryOut */
+        ProjectHistoryOut: {
+            /**
+             * Groups
+             * @description By latest activity, newest first.
+             */
+            groups: components["schemas"]["HistoryGroupOut"][];
+        };
         /** ProjectIn */
         ProjectIn: {
             /** Name */
@@ -3287,6 +3638,24 @@ export interface components {
              * @description Whether the caller has pinned it. Pins are per user.
              */
             is_pinned: boolean;
+        };
+        /** ProjectPaperMarksOut */
+        ProjectPaperMarksOut: {
+            /**
+             * Papers
+             * @description Only papers with a mark.
+             */
+            papers: components["schemas"]["PaperMarksOut"][];
+        };
+        /** ProjectRefOut */
+        ProjectRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** ProjectRenameIn */
         ProjectRenameIn: {
@@ -3553,6 +3922,21 @@ export interface components {
             /** @description Who asked the question. */
             created_by: components["schemas"]["UserRefOut"];
         };
+        /** ReviewRefOut */
+        ReviewRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question */
+            question: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
         /**
          * ReviewStatus
          * @enum {string}
@@ -3658,6 +4042,41 @@ export interface components {
          * @description One event on `GET /runs/{run_id}/events`: its `id:`, `event:` and parsed `data:`.
          */
         RunStreamEvent: components["schemas"]["StageStartedEvent"] | components["schemas"]["StageProgressEvent"] | components["schemas"]["StageFinishedEvent"] | components["schemas"]["AgentStepEvent"] | components["schemas"]["GateRequiredEvent"] | components["schemas"]["GateResolvedEvent"] | components["schemas"]["JobFinishedEvent"];
+        /** SavedPaperOut */
+        SavedPaperOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /** Link */
+            link: string | null;
+            /**
+             * Saved At
+             * Format: date-time
+             */
+            saved_at: string;
+        };
+        /** SavedPapersOut */
+        SavedPapersOut: {
+            /**
+             * Papers
+             * @description Newest saved first.
+             */
+            papers: components["schemas"]["SavedPaperOut"][];
+        };
         /**
          * ScreenedItemData
          * @description The screen stage's row for one paper, as the live screening list shows it.
@@ -3898,6 +4317,14 @@ export interface components {
             event: "stage.finished";
             data: components["schemas"]["StageFinishedData"];
         };
+        /** StageLineOut */
+        StageLineOut: {
+            /** Stage */
+            stage: string;
+            state: components["schemas"]["StageState"];
+            /** Seconds */
+            seconds: number | null;
+        };
         /** StageProgressData */
         StageProgressData: {
             /**
@@ -3973,6 +4400,11 @@ export interface components {
             event: "stage.started";
             data: components["schemas"]["StageStartedData"];
         };
+        /**
+         * StageState
+         * @enum {string}
+         */
+        StageState: "done" | "running" | "waiting" | "stopped" | "not_run";
         /**
          * StepStatus
          * @enum {string}
@@ -7645,6 +8077,313 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BulkOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_needs_you_api_v1_needs_you_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeedsYouOut"];
+                };
+            };
+        };
+    };
+    dismiss_api_v1_needs_you_dismissals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Nothing waiting for the caller has this key */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_activity_api_v1_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+        };
+    };
+    read_history_api_v1_projects__project_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectHistoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    see_paper_api_v1_projects__project_id__papers__paper_id__seen_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_paper_api_v1_projects__project_id__papers__paper_id__saved_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_paper_marks_api_v1_projects__project_id__paper_marks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPaperMarksOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_saved_papers_api_v1_saved_papers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedPapersOut"];
+                };
+            };
+        };
+    };
+    see_brief_api_v1_briefs__brief_id__seen_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brief_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such brief */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

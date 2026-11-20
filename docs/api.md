@@ -79,6 +79,15 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/runs/{run_id}/events` | runs | Follow a run as Server-Sent Events (any member) |
 | `POST` | `/api/v1/runs/{run_id}/cancel` | runs | Cancel a run; finished stages are kept (owner, reviewer) |
 | `POST` | `/api/v1/gates/{gate_id}` | runs | Decide a gate so the run continues (owner; reviewer for a vocabulary) |
+| `GET` | `/api/v1/needs-you` | history | What waits for the caller across their projects |
+| `POST` | `/api/v1/needs-you/dismissals` | history | Hide one Needs you item for the caller until it changes |
+| `GET` | `/api/v1/activity` | history | Recent activity in the caller's projects |
+| `GET` | `/api/v1/projects/{project_id}/history` | history | The project's timeline, grouped by review (any member) |
+| `GET` | `/api/v1/projects/{project_id}/paper-marks` | marks | The caller's seen and saved marks on the project's papers (any member) |
+| `PUT` | `/api/v1/projects/{project_id}/papers/{paper_id}/seen` | marks | Mark a paper opened (any member) |
+| `PUT`, `DELETE` | `/api/v1/projects/{project_id}/papers/{paper_id}/saved` | marks | Save a paper, or take it off the saved list (any member) |
+| `GET` | `/api/v1/saved-papers` | marks | The caller's saved papers |
+| `PUT` | `/api/v1/briefs/{brief_id}/seen` | marks | Mark a brief opened (any member) |
 
 ---
 
@@ -804,6 +813,49 @@ The worker (`python -m app.worker`, or the in-process worker in development) cla
 
 ---
 
+## History and marks
+
+Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity.
+
+### `GET /api/v1/needs-you`
+
+**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id"}`; fields a kind does not use are `null`. Kinds, and who sees them:
+
+| `kind` | Listed while | For | `key` |
+| --- | --- | --- | --- |
+| `gate` | the review's latest run waits at an open gate | members who may decide it (`privacy_review`: owners) | `gate:<gate_id>` |
+| `draft` | the review is drafting and its latest plan version is not accepted | owners and reviewers | `draft:<review_id>:<version>` |
+| `failed_run` | the review's latest run failed; `stopped_at` is the stage it did not finish | owners and reviewers | `failed_run:<run_id>` |
+| `unread_brief` | the review's newest brief has not been opened by the caller | every member | `unread_brief:<brief_id>` |
+
+### `POST /api/v1/needs-you/dismissals`
+
+**Request** `{"key": "failed_run:…"}`. **Response** `204`; dismissing again is also `204`. `404` unless the key is an item waiting for the caller now. The dismissal is per person and holds the key only. A changed thing has a new key (a new run, plan version or brief), so it is listed again.
+
+### `GET /api/v1/activity`
+
+**Response** `200` `{"events": [ActivityEventOut]}`, the newest 40 across the caller's live, unarchived projects. `ActivityEventOut` is `{"kind", "action", "at", "project": {"id", "name"}, "review_id", "actor": {"id", "display_name"}|null, "run_id", "run_number", "run_state", "seconds", "stopped_at", "error", "model_ids", "stages", "version", "brief_id", "thread_id", "document_id", "document_number", "text", "papers_moved"}`. `action` is one of `review_started`, `plan_drafted`, `plan_accepted`, `labels_changed`, `run` (one line per run, at its latest state), `brief_ready`, `question_asked`, `document_added`; `kind` is the timeline filter it falls under (`review`, `run`, `brief`, `question`, `document`). `text` is a question as stored (masked when masking was on) or a document's name. Home lines leave `stages` empty and `error` null: the run's log is not read for them.
+
+### `GET /api/v1/projects/{project_id}/history`
+
+**Response** `200` `{"groups": [{"review": {"id", "question", "started_at"}|null, "events": [ActivityEventOut]}]}`. Groups are ordered by their latest event and lines are newest first; `review: null` holds project-wide lines (documents). Run lines carry `stages` (`{"stage", "state", "seconds"}`, `state` one of `done`, `running`, `waiting`, `stopped`, `not_run`), the models the run's stages recorded in their manifests, and the plain-words `error` of a run that stopped. Brief lines carry the brief's model. **Who:** any member; a non-member gets the same `404` as a missing project.
+
+### Seen and saved marks
+
+A mark is per person (UI_UX_SPEC §7.5). A paper is matched across projects by the dedup rule's key, `PaperRecord.identity`: the DOI when there is one, else the normalised title and year. A mark keeps that identity sealed under the paper's own project key (`paper_marks.identity`, bound to person, paper and kind), so it is unreadable once that project is deleted. To find the same paper in another project, the identity is digested under that project's identity key and looked up as a re-run looks papers up. Marks in projects the caller has left, or that were deleted, are never opened.
+
+`PUT /api/v1/projects/{project_id}/papers/{paper_id}/seen` and `PUT …/saved` mark a paper of the project, `DELETE …/saved` takes it off the saved list; each answers `204`, and marking again keeps the first time. `404` for a paper of another project. `PUT /api/v1/briefs/{brief_id}/seen` marks a brief opened (`204`), so Needs you stops listing it for the caller.
+
+`GET /api/v1/projects/{project_id}/paper-marks` answers `{"papers": [{"paper_id", "is_seen", "is_saved", "seen_in_other_projects": [{"id", "name"}]}]}` for each of the project's papers with a mark. `is_seen` is true when the caller opened the same paper here or in any project they belong to; `seen_in_other_projects` names only those projects. `is_saved` is for this paper in this project.
+
+`GET /api/v1/saved-papers` answers `{"papers": [{"paper_id", "project": {"id", "name"}, "review_id", "title", "year", "doi", "link", "saved_at"}]}`, newest saved first, from projects the caller still belongs to.
+
+### Audit
+
+None. Marks and dismissals record what one person read or chose to hide, not a decision about the evidence; they hold ids only.
+
+---
+
 ## Semantics
 
 ### How a query is built
@@ -924,4 +976,4 @@ Every response carries security headers (CSP, HSTS, `nosniff`, `Cache-Control: n
 ## Not here
 
 - **Google Scholar** is not a source and will not be: it has no API, and its terms forbid automated access ([dependencies §4](dependencies.md#4-outside-services-and-the-libraries-that-reach-them)).
-- **P3 features** (collections, tags, pins, seen and saved marks, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).
+- **P3 features** (collections, tags, pins, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).

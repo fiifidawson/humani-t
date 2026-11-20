@@ -44,6 +44,7 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Reveal } from "../../ui/Reveal";
+import { SaveButton, SeenMark, useMarkSeen } from "../history/PaperMarks";
 import { Canvas, CanvasHeading } from "./Canvas";
 import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { paperDownloads } from "./exports";
@@ -301,6 +302,8 @@ function Why({ paper, runId }: { paper: Paper; runId: string }) {
 function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 	const [isOpen, setOpen] = useState(false);
 	const id = useId();
+	const { project } = useReview();
+	const markSeen = useMarkSeen(project.id, paper.paper_id);
 	const reason = noDecisionReason(paper);
 	return (
 		<>
@@ -322,12 +325,25 @@ function PaperRow({ paper, runId }: { paper: Paper; runId: string }) {
 						cursor="pointer"
 						aria-expanded={isOpen}
 						aria-controls={id}
-						onClick={() => setOpen(!isOpen)}
+						onClick={() => {
+							if (!isOpen) {
+								markSeen();
+							}
+							setOpen(!isOpen);
+						}}
 						css={{ "& > svg": { flex: "none", mt: "1" } }}
 					>
 						{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
 						{paper.title}
 					</chakra.button>
+					<SaveButton
+						projectId={project.id}
+						paperId={paper.paper_id}
+						title={paper.title}
+					/>
+					<Box ps="5">
+						<SeenMark projectId={project.id} paperId={paper.paper_id} />
+					</Box>
 					{reason === null ? null : (
 						<Text fontSize="sm" color="fg.muted" ps="5">
 							{reason}

@@ -374,6 +374,24 @@ const documentsRoute = createRoute({
 	),
 });
 
+const historyRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "history",
+	component: lazyRouteComponent(
+		() => import("../features/history/HistoryPage"),
+		"HistoryPage",
+	),
+});
+
+const savedRoute = createRoute({
+	getParentRoute: () => signedInRoute,
+	path: "saved",
+	component: lazyRouteComponent(
+		() => import("../features/history/SavedPage"),
+		"SavedPage",
+	),
+});
+
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
@@ -397,8 +415,10 @@ const routeTree = rootRoute.addChildren([
 			]),
 			documentsRoute,
 			threadRoute,
+			historyRoute,
 		]),
 		accountRoute,
+		savedRoute,
 	]),
 ]);
 

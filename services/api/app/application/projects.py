@@ -53,6 +53,11 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def name_context(project_id: UUID) -> EncryptionContext:
+    """How a project's name is bound: table "projects", column "name", the project."""
+    return EncryptionContext(project_id, _NAME_PURPOSE, str(project_id))
+
+
 @dataclass(frozen=True, slots=True)
 class MaskingView:
     """The owner's switch, whether masking applies now, and whether it may be turned off."""
@@ -448,7 +453,7 @@ class ProjectService:
 
     @staticmethod
     def _name_context(project_id: UUID) -> EncryptionContext:
-        return EncryptionContext(project_id, _NAME_PURPOSE, str(project_id))
+        return name_context(project_id)
 
     async def _record(
         self,

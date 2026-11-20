@@ -43,6 +43,7 @@ from app.storage.memory_collections import (
 )
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
 from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
+from app.storage.memory_marks import MarkState, MemoryDismissalRepository, MemoryMarkRepository
 from app.storage.memory_masking import (
     MaskingState,
     MemoryMaskingRuleRepository,
@@ -91,6 +92,7 @@ class _MemoryState:
         self.label_rules_state = LabelRulesState()
         self.model_instructions_state = ModelInstructionsState()
         self.collection_state = CollectionState()
+        self.mark_state = MarkState()
 
     def copy(self) -> _MemoryState:
         clone = _MemoryState()
@@ -125,6 +127,7 @@ class _MemoryState:
         clone.label_rules_state = self.label_rules_state.copy()
         clone.model_instructions_state = self.model_instructions_state.copy()
         clone.collection_state = self.collection_state.copy()
+        clone.mark_state = self.mark_state.copy()
         return clone
 
 
@@ -764,6 +767,8 @@ class MemoryUnitOfWork:
         self.placements = MemoryProjectPlacementRepository(state.collection_state)
         self.project_tags = MemoryProjectTagsRepository(state.collection_state)
         self.pins = MemoryPinRepository(state.collection_state)
+        self.marks = MemoryMarkRepository(state.mark_state)
+        self.dismissals = MemoryDismissalRepository(state.mark_state)
 
     async def commit(self) -> None:
         self._storage.state = self._staged
