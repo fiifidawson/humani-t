@@ -53,6 +53,7 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
 | `PATCH` | `/api/v1/projects/{project_id}` | projects | Rename (owner) |
 | `PUT` | `/api/v1/projects/{project_id}/masking` | projects | Switch masking on or off (owner; recent sign-in to turn it off) |
+| `PUT` | `/api/v1/projects/{project_id}/view-first` | projects | Switch "Your view first" on or off (owner) |
 | `POST` | `/api/v1/projects/{project_id}/archive` | projects | Hide from the default list (owner) |
 | `POST` | `/api/v1/projects/{project_id}/unarchive` | projects | Bring back (owner) |
 | `DELETE` | `/api/v1/projects/{project_id}` | projects | Delete by destroying the project's key (owner, recent sign-in) |
@@ -79,6 +80,8 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/runs/{run_id}/events` | runs | Follow a run as Server-Sent Events (any member) |
 | `POST` | `/api/v1/runs/{run_id}/cancel` | runs | Cancel a run; finished stages are kept (owner, reviewer) |
 | `POST` | `/api/v1/gates/{gate_id}` | runs | Decide a gate so the run continues (owner; reviewer for a vocabulary) |
+| `GET` | `/api/v1/runs/{run_id}/leaning` | briefs | Your own answer to "Your view first" for this run's brief, or `null` (any member) |
+| `PUT` | `/api/v1/runs/{run_id}/leaning` | briefs | Say which option you lean towards before reading, once (any member) |
 | `GET` | `/api/v1/needs-you` | history | What waits for the caller across their projects |
 | `POST` | `/api/v1/needs-you/dismissals` | history | Hide one Needs you item for the caller until it changes |
 | `GET` | `/api/v1/activity` | history | Recent activity in the caller's projects |
@@ -170,6 +173,7 @@ The table is the domain function `can(role, action)` in `app/domain/projects.py`
   "is_masking_on": true,
   "is_masking_effective": true,
   "can_turn_masking_off": false,
+  "is_view_first_on": false,
   "collection_id": null,
   "tags": ["Mali", "cash transfers"],
   "is_pinned": false
@@ -198,6 +202,8 @@ The masking fields come from the API, so the web app shows them without deciding
 | `is_masking_on` | The owner's switch, as stored. A new project starts on when the model is hosted, off when the deployment runs it itself. |
 | `is_masking_effective` | Whether text is masked before it reaches the model now: the switch, unless the model is hosted and the operator has not set `allow_unmasked_hosted_inference`, when it is `true` whatever the switch says. |
 | `can_turn_masking_off` | `false` while the deployment requires masking for every project. |
+
+`is_view_first_on` says whether the brief asks each member which option they lean towards before showing it (UI_UX_SPEC §6.9). Off for every new project (§16 Q3).
 
 ### `POST /api/v1/projects`
 
@@ -247,6 +253,10 @@ Owner only. **Request** `{"is_masking_on": false}`. **Response** `200` with the 
 
 With masking effectively off, typed text (the question, clarifying answers, change requests, follow-up questions) is sent without the name, place and pattern detectors; the `mask` stage keeps paper text as written; uploaded documents are used once scanned and read, with no privacy review and no `privacy_review` gate; and the prompt guard no longer refuses identifiers. The project's masking rules still apply to every text, and the guard still refuses a rule term. Receipts, follow-up questions, stage manifests and the brief's trace record which way each text was sent.
 
+### `PUT /api/v1/projects/{project_id}/view-first`
+
+Owner only, no recent sign-in. **Request** `{"is_view_first_on": true}`. **Response** `200` with the `ProjectOut`. Setting the value it already has changes nothing and records nothing. Answers are kept when it is turned off.
+
 ### `DELETE /api/v1/projects/{project_id}`
 
 Owner only, with a sign-in in the last 15 minutes. Destroys the project's data key (crypto-shredding), removes every membership and keeps the project row as a tombstone. Answers `204`; from then on the project answers `404` to everyone, exactly as if it never existed. Every ciphertext of the project (its name, encrypted audit details, later its documents) becomes permanently unreadable, including copies in backups once the backup retention window has passed. The audit chain still verifies. Irreversible; asking the user to type the name first is the web app's job.
@@ -270,7 +280,7 @@ The last owner can neither be demoted nor removed, nor leave: `409` with `"last_
 
 ### Audit
 
-Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
+Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.view_first_changed` (sealed details: `{"is_view_first_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
 
 ---
 
@@ -680,13 +690,21 @@ The source panel. **Response** `200` with `EvidenceOut`: `{"tag", "source_kind",
 
 How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds", "instructions_version"?}, "is_masked", "instructions": {"version", "text"} | null}`. `is_masked` says whether the brief's question and passages were masked; `null` for a brief written before this was recorded. `instructions` is the project's writing instructions exactly as the Writer received them, masked where masking applies; `null` when it had none, as for every brief written before they existed. `instructions_version` is in the manifest only when they were added. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
 
+### `GET`, `PUT /api/v1/runs/{run_id}/leaning`
+
+"Your view first" (UI_UX_SPEC §6.9): which option the caller leaned towards before reading the brief this run wrote. Keyed by run and by member: each member reads and writes only their own answer, and nobody else's is ever returned. **Who:** any member, viewers included; a non-member gets the same `404` as a missing run.
+
+`GET` returns `200` with `{"run_id", "option", "answered_at"}`, or `null` until the caller answers. `option` is `null` for "Not sure".
+
+`PUT` with `{"option": "Cash transfers"}` or `{"option": null}` stores the answer once and returns it. `option` must be one of the brief's option names (`422` otherwise). `409` when the caller already answered (the first answer stays) or when the project does not ask (`is_view_first_on` is false); `404` when the run has no brief. The option is sealed under the project's key (`leanings.option`, bound to the run and the member), so deleting the project makes it unreadable. Skipping the question stores nothing.
+
 ### The `answer` stage
 
 Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.for_project`, which adds the project's rules. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever`, `max_rounds`, `is_masked` and, when the Writer got the project's writing instructions, `instructions_version`.
 
 ### Audit
 
-`brief.created` by the system, with the brief as target and the project as `scope_id`; its sealed details hold the run id and version. Reading a brief is not audited, like reading a review.
+`brief.created` by the system, with the brief as target and the project as `scope_id`; its sealed details hold the run id and version. `brief.leaning_recorded` by the member, with the run as target and no details: the answer itself is never in the log. Reading a brief is not audited, like reading a review.
 
 ---
 

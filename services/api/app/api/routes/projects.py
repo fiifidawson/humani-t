@@ -24,6 +24,7 @@ from app.api.schemas.projects import (
     ProjectMaskingIn,
     ProjectOut,
     ProjectRenameIn,
+    ProjectViewFirstIn,
 )
 from app.api.session import CurrentDep, request_id
 from app.application.accounts import Current
@@ -112,6 +113,21 @@ async def set_project_masking(
     """Owners only. The project's own masking rules apply either way (ADR 0014)."""
     view = await projects.set_masking(
         current, project_id, is_on=payload.is_masking_on, request_id=request_id(request)
+    )
+    return ProjectOut.from_view(view)
+
+
+@router.put("/{project_id}/view-first", summary='Switch "Your view first" on or off')
+async def set_project_view_first(
+    project_id: UUID,
+    payload: ProjectViewFirstIn,
+    request: Request,
+    current: _Updater,
+    projects: ProjectsDep,
+) -> ProjectOut:
+    """Owners only. When on, the brief asks each member which option they lean towards."""
+    view = await projects.set_view_first(
+        current, project_id, is_on=payload.is_view_first_on, request_id=request_id(request)
     )
     return ProjectOut.from_view(view)
 

@@ -20,6 +20,7 @@ import {
 	text,
 } from "./fakeHttp";
 import { FakeInstructions } from "./fakeInstructions";
+import { FakeLeanings } from "./fakeLeanings";
 import { FakeReviews } from "./fakeReviews";
 
 const API = "*/api/v1";
@@ -68,6 +69,7 @@ interface FakeProject {
 	is_masking_on: boolean;
 	/** False plays a deployment whose hosted model requires masking (ADR 0014). */
 	can_turn_masking_off: boolean;
+	is_view_first_on: boolean;
 	collection_id: string | null;
 	tags: string[];
 	/** The signed-in person's pin. */
@@ -180,6 +182,22 @@ export class FakeApi {
 			this.projects.find((p) => p.id === projectId)?.role ?? null,
 		userId: () => this.session?.userId ?? null,
 	});
+	/** "Your view first": each member's leaning per run (fakeLeanings.ts). */
+	readonly leanings = new FakeLeanings({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		userId: () => this.session?.userId ?? null,
+		projectOf: (runId) => {
+			const run = this.reviews.runs.find((r) => r.id === runId);
+			const review = this.reviews.all.find((r) => r.id === run?.review_id);
+			return this.projects.find((p) => p.id === review?.project_id)?.id ?? null;
+		},
+		isViewFirstOn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.is_view_first_on ?? false,
+		briefOptions: (runId) =>
+			this.reviews.briefs
+				.find((b) => b.brief.run_id === runId)
+				?.brief.options.map((o) => o.name) ?? null,
+	});
 	/** A project's uploaded documents (fakeDocuments.ts). */
 	readonly documents = new FakeDocuments({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
@@ -276,6 +294,7 @@ export class FakeApi {
 			status: "planning",
 			is_masking_on: true,
 			can_turn_masking_off: true,
+			is_view_first_on: false,
 			collection_id: null,
 			tags: [],
 			pinned_at: null,
@@ -1045,6 +1064,28 @@ export class FakeApi {
 				},
 			),
 
+			// Owner only, with no recent sign-in.
+			http.put(
+				`${API}/projects/:projectId/view-first`,
+				async ({ params, request }) => {
+					const { project, refused } = this.gate(params["projectId"], {
+						isOwnersOnly: true,
+					});
+					if (refused !== null) {
+						return refused;
+					}
+					const isOn = (await jsonBody(request))["is_view_first_on"];
+					if (typeof isOn !== "boolean") {
+						return invalidBody(
+							"is_view_first_on",
+							"Input should be a valid boolean",
+						);
+					}
+					project.is_view_first_on = isOn;
+					return HttpResponse.json(projectOut(project));
+				},
+			),
+
 			// Owner only, with no recent sign-in; archiving twice keeps the first date.
 			http.post(`${API}/projects/:projectId/archive`, ({ params }) => {
 				const { project, refused } = this.gate(params["projectId"], {
@@ -1197,6 +1238,7 @@ export class FakeApi {
 			...this.reviews.handlers(),
 			...this.documents.handlers(),
 			...this.instructions.handlers(),
+			...this.leanings.handlers(),
 			...this.collections.handlers(),
 			...this.history.handlers(),
 		];

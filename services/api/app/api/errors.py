@@ -42,6 +42,7 @@ from app.domain.errors import (
     StorageUnavailableError,
 )
 from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
+from app.domain.leanings import LeaningRefusedError
 from app.domain.mfa import (
     EnrolmentCodeIncorrectError,
     LastAuthenticatorError,
@@ -249,6 +250,7 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ConcurrentUpdateError, _concurrent_update)
     app.add_exception_handler(RunConflictError, _run_conflict)
     app.add_exception_handler(InvalidTransitionError, _run_conflict)
+    app.add_exception_handler(LeaningRefusedError, _run_conflict)
     app.add_exception_handler(EmailDeliveryError, _email_delivery)
     app.add_exception_handler(PaperSourceUnavailableError, _paper_source_unavailable)
     app.add_exception_handler(InferenceRateLimitedError, _inference_rate_limited)

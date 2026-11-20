@@ -48,6 +48,7 @@ PROJECT_ROUTES = frozenset(
         ("PATCH", f"{PROJECTS}/{{project_id}}"),
         ("DELETE", f"{PROJECTS}/{{project_id}}"),
         ("PUT", f"{PROJECTS}/{{project_id}}/masking"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/view-first"),
         ("POST", f"{PROJECTS}/{{project_id}}/archive"),
         ("POST", f"{PROJECTS}/{{project_id}}/unarchive"),
         ("GET", f"{PROJECTS}/{{project_id}}/members"),

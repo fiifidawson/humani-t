@@ -274,7 +274,9 @@ Project         the unit of ownership, sharing, encryption and deletion;
                 owns one or more Reviews. Its name is stored only sealed
                 under its own data key; archived and deleted are dates, and
                 a deleted project stays as a tombstone row. is_masking_on is
-                the owner's masking switch (ADR-0014)
+                the owner's masking switch (ADR-0014);
+                is_view_first_on asks each member for a Leaning
+                before showing a brief, off by default
 MaskingPolicy   the operator's side of the masking choice, built from
                 settings: whether the model is hosted, and whether owners may
                 send it unmasked text. Not stored
@@ -359,6 +361,9 @@ Review          a question, a Vocabulary, and a set of Criteria
                 read, never stored
   AgentStep     one step of the loop that wrote a brief: round, role, status,
                 timings, tokens; a brief's AgentSteps are its trace
+  Leaning       which option one member leaned towards before reading one
+                run's brief ("Your view first"), or none for "Not sure";
+                written once, sealed, seen by that member alone
   RunManifest   everything needed to reproduce or diff a run
     RunComparison  two runs of one review, older first, part by part:
                 setup (from the manifests), discovery, screening and

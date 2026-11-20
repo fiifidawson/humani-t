@@ -1322,6 +1322,60 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/view-first": {
+      "put": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Switch \"Your view first\" on or off",
+        "description": "Owners only. When on, the brief asks each member which option they lean towards.",
+        "operationId": "set_project_view_first_api_v1_projects__project_id__view_first_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectViewFirstIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/archive": {
       "post": {
         "tags": [
@@ -4262,6 +4316,116 @@
           },
           "409": {
             "description": "Not waiting for review, or the masking changed"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/leaning": {
+      "get": {
+        "tags": [
+          "briefs"
+        ],
+        "summary": "Which option you leaned towards before reading this run's brief",
+        "description": "`null` until you answer. Nobody else's answer is ever returned.",
+        "operationId": "read_leaning_api_v1_runs__run_id__leaning_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LeaningOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Read Leaning Api V1 Runs  Run Id  Leaning Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "briefs"
+        ],
+        "summary": "Say which option you lean towards, before reading the brief",
+        "description": "Once per member and brief; the first answer stays.",
+        "operationId": "record_leaning_api_v1_runs__run_id__leaning_put",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaningIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaningOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or the run has no brief"
+          },
+          "409": {
+            "description": "Already answered, or the project does not ask"
           },
           "422": {
             "description": "Validation Error",
@@ -8142,6 +8306,62 @@
         ],
         "title": "LabelRulesVersionOut"
       },
+      "LeaningIn": {
+        "properties": {
+          "option": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option",
+            "description": "One of the brief's option names, or null for \"Not sure\"."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "option"
+        ],
+        "title": "LeaningIn"
+      },
+      "LeaningOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "option": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option",
+            "description": "null when the member was not sure."
+          },
+          "answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Answered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "option",
+          "answered_at"
+        ],
+        "title": "LeaningOut"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -9869,6 +10089,11 @@
             "title": "Can Turn Masking Off",
             "description": "false while the deployment requires masking for every project."
           },
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On",
+            "description": "Whether the brief asks members which option they lean towards first."
+          },
           "collection_id": {
             "anyOf": [
               {
@@ -9907,6 +10132,7 @@
           "is_masking_on",
           "is_masking_effective",
           "can_turn_masking_off",
+          "is_view_first_on",
           "collection_id",
           "tags",
           "is_pinned"
@@ -10041,6 +10267,11 @@
             "title": "Can Turn Masking Off",
             "description": "false while the deployment requires masking for every project."
           },
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On",
+            "description": "Whether the brief asks members which option they lean towards first."
+          },
           "collection_id": {
             "anyOf": [
               {
@@ -10139,6 +10370,7 @@
           "is_masking_on",
           "is_masking_effective",
           "can_turn_masking_off",
+          "is_view_first_on",
           "collection_id",
           "tags",
           "is_pinned",
@@ -10169,6 +10401,20 @@
           "tags"
         ],
         "title": "ProjectTagsIn"
+      },
+      "ProjectViewFirstIn": {
+        "properties": {
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_view_first_on"
+        ],
+        "title": "ProjectViewFirstIn"
       },
       "ProvenanceOut": {
         "properties": {

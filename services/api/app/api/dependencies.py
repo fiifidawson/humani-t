@@ -36,6 +36,7 @@ from app.application.exports import ExportService
 from app.application.history import HistoryService
 from app.application.inference import GuardedInference
 from app.application.label_rules import LabelRulesService, PlanCriteria
+from app.application.leanings import LeaningService
 from app.application.marks import MarkService
 from app.application.masking import (
     DocumentsAwaitingReview,
@@ -142,6 +143,7 @@ class Providers:
     plans: PlanService
     masking_rules: MaskingRuleService
     briefs: BriefService
+    leanings: LeaningService
     questions: QuestionService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     answers: QuestionWorker
@@ -604,6 +606,9 @@ def build_providers(
         plans=plans,
         masking_rules=masking_rules,
         briefs=BriefService(storage=storage, encryption=encryption),
+        leanings=LeaningService(
+            storage=storage, encryption=encryption, audit=audit, clock=clock
+        ),
         questions=QuestionService(
             storage=storage,
             encryption=encryption,
@@ -755,6 +760,13 @@ def get_briefs(providers: ProvidersDep) -> BriefService:
 
 
 BriefsDep = Annotated[BriefService, Depends(get_briefs)]
+
+
+def get_leanings(providers: ProvidersDep) -> LeaningService:
+    return providers.leanings
+
+
+LeaningsDep = Annotated[LeaningService, Depends(get_leanings)]
 
 
 def get_exports(providers: ProvidersDep) -> ExportService:

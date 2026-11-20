@@ -38,6 +38,7 @@ from app.storage.postgres.collections import (
 )
 from app.storage.postgres.documents import PostgresDocumentRepository
 from app.storage.postgres.label_rules import PostgresLabelRulesRepository
+from app.storage.postgres.leanings import PostgresLeaningRepository
 from app.storage.postgres.marks import PostgresDismissalRepository, PostgresMarkRepository
 from app.storage.postgres.masking import (
     PostgresMaskingRuleRepository,
@@ -649,6 +650,7 @@ class PostgresUnitOfWork:
         self.documents = PostgresDocumentRepository(connection)
         self.label_rules = PostgresLabelRulesRepository(connection)
         self.model_instructions = PostgresModelInstructionsRepository(connection)
+        self.leanings = PostgresLeaningRepository(connection)
         self.collections = PostgresCollectionRepository(connection)
         self.placements = PostgresProjectPlacementRepository(connection)
         self.project_tags = PostgresProjectTagsRepository(connection)

@@ -580,6 +580,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/view-first": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch "Your view first" on or off
+         * @description Owners only. When on, the brief asks each member which option they lean towards.
+         */
+        put: operations["set_project_view_first_api_v1_projects__project_id__view_first_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/archive": {
         parameters: {
             query?: never;
@@ -1434,6 +1454,30 @@ export interface paths {
         put?: never;
         /** Reject the masked version you reviewed: it is never used */
         post: operations["reject_document_api_v1_projects__project_id__documents__document_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/leaning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which option you leaned towards before reading this run's brief
+         * @description `null` until you answer. Nobody else's answer is ever returned.
+         */
+        get: operations["read_leaning_api_v1_runs__run_id__leaning_get"];
+        /**
+         * Say which option you lean towards, before reading the brief
+         * @description Once per member and brief; the first answer stays.
+         */
+        put: operations["record_leaning_api_v1_runs__run_id__leaning_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3095,6 +3139,32 @@ export interface components {
              */
             papers_moved: number;
         };
+        /** LeaningIn */
+        LeaningIn: {
+            /**
+             * Option
+             * @description One of the brief's option names, or null for "Not sure".
+             */
+            option: string | null;
+        };
+        /** LeaningOut */
+        LeaningOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Option
+             * @description null when the member was not sure.
+             */
+            option: string | null;
+            /**
+             * Answered At
+             * Format: date-time
+             */
+            answered_at: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -3872,6 +3942,11 @@ export interface components {
              */
             can_turn_masking_off: boolean;
             /**
+             * Is View First On
+             * @description Whether the brief asks members which option they lean towards first.
+             */
+            is_view_first_on: boolean;
+            /**
              * Collection Id
              * @description The one collection the project is filed in; null for none (ADR 0016).
              */
@@ -3957,6 +4032,11 @@ export interface components {
              */
             can_turn_masking_off: boolean;
             /**
+             * Is View First On
+             * @description Whether the brief asks members which option they lean towards first.
+             */
+            is_view_first_on: boolean;
+            /**
              * Collection Id
              * @description The one collection the project is filed in; null for none (ADR 0016).
              */
@@ -3998,6 +4078,11 @@ export interface components {
         ProjectTagsIn: {
             /** Tags */
             tags: string[];
+        };
+        /** ProjectViewFirstIn */
+        ProjectViewFirstIn: {
+            /** Is View First On */
+            is_view_first_on: boolean;
         };
         /**
          * ProvenanceOut
@@ -6252,6 +6337,41 @@ export interface operations {
             };
         };
     };
+    set_project_view_first_api_v1_projects__project_id__view_first_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectViewFirstIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     archive_project_api_v1_projects__project_id__archive_post: {
         parameters: {
             query?: never;
@@ -8192,6 +8312,86 @@ export interface operations {
                 };
             };
             /** @description Not waiting for review, or the masking changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_leaning_api_v1_runs__run_id__leaning_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaningOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_leaning_api_v1_runs__run_id__leaning_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaningIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaningOut"];
+                };
+            };
+            /** @description No such run, or the run has no brief */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already answered, or the project does not ask */
             409: {
                 headers: {
                     [name: string]: unknown;

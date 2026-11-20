@@ -192,6 +192,7 @@ projects = Table(
     Column("deleted_at", DateTime(timezone=True), nullable=True),
     Column("version", Integer, nullable=False, server_default="0"),
     Column("is_masking_on", Boolean, nullable=False, server_default="true"),
+    Column("is_view_first_on", Boolean, nullable=False, server_default="false"),
 )
 
 memberships = Table(
@@ -554,6 +555,16 @@ model_instruction_versions = Table(
     Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("version >= 1", name="version_counts_from_one"),
+)
+
+leanings = Table(
+    "leanings",
+    metadata,
+    Column("run_id", Uuid, ForeignKey("runs.id"), primary_key=True),
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("option_sealed", LargeBinary, nullable=False),
+    Column("answered_at", DateTime(timezone=True), nullable=False),
 )
 
 # Collections are shared labels (ADR 0016); the name is sealed under the collection's own

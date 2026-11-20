@@ -322,9 +322,21 @@ export interface BriefSearch {
 	run?: string | undefined;
 	/** The source panel's tag (UI_UX_SPEC §3.2 "a passage is a query parameter"). */
 	source?: string | undefined;
+	/** Picked trade-off criteria, as positions in the brief's list: names are project text. */
+	priorities?: number[] | undefined;
 }
 
 const SOURCE_TAG = /^[PD]\d{1,6}$/;
+
+function positions(value: unknown): number[] | undefined {
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+	const kept = value.filter(
+		(n): n is number => Number.isInteger(n) && n >= 0 && n < 100,
+	);
+	return kept.length === 0 ? undefined : [...new Set(kept)];
+}
 
 const briefRoute = createRoute({
 	getParentRoute: () => reviewRoute,
@@ -335,6 +347,7 @@ const briefRoute = createRoute({
 			typeof search["source"] === "string" && SOURCE_TAG.test(search["source"])
 				? search["source"]
 				: undefined,
+		priorities: positions(search["priorities"]),
 	}),
 	component: lazyRouteComponent(
 		() => import("../features/briefs/BriefCanvas"),

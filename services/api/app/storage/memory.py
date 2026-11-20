@@ -43,6 +43,7 @@ from app.storage.memory_collections import (
 )
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
 from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
+from app.storage.memory_leanings import LeaningState, MemoryLeaningRepository
 from app.storage.memory_marks import MarkState, MemoryDismissalRepository, MemoryMarkRepository
 from app.storage.memory_masking import (
     MaskingState,
@@ -91,6 +92,7 @@ class _MemoryState:
         self.document_state = DocumentState()
         self.label_rules_state = LabelRulesState()
         self.model_instructions_state = ModelInstructionsState()
+        self.leaning_state = LeaningState()
         self.collection_state = CollectionState()
         self.mark_state = MarkState()
 
@@ -126,6 +128,7 @@ class _MemoryState:
         clone.document_state = self.document_state.copy()
         clone.label_rules_state = self.label_rules_state.copy()
         clone.model_instructions_state = self.model_instructions_state.copy()
+        clone.leaning_state = self.leaning_state.copy()
         clone.collection_state = self.collection_state.copy()
         clone.mark_state = self.mark_state.copy()
         return clone
@@ -763,6 +766,7 @@ class MemoryUnitOfWork:
         self.model_instructions = MemoryModelInstructionsRepository(
             state.model_instructions_state
         )
+        self.leanings = MemoryLeaningRepository(state.leaning_state)
         self.collections = MemoryCollectionRepository(state.collection_state)
         self.placements = MemoryProjectPlacementRepository(state.collection_state)
         self.project_tags = MemoryProjectTagsRepository(state.collection_state)

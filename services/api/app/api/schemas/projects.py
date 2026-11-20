@@ -35,6 +35,10 @@ class ProjectMaskingIn(_Strict):
     is_masking_on: bool
 
 
+class ProjectViewFirstIn(_Strict):
+    is_view_first_on: bool
+
+
 class MemberIn(_Strict):
     email: EmailStr
     role: Role
@@ -63,6 +67,9 @@ class ProjectOut(BaseModel):
     can_turn_masking_off: bool = Field(
         description="false while the deployment requires masking for every project."
     )
+    is_view_first_on: bool = Field(
+        description="Whether the brief asks members which option they lean towards first."
+    )
     collection_id: UUID | None = Field(
         description="The one collection the project is filed in; null for none (ADR 0016)."
     )
@@ -81,6 +88,7 @@ class ProjectOut(BaseModel):
             is_masking_on=view.masking.is_on,
             is_masking_effective=view.masking.is_effective,
             can_turn_masking_off=view.masking.can_turn_off,
+            is_view_first_on=view.is_view_first_on,
             collection_id=view.labels.collection_id,
             tags=list(view.labels.tags),
             is_pinned=view.labels.is_pinned,

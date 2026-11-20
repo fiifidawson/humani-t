@@ -24,6 +24,7 @@ from app.domain.documents import Document, DocumentMask, DocumentReview, Documen
 from app.domain.encryption import WrappedDataKey
 from app.domain.history import Dismissal
 from app.domain.label_rules import LabelRulesVersion
+from app.domain.leanings import StoredLeaning
 from app.domain.marks import BriefRead, PaperMark, PaperMarkKind
 from app.domain.masking import MaskingRuleRecord, PaperMask
 from app.domain.mfa import (
@@ -463,6 +464,16 @@ class ModelInstructionsRepository(Protocol):
         ...
 
 
+class LeaningRepository(Protocol):
+    """Members' answers to "Your view first", sealed: inserted, never updated."""
+
+    async def add(self, leaning: StoredLeaning, /) -> bool:
+        """False if this member already answered for this run: the first answer stays."""
+        ...
+
+    async def get(self, run_id: UUID, user_id: UUID) -> StoredLeaning | None: ...
+
+
 class CollectionRepository(Protocol):
     """Collections shared across the deployment (ADR 0016)."""
 
@@ -864,6 +875,9 @@ class UnitOfWork(Protocol):
 
     @property
     def briefs(self) -> DecisionBriefRepository: ...
+
+    @property
+    def leanings(self) -> LeaningRepository: ...
 
     @property
     def questions(self) -> QuestionRepository: ...

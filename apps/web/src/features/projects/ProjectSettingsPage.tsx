@@ -1,5 +1,5 @@
 /**
- * Project settings: name, archiving, collection and tags, members, masking rules, and the danger zone
+ * Project settings: name, archiving, collection and tags, members, masking rules, briefs, and the danger zone
  * where anyone may leave and owners may delete.
  *
  * Deleting destroys the project's key (crypto-shredding), so it asks for the name
@@ -29,6 +29,7 @@ import { ArchiveControl, ArchiveStatus } from "./ProjectArchive";
 import { MembersSection } from "./ProjectMembers";
 import { SettingsSection } from "./SettingsSection";
 import { useLeaveForHome } from "./useLeaveForHome";
+import { ViewFirstSwitch } from "./ViewFirstSwitch";
 
 export function ProjectSettingsPage() {
 	const api = useApi();
@@ -84,6 +85,9 @@ export function ProjectSettingsPage() {
 					projectId={projectId}
 					isOwner={role === "owner"}
 				/>
+				<SettingsSection title="Briefs">
+					<ViewFirstSwitch project={project.data} />
+				</SettingsSection>
 				<SettingsSection title="Danger zone" isDanger>
 					<Stack gap="4">
 						<LeaveControl project={project.data} />

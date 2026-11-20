@@ -78,6 +78,7 @@ class ProjectView:
     archived_at: datetime | None
     status: ProjectStatus
     masking: MaskingView
+    is_view_first_on: bool = False
     labels: ProjectLabels = NO_LABELS
 
 
@@ -161,6 +162,7 @@ class ProjectService:
             None,
             ProjectStatus.PLANNING,
             self._masking_view(project),
+            project.is_view_first_on,
         )
 
     async def list_mine(
@@ -230,6 +232,29 @@ class ProjectService:
         if not is_on and self._runs is not None:
             await self._runs.release_privacy_gates(current, project_id, request_id)
         return view
+
+    async def set_view_first(
+        self, current: Current, project_id: UUID, *, is_on: bool, request_id: str | None = None
+    ) -> ProjectView:
+        """Switch "Your view first" on or off: whether a brief asks for a leaning first."""
+        async with self._storage.unit_of_work() as uow:
+            project, membership = await self._access(
+                uow, current, project_id, Action.UPDATE_PROJECT
+            )
+            changed = project.with_view_first(is_on=is_on)
+            if changed != project:
+                await uow.projects.save(changed)
+                await self._audit.record(
+                    uow,
+                    current.actor(request_id),
+                    "project.view_first_changed",
+                    "project",
+                    str(project_id),
+                    scope_id=project_id,
+                    details={"is_view_first_on": is_on},
+                )
+                await uow.commit()
+            return await self._view(uow, changed, membership.role, current.user.id)
 
     async def archive(
         self, current: Current, project_id: UUID, request_id: str | None = None
@@ -423,6 +448,7 @@ class ProjectService:
             project.archived_at,
             await _status(uow, project),
             self._masking_view(project),
+            project.is_view_first_on,
             await read_labels(uow, self._encryption, project.id, user_id),
         )
 

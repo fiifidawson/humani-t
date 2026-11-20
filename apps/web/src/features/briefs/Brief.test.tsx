@@ -6,6 +6,7 @@ import { CAVEAT } from "../../test/fakeBriefs";
 import { FakeEventSource } from "../../test/fakeEventSource";
 import { currentPath, renderApp } from "../../test/render";
 import { fakeApi } from "../../test/server";
+import { setScreenWidth } from "../../test/viewport";
 
 type Brief = components["schemas"]["BriefOut"];
 
@@ -14,14 +15,17 @@ function briefed(
 		role?: "owner" | "reviewer" | "viewer";
 		state?: "running" | "done";
 		brief?: Partial<Brief> | null;
+		isViewFirstOn?: boolean;
 	} = {},
 ) {
 	const api = fakeApi();
-	api.signInAs(api.addUser({ hasTotp: true }));
+	const me = api.addUser({ hasTotp: true });
+	api.signInAs(me);
 	const project = api.addProject(
 		"Cash vs vouchers, Gao",
 		options.role ?? "owner",
 	);
+	project.is_view_first_on = options.isViewFirstOn ?? false;
 	const review = api.reviews.add(project.id, "Cash or vouchers in camps?");
 	api.reviews.startPlan(review, "shallow");
 	api.reviews.accept(review);
@@ -32,6 +36,7 @@ function briefed(
 			: api.reviews.addBrief(review, run, options.brief);
 	return {
 		api,
+		me,
 		project,
 		review,
 		run,
@@ -334,6 +339,221 @@ describe("trade-offs and priorities (UI_UX_SPEC §6.9)", () => {
 		expect(
 			within(canvas).getByRole("checkbox", { name: "Do no harm" }),
 		).toBeChecked();
+	});
+});
+
+describe("trade-off priorities as a view preference (UI_UX_SPEC §6.9)", () => {
+	const rowsOf = (canvas: HTMLElement) =>
+		within(within(canvas).getByRole("table", { name: "Trade-offs" }))
+			.getAllByRole("rowheader")
+			.map((row) => row.textContent ?? "");
+
+	it("lists the humanitarian criteria first in the picker, marked as humanitarian", async () => {
+		const { path } = briefed();
+		const { canvas } = await openBrief(path);
+		const picker = within(canvas).getByRole("group", {
+			name: "What matters most to you?",
+		});
+
+		const boxes = within(picker).getAllByRole("checkbox");
+		expect(boxes).toHaveLength(2);
+		expect(boxes[0]).toHaveAccessibleName("Do no harm");
+		expect(boxes[1]).toHaveAccessibleName("Cost to deliver");
+		expect(boxes[0]).toHaveAccessibleDescription("humanitarian");
+		expect(boxes[1]).not.toHaveAccessibleDescription("humanitarian");
+	});
+
+	it("keeps the picks in the address, so reopening the link shows the same priorities", async () => {
+		const { path } = briefed();
+		const { canvas, user, router, unmount } = await openBrief(path);
+
+		await user.click(
+			within(canvas).getByRole("checkbox", { name: /Cost to deliver/ }),
+		);
+		const href = router.state.location.href;
+		unmount();
+		renderApp(href);
+		await screen.findByRole("navigation", { name: "Sections of this brief" });
+
+		const again = screen.getByRole("region", { name: "Decision brief" });
+		expect(
+			within(again).getByRole("checkbox", { name: /Cost to deliver/ }),
+		).toBeChecked();
+		expect(rowsOf(again)[0]).toContain("Cost to deliver");
+		expect(rowsOf(again)[0]).toContain("priority");
+		// Positions, not names: the criteria are project text and stay out of the address.
+		expect(href).not.toContain("Cost");
+	});
+
+	it("can keep the original order, still marking the picked rows as priorities", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openBrief(path);
+		await user.click(
+			within(canvas).getByRole("checkbox", { name: /Cost to deliver/ }),
+		);
+		expect(rowsOf(canvas)[0]).toContain("Cost to deliver");
+
+		await user.click(
+			within(canvas).getByRole("radio", { name: "Original order" }),
+		);
+
+		const rows = rowsOf(canvas);
+		expect(rows[0]).toContain("Do no harm");
+		expect(rows[1]).toContain("Cost to deliver");
+		expect(rows[1]).toContain("priority");
+
+		await user.click(
+			within(canvas).getByRole("radio", { name: "Your priorities first" }),
+		);
+		expect(rowsOf(canvas)[0]).toContain("Cost to deliver");
+	});
+
+	it("shows one card per criterion on a narrow screen, with the options inside", async () => {
+		setScreenWidth(400);
+		const { path } = briefed();
+		const { canvas, user } = await openBrief(path);
+		const tradeOffs = within(canvas).getByRole("region", {
+			name: "Trade-offs",
+		});
+
+		expect(within(tradeOffs).queryByRole("table")).not.toBeInTheDocument();
+		await user.click(
+			within(tradeOffs).getByRole("checkbox", { name: /Cost to deliver/ }),
+		);
+		const cards = within(tradeOffs).getAllByRole("article");
+		expect(
+			cards.map(
+				(card) => within(card).getByRole("heading", { level: 4 }).textContent,
+			),
+		).toEqual(["Cost to deliver", "Do no harm"]);
+		expect(cards[0]).toHaveTextContent("priority");
+		const options = within(cards[0] as HTMLElement).getAllByRole("term");
+		expect(options.map((o) => o.textContent)).toEqual([
+			"Cash transfers",
+			"Vouchers",
+			"In-kind food",
+		]);
+	});
+
+	it("has no accessibility violations on a narrow screen with a priority picked", async () => {
+		setScreenWidth(400);
+		const { path } = briefed();
+		const { canvas, user, container } = await openBrief(path);
+		await user.click(
+			within(canvas).getByRole("checkbox", { name: /Do no harm/ }),
+		);
+
+		await expectNoAccessibilityViolations(container);
+	});
+});
+
+describe("your view first (UI_UX_SPEC §6.9)", () => {
+	async function openAsked(path: string) {
+		const view = renderApp(`${path}/brief`);
+		const prompt = await screen.findByRole("region", {
+			name: "Before you read the brief",
+		});
+		return { ...view, prompt };
+	}
+
+	it("asks which option you lean towards before showing the brief, when the project asks", async () => {
+		const { path } = briefed({ isViewFirstOn: true });
+		const { prompt } = await openAsked(path);
+
+		const answers = within(
+			within(prompt).getByRole("group", {
+				name: "Which option do you lean towards now?",
+			}),
+		)
+			.getAllByRole("button")
+			.map((b) => b.textContent);
+		expect(answers).toEqual([
+			"Cash transfers",
+			"Vouchers",
+			"In-kind food",
+			"Not sure",
+		]);
+		expect(within(prompt).getByRole("button", { name: "Skip" })).toBeVisible();
+		expect(
+			screen.queryByRole("table", { name: "Trade-offs" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("saves the answer for this brief and shows it in the header", async () => {
+		const { api, path, run } = briefed({ isViewFirstOn: true });
+		const { prompt, user } = await openAsked(path);
+
+		await user.click(
+			within(prompt).getByRole("button", { name: "Cash transfers" }),
+		);
+
+		expect(
+			await screen.findByText(
+				"You leaned towards Cash transfers before reading.",
+			),
+		).toBeVisible();
+		expect(screen.getByRole("table", { name: "Trade-offs" })).toBeVisible();
+		const sent = api.requests.filter(
+			(r) => r.method === "PUT" && r.path.endsWith(`/runs/${run.id}/leaning`),
+		);
+		expect(sent.map((r) => r.body)).toEqual([{ option: "Cash transfers" }]);
+	});
+
+	it("saves 'Not sure' as no option", async () => {
+		const { api, path, run } = briefed({ isViewFirstOn: true });
+		const { prompt, user } = await openAsked(path);
+
+		await user.click(within(prompt).getByRole("button", { name: "Not sure" }));
+
+		expect(
+			await screen.findByText("You were not sure before reading."),
+		).toBeVisible();
+		expect(api.requestsTo("PUT", `/runs/${run.id}/leaning`)[0]?.body).toEqual({
+			option: null,
+		});
+	});
+
+	it("can be skipped, saves nothing, and asks again next time", async () => {
+		const { api, path, run } = briefed({ isViewFirstOn: true });
+		const { prompt, user, unmount } = await openAsked(path);
+
+		await user.click(within(prompt).getByRole("button", { name: "Skip" }));
+
+		expect(
+			await screen.findByRole("table", { name: "Trade-offs" }),
+		).toBeVisible();
+		expect(api.requestsTo("PUT", `/runs/${run.id}/leaning`)).toEqual([]);
+		unmount();
+		await openAsked(path);
+	});
+
+	it("does not ask again once you have answered", async () => {
+		const { api, me, path, run } = briefed({ isViewFirstOn: true });
+		api.leanings.add(run.id, me.id, "In-kind food");
+		const { canvas } = await openBrief(path);
+
+		expect(
+			await within(canvas).findByText(
+				"You leaned towards In-kind food before reading.",
+			),
+		).toBeVisible();
+		expect(
+			screen.queryByRole("region", { name: "Before you read the brief" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("does not ask when the project has it off, as it is by default", async () => {
+		const { path } = briefed();
+		const { canvas } = await openBrief(path);
+
+		expect(canvas).not.toHaveTextContent("lean");
+	});
+
+	it("has no accessibility violations", async () => {
+		const { path } = briefed({ isViewFirstOn: true });
+		const { container } = await openAsked(path);
+
+		await expectNoAccessibilityViolations(container);
 	});
 });
 
