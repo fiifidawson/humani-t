@@ -10,12 +10,26 @@
 
 import { Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import {
+	Outlet,
+	useLocation,
+	useNavigate,
+	useParams,
+} from "@tanstack/react-router";
+import {
+	type KeyboardEvent,
+	type ReactNode,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useApi } from "../../app/api-context";
 import { useDraft, usePageMemory } from "../../app/memory";
 import { PANEL_LIMITS, usePanelWidth } from "../../app/preferences";
 import { reviewsQuery } from "../../app/reviewQueries";
+import { allowsSingleKey } from "../../shell/useShortcuts";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
@@ -373,6 +387,97 @@ function Conversation({
 	);
 }
 
+/**
+ * `]` (UI_UX_SPEC §11.5): close the open canvas, or open the last one again;
+ * with none yet, the brief if there is one, else the latest run, else the draft.
+ */
+function useCanvasKey({
+	isCanvasOpen,
+	href,
+	hasBrief,
+}: {
+	isCanvasOpen: boolean;
+	href: string;
+	hasBrief: boolean;
+}) {
+	const navigate = useNavigate();
+	const { project, review, plan, runs } = useReview();
+	const lastCanvas = useRef<string | null>(null);
+	useEffect(() => {
+		if (isCanvasOpen) {
+			lastCanvas.current = href;
+		}
+	}, [isCanvasOpen, href]);
+	const latestRun = runs[0]?.id;
+	const hasDraft = plan.current !== null;
+
+	useEffect(() => {
+		const params = { projectId: project.id, reviewId: review.id };
+		const onKeyDown = (event: globalThis.KeyboardEvent) => {
+			if (event.key !== "]" || !allowsSingleKey(event)) {
+				return;
+			}
+			event.preventDefault();
+			if (isCanvasOpen) {
+				void navigate({ to: "/p/$projectId/r/$reviewId", params });
+			} else if (lastCanvas.current !== null) {
+				void navigate({ href: lastCanvas.current });
+			} else if (hasBrief) {
+				void navigate({ to: "/p/$projectId/r/$reviewId/brief", params });
+			} else if (latestRun !== undefined) {
+				void navigate({
+					to: "/p/$projectId/r/$reviewId/run/$runId",
+					params: { ...params, runId: latestRun },
+				});
+			} else if (hasDraft) {
+				void navigate({ to: "/p/$projectId/r/$reviewId/draft", params });
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [
+		navigate,
+		project.id,
+		review.id,
+		isCanvasOpen,
+		hasBrief,
+		latestRun,
+		hasDraft,
+	]);
+}
+
+/** `j` and `k` move between the chat's cards; Enter on a card follows its first link. */
+function moveBetweenCards(event: KeyboardEvent<HTMLElement>) {
+	if (!allowsSingleKey(event.nativeEvent)) {
+		return;
+	}
+	const cards = [
+		...event.currentTarget.querySelectorAll<HTMLElement>("[data-chat-card]"),
+	];
+	const current = cards.findIndex((card) =>
+		card.contains(document.activeElement),
+	);
+	if (event.key === "j" || event.key === "k") {
+		event.preventDefault();
+		const step = event.key === "j" ? 1 : -1;
+		const next =
+			current === -1 ? (step === 1 ? 0 : cards.length - 1) : current + step;
+		cards[Math.min(Math.max(next, 0), cards.length - 1)]?.focus();
+	} else if (
+		event.key === "Enter" &&
+		event.target instanceof HTMLElement &&
+		cards.includes(event.target)
+	) {
+		const link = event.target.querySelector<HTMLElement>(
+			"[data-card-actions] a[href]",
+		);
+		if (link !== null) {
+			event.preventDefault();
+			link.click();
+		}
+	}
+}
+
 function ReviewLayout({
 	draft,
 	setDraft,
@@ -383,9 +488,10 @@ function ReviewLayout({
 	isFirstReview: boolean;
 }) {
 	const { review, plan, runs, canManage, actions } = useReview();
-	const { pathname } = useLocation();
+	const { pathname, href } = useLocation();
 	const isCanvasOpen = !pathname.replace(/\/$/, "").endsWith(`/r/${review.id}`);
 	const hasBrief = useHasBrief();
+	useCanvasKey({ isCanvasOpen, href, hasBrief });
 	const ask = useAskState(draft, setDraft);
 	const askSetup = useAskSetup(ask);
 	const setup =
@@ -432,6 +538,9 @@ function ReviewLayout({
 						<Flex
 							role="log"
 							aria-label="Project conversation"
+							// Focusable, as a scrolling region must be; j and k start from here.
+							tabIndex={0}
+							onKeyDown={moveBetweenCards}
 							flex="1"
 							minH="0"
 							position="relative"

@@ -274,13 +274,26 @@ Project         the unit of ownership, sharing, encryption and deletion;
                 owns one or more Reviews. Its name is stored only sealed
                 under its own data key; archived and deleted are dates, and
                 a deleted project stays as a tombstone row. is_masking_on is
-                the owner's masking switch (ADR-0014)
+                the owner's masking switch (ADR-0014);
+                is_view_first_on asks each member for a Leaning
+                before showing a brief, off by default
 MaskingPolicy   the operator's side of the masking choice, built from
                 settings: whether the model is hosted, and whether owners may
                 send it unmasked text. Not stored
 Membership      (User, Project, Role) where Role is owner | reviewer | viewer;
                 removed when the project is deleted
 AuditEvent      who did what to which object, when; hash-chained
+Collection      a label shared across the deployment, one level deep, with no
+                access rules of its own (ADR-0016). Its name is sealed under
+                its own data key; deleting it unfiles its projects
+ProjectPlacement  the one Collection a Project is filed in, if any
+Tags            a Project's free labels, sealed together under its key
+Pin             one User's bookmark on a Project they belong to
+SearchQuery     a few words and an optional scope to look for across the
+                caller's projects; matched in the application on decrypted
+                text, never stored (ADR-0018)
+SearchHit       one match: its scope, an excerpt, and the ids to open it;
+                grouped by project in SearchResults
 ```
 
 A **Project** is what the brief calls a project. It is the boundary for three things:
@@ -347,9 +360,20 @@ Review          a question, a Vocabulary, and a set of Criteria
     Claim       a statement in the brief, marked evidence or hypothesis
     Citation    a Claim bound to one retrieved passage, from a paper
                 (PaperRecord) or from a team's uploaded Document
+    BriefComparison  what changed from one version to a later one:
+                options added or removed, strength changes, and sources
+                (matched by paper, not tag) added or removed; computed on
+                read, never stored
   AgentStep     one step of the loop that wrote a brief: round, role, status,
                 timings, tokens; a brief's AgentSteps are its trace
+  Leaning       which option one member leaned towards before reading one
+                run's brief ("Your view first"), or none for "Not sure";
+                written once, sealed, seen by that member alone
   RunManifest   everything needed to reproduce or diff a run
+    RunComparison  two runs of one review, older first, part by part:
+                setup (from the manifests), discovery, screening and
+                BriefComparison; computed on read, and only when both
+                runs' stages recorded a manifest fact
   Run           one background execution of some of a Review's stages; its
                 row is also its job in the queue (§4.4)
     RunEvent    one entry in a run's log: an id counting from 1 within the
@@ -494,6 +518,29 @@ POST /api/v1/runs/{run_id}/cancel
 - Polling was rejected: it either lags or loads the API, and the browser would have to rebuild its own replay logic.
 
 Retrofitting a pause into a synchronous endpoint is a breaking change. Designing for it now costs nothing.
+
+### 4.5 History, Needs you and marks
+
+What happened in a project, and what waits for a person, are derived each time from the records above; only a person's own choices are stored ([ADR-0017](adr/0017-history-is-derived-and-marks-die-with-their-project.md)):
+
+```text
+NeedsYouItem    one thing in one review waiting for a person: an open gate, a
+                draft waiting for accept, a failed latest run, or a newest
+                brief they have not opened. Derived, never stored; its key
+                names the gate, run, plan version or brief, so a new one is
+                a new item
+Dismissal       (User, item key, when): a person hid one NeedsYouItem
+ActivityEvent   one L0 line: review started, plan drafted or accepted, labels
+                changed, a run at its latest state (with its stages and
+                models), brief ready, question asked, document added. Derived
+PaperMark       (User, paper, seen | saved): the paper's identity (DOI, else
+                title and year) sealed under the paper's project key, so the
+                same paper is recognised in the person's other projects and
+                the mark dies with its project
+BriefRead       (User, brief): the person opened the brief
+```
+
+Every read starts from the projects the person is a member of now, so a line, a count or a "seen in" can never name another project.
 
 ---
 

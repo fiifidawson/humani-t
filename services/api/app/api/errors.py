@@ -31,12 +31,18 @@ from app.domain.accounts import (
     ReauthenticationRequiredError,
     ThrottledError,
 )
+from app.domain.collections import (
+    CollectionError,
+    CollectionNameTakenError,
+    NoSuchCollectionError,
+)
 from app.domain.errors import (
     ConcurrentUpdateError,
     RateLimiterUnavailableError,
     StorageUnavailableError,
 )
 from app.domain.inference import InferenceRateLimitedError, InferenceUnavailableError
+from app.domain.leanings import LeaningRefusedError
 from app.domain.mfa import (
     EnrolmentCodeIncorrectError,
     LastAuthenticatorError,
@@ -182,6 +188,14 @@ async def _project_error(_: Request, exc: Exception) -> JSONResponse:
     return problem(status, str(exc), **extensions)
 
 
+async def _collection_error(_: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, CollectionNameTakenError):
+        return problem(409, str(exc), collection_name_taken=True)
+    # 422, not 404: on a project route the UI reads 404 as "no such project".
+    assert isinstance(exc, NoSuchCollectionError)  # noqa: S101 — the only other kind
+    return problem(422, str(exc))
+
+
 async def _run_conflict(_: Request, exc: Exception) -> JSONResponse:
     # The messages are written for members: what changed, and what to do now.
     return problem(409, str(exc))
@@ -230,11 +244,13 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(AccountError, _account_error)
     app.add_exception_handler(ProjectError, _project_error)
+    app.add_exception_handler(CollectionError, _collection_error)
     app.add_exception_handler(StorageUnavailableError, _storage_unavailable)
     app.add_exception_handler(RateLimiterUnavailableError, _rate_limiter_unavailable)
     app.add_exception_handler(ConcurrentUpdateError, _concurrent_update)
     app.add_exception_handler(RunConflictError, _run_conflict)
     app.add_exception_handler(InvalidTransitionError, _run_conflict)
+    app.add_exception_handler(LeaningRefusedError, _run_conflict)
     app.add_exception_handler(EmailDeliveryError, _email_delivery)
     app.add_exception_handler(PaperSourceUnavailableError, _paper_source_unavailable)
     app.add_exception_handler(InferenceRateLimitedError, _inference_rate_limited)

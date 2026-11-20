@@ -3,7 +3,8 @@
  *
  * What the person picks as mattering most only reorders and highlights: the brief
  * has no per-cell scores and this screen invents none. Options stay in the Writer's
- * order, and nothing is ranked unless the person asks.
+ * order, and nothing is ranked unless the person asks. The picks are a view
+ * preference, kept in the address; "Your view first" is in ViewFirst.tsx.
  */
 
 import {
@@ -32,11 +33,14 @@ import { ErrorNotice } from "../../ui/ErrorNotice";
 import { linkStyle } from "../../ui/LinkButton";
 import { Loading } from "../../ui/Loading";
 import { Reveal } from "../../ui/Reveal";
+import { useMediaQuery } from "../../ui/useMediaQuery";
+import { useBriefSeen } from "../history/PaperMarks";
 import { Canvas } from "../reviews/Canvas";
 import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
 import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
+import { BriefVersions } from "./BriefVersions";
 import {
 	type BriefSource,
 	CitationChip,
@@ -46,6 +50,12 @@ import {
 	EvidenceBadge,
 } from "./Claim";
 import { SourcePanel } from "./SourcePanel";
+import {
+	type Leaning,
+	leaningQuery,
+	leaningWords,
+	ViewFirstQuestion,
+} from "./ViewFirst";
 import {
 	CONFLICTS,
 	SCORES,
@@ -60,6 +70,11 @@ type Schemas = components["schemas"];
 type Brief = Schemas["BriefOut"];
 type Option = Schemas["OptionOut"];
 type OpenSource = (tag: string) => void;
+type TradeOff = Brief["trade_offs"][number];
+type RowOrder = "priorities" | "original";
+
+// Below Chakra's `md`: the matrix becomes one card per criterion (§6.9).
+const NARROW_SCREEN = "(max-width: 767px)";
 
 const FROM = "/signed-in/p/$projectId/r/$reviewId/brief" as const;
 
@@ -148,7 +163,15 @@ function SectionBar({ prefix }: { prefix: string }) {
 	);
 }
 
-function Header({ brief, onOpen }: { brief: Brief; onOpen: OpenSource }) {
+function Header({
+	brief,
+	leaning,
+	onOpen,
+}: {
+	brief: Brief;
+	leaning: Leaning | null;
+	onOpen: OpenSource;
+}) {
 	const { project, review } = useReview();
 	return (
 		<Stack gap="4">
@@ -166,6 +189,10 @@ function Header({ brief, onOpen }: { brief: Brief; onOpen: OpenSource }) {
 					stoppedBecause(brief.stopped_because, brief.max_rounds),
 				].join(" · ")}
 			</Text>
+			<BriefVersions key={brief.id} brief={brief} />
+			{leaning === null ? null : (
+				<Text fontSize="sm">{leaningWords(leaning)}</Text>
+			)}
 			<Box>
 				<Text fontSize="xs" color="fg.muted" mb="1">
 					The question as the model received it
@@ -378,18 +405,217 @@ function OptionCard({
 	);
 }
 
-/** Picked first, then humanitarian criteria, then the rest, each in the Writer's order (§6.9). */
+/** Humanitarian criteria first, then the rest, each in the Writer's order (§6.9). */
+const humanitarianFirst = (rows: readonly TradeOff[]) => [
+	...rows.filter((row) => row.is_humanitarian),
+	...rows.filter((row) => !row.is_humanitarian),
+];
+
+/** The rows to show; with "priorities", the picked ones move to the top. */
 function orderedRows(
 	brief: Brief,
 	picked: readonly string[],
 	isHumanitarianOnly: boolean,
+	order: RowOrder,
 ) {
-	const rows = brief.trade_offs.filter(
+	const rows = humanitarianFirst(brief.trade_offs).filter(
 		(row) => !isHumanitarianOnly || row.is_humanitarian,
 	);
-	const rank = (row: Brief["trade_offs"][number]) =>
-		picked.includes(row.criterion) ? 0 : row.is_humanitarian ? 1 : 2;
-	return [...rows].sort((a, b) => rank(a) - rank(b));
+	return order === "original"
+		? rows
+		: [
+				...rows.filter((row) => picked.includes(row.criterion)),
+				...rows.filter((row) => !picked.includes(row.criterion)),
+			];
+}
+
+function HumanitarianMark({ id }: { id?: string }) {
+	return (
+		<Text
+			as="span"
+			id={id}
+			display="inline-flex"
+			gap="1"
+			alignItems="center"
+			fontSize="xs"
+			fontWeight="normal"
+			color="fg.muted"
+		>
+			<HeartHandshake size={12} aria-hidden="true" />
+			humanitarian
+		</Text>
+	);
+}
+
+function PriorityMark() {
+	return (
+		<Text as="span" fontSize="xs" color="link">
+			priority
+		</Text>
+	);
+}
+
+/** A criterion's name with its marks, as a row header or a card heading. */
+function CriterionLabel({
+	row,
+	isPicked,
+}: {
+	row: TradeOff;
+	isPicked: boolean;
+}) {
+	return (
+		<Flex direction="column" gap="0.5">
+			<span>{row.criterion}</span>
+			{row.is_humanitarian ? <HumanitarianMark /> : null}
+			{isPicked ? <PriorityMark /> : null}
+		</Flex>
+	);
+}
+
+function Picker({
+	brief,
+	picked,
+	onToggle,
+}: {
+	brief: Brief;
+	picked: readonly string[];
+	onToggle: (criterion: string) => void;
+}) {
+	const prefix = useId();
+	return (
+		<chakra.fieldset border="0" p="0" m="0">
+			<chakra.legend fontWeight="medium" fontSize="sm" mb="1">
+				What matters most to you?
+			</chakra.legend>
+			<Flex gap="3" wrap="wrap">
+				{humanitarianFirst(brief.trade_offs).map((row, index) => {
+					const markId = `${prefix}-${index}`;
+					return (
+						<Flex key={row.criterion} gap="1.5" align="center" fontSize="sm">
+							<chakra.label display="inline-flex" gap="1.5" alignItems="center">
+								<chakra.input
+									type="checkbox"
+									checked={picked.includes(row.criterion)}
+									onChange={() => onToggle(row.criterion)}
+									aria-describedby={row.is_humanitarian ? markId : undefined}
+									accentColor="brand.solid"
+									boxSize="4"
+								/>
+								{row.criterion}
+							</chakra.label>
+							{row.is_humanitarian ? <HumanitarianMark id={markId} /> : null}
+						</Flex>
+					);
+				})}
+			</Flex>
+		</chakra.fieldset>
+	);
+}
+
+function OrderChoice({
+	order,
+	onChange,
+}: {
+	order: RowOrder;
+	onChange: (order: RowOrder) => void;
+}) {
+	const name = useId();
+	const choices: [RowOrder, string][] = [
+		["priorities", "Your priorities first"],
+		["original", "Original order"],
+	];
+	return (
+		<chakra.fieldset border="0" p="0" m="0">
+			<chakra.legend fontWeight="medium" fontSize="sm" mb="1">
+				Sort
+			</chakra.legend>
+			<Flex gap="3" wrap="wrap">
+				{choices.map(([value, label]) => (
+					<Flex key={value} as="label" gap="1.5" align="center" fontSize="sm">
+						<chakra.input
+							type="radio"
+							name={name}
+							checked={order === value}
+							onChange={() => onChange(value)}
+							accentColor="brand.solid"
+							boxSize="4"
+						/>
+						{label}
+					</Flex>
+				))}
+			</Flex>
+		</chakra.fieldset>
+	);
+}
+
+/** Narrow screens: one card per criterion, with the options as rows inside. */
+function CriterionCards({
+	brief,
+	rows,
+	picked,
+	onOpen,
+}: {
+	brief: Brief;
+	rows: readonly TradeOff[];
+	picked: readonly string[];
+	onOpen: OpenSource;
+}) {
+	const prefix = useId();
+	return (
+		<Stack gap="3">
+			{rows.map((row, index) => {
+				const isPicked = picked.includes(row.criterion);
+				const headingId = `${prefix}-${index}`;
+				return (
+					<Box
+						as="article"
+						key={row.criterion}
+						aria-labelledby={headingId}
+						p="3"
+						rounded="card"
+						borderWidth="1px"
+						borderColor="border"
+						borderLeftWidth="3px"
+						borderLeftColor={isPicked ? "focusRing" : "border"}
+						bg="bg.panel"
+					>
+						<Heading as="h4" id={headingId} fontSize="sm" fontWeight="medium">
+							{row.criterion}
+						</Heading>
+						<Flex gap="2">
+							{row.is_humanitarian ? <HumanitarianMark /> : null}
+							{isPicked ? <PriorityMark /> : null}
+						</Flex>
+						<chakra.dl mt="2">
+							{brief.options.map((option) => {
+								const cell = row.assessments.find(
+									(a) => a.option === option.name,
+								);
+								return (
+									<Box key={option.name} py="1">
+										<chakra.dt fontWeight="medium" fontSize="sm">
+											{option.name}
+										</chakra.dt>
+										<chakra.dd ms="0">
+											{cell === undefined ? (
+												"—"
+											) : (
+												<ClaimText
+													claim={cell.claim}
+													sources={brief.sources}
+													onOpen={onOpen}
+												/>
+											)}
+										</chakra.dd>
+									</Box>
+								);
+							})}
+						</chakra.dl>
+					</Box>
+				);
+			})}
+		</Stack>
+	);
 }
 
 function TradeOffs({
@@ -406,8 +632,10 @@ function TradeOffs({
 	labelId: string;
 }) {
 	const [isHumanitarianOnly, setHumanitarianOnly] = useState(false);
+	const [order, setOrder] = useState<RowOrder>("priorities");
+	const isNarrow = useMediaQuery(NARROW_SCREEN);
 	const id = useId();
-	const rows = orderedRows(brief, picked, isHumanitarianOnly);
+	const rows = orderedRows(brief, picked, isHumanitarianOnly, order);
 	const considered = brief.considerations.filter((c) =>
 		picked.includes(c.criterion),
 	);
@@ -415,31 +643,8 @@ function TradeOffs({
 	return (
 		<>
 			<Flex gap="6" wrap="wrap" mb="3" align="flex-start">
-				<chakra.fieldset border="0" p="0" m="0">
-					<chakra.legend fontWeight="medium" fontSize="sm" mb="1">
-						What matters most to you?
-					</chakra.legend>
-					<Flex gap="3" wrap="wrap">
-						{brief.trade_offs.map((row) => (
-							<Flex
-								key={row.criterion}
-								as="label"
-								gap="1.5"
-								align="center"
-								fontSize="sm"
-							>
-								<chakra.input
-									type="checkbox"
-									checked={picked.includes(row.criterion)}
-									onChange={() => onToggle(row.criterion)}
-									accentColor="brand.solid"
-									boxSize="4"
-								/>
-								{row.criterion}
-							</Flex>
-						))}
-					</Flex>
-				</chakra.fieldset>
+				<Picker brief={brief} picked={picked} onToggle={onToggle} />
+				<OrderChoice order={order} onChange={setOrder} />
 				<Flex as="label" gap="1.5" align="center" fontSize="sm">
 					<chakra.input
 						type="checkbox"
@@ -472,78 +677,66 @@ function TradeOffs({
 					))}
 				</Stack>
 			)}
-			<Box overflowX="auto">
-				<Table.Root size="sm" aria-labelledby={labelId} id={id}>
-					<Table.Header>
-						<Table.Row>
-							<Table.ColumnHeader>Criterion</Table.ColumnHeader>
-							{brief.options.map((option) => (
-								<Table.ColumnHeader key={option.name}>
-									{option.name}
-								</Table.ColumnHeader>
-							))}
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{rows.map((row) => {
-							const isPicked = picked.includes(row.criterion);
-							return (
-								<Table.Row key={row.criterion} verticalAlign="top">
-									<Table.Cell
-										as="th"
-										scope="row"
-										textAlign="start"
-										fontWeight="medium"
-										borderLeftWidth="3px"
-										borderLeftColor={isPicked ? "focusRing" : "transparent"}
-									>
-										<Flex direction="column" gap="0.5">
-											<span>{row.criterion}</span>
-											{row.is_humanitarian ? (
-												<Text
-													as="span"
-													display="inline-flex"
-													gap="1"
-													alignItems="center"
-													fontSize="xs"
-													fontWeight="normal"
-													color="fg.muted"
-												>
-													<HeartHandshake size={12} />
-													humanitarian
-												</Text>
-											) : null}
-											{isPicked ? (
-												<Text as="span" fontSize="xs" color="link">
-													priority
-												</Text>
-											) : null}
-										</Flex>
-									</Table.Cell>
-									{brief.options.map((option) => {
-										const cell = row.assessments.find(
-											(a) => a.option === option.name,
-										);
-										return (
-											<Table.Cell key={option.name}>
-												{cell === undefined ? (
-													"—"
-												) : (
-													<ClaimText
-														claim={cell.claim}
-														sources={brief.sources}
-														onOpen={onOpen}
-													/>
-												)}
-											</Table.Cell>
-										);
-									})}
-								</Table.Row>
-							);
-						})}
-					</Table.Body>
-				</Table.Root>
-			</Box>
+			{isNarrow ? (
+				<CriterionCards
+					brief={brief}
+					rows={rows}
+					picked={picked}
+					onOpen={onOpen}
+				/>
+			) : (
+				<Box overflowX="auto">
+					<Table.Root size="sm" aria-labelledby={labelId} id={id}>
+						<Table.Header>
+							<Table.Row>
+								<Table.ColumnHeader>Criterion</Table.ColumnHeader>
+								{brief.options.map((option) => (
+									<Table.ColumnHeader key={option.name}>
+										{option.name}
+									</Table.ColumnHeader>
+								))}
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{rows.map((row) => {
+								const isPicked = picked.includes(row.criterion);
+								return (
+									<Table.Row key={row.criterion} verticalAlign="top">
+										<Table.Cell
+											as="th"
+											scope="row"
+											textAlign="start"
+											fontWeight="medium"
+											borderLeftWidth="3px"
+											borderLeftColor={isPicked ? "focusRing" : "transparent"}
+										>
+											<CriterionLabel row={row} isPicked={isPicked} />
+										</Table.Cell>
+										{brief.options.map((option) => {
+											const cell = row.assessments.find(
+												(a) => a.option === option.name,
+											);
+											return (
+												<Table.Cell key={option.name}>
+													{cell === undefined ? (
+														"—"
+													) : (
+														<ClaimText
+															claim={cell.claim}
+															sources={brief.sources}
+															onOpen={onOpen}
+														/>
+													)}
+												</Table.Cell>
+											);
+										})}
+									</Table.Row>
+								);
+							})}
+						</Table.Body>
+					</Table.Root>
+				</Box>
+			)}
 		</>
 	);
 }
@@ -699,19 +892,39 @@ function Quality({ quality }: { quality: NonNullable<Brief["quality"]> }) {
 	);
 }
 
-function BriefView({ brief }: { brief: Brief }) {
+function BriefView({
+	brief,
+	leaning,
+}: {
+	brief: Brief;
+	leaning: Leaning | null;
+}) {
 	const { project, review } = useReview();
 	const navigate = useNavigate();
 	const search = useSearch({ from: FROM });
 	const prefix = useId();
-	const [picked, setPicked] = useState<string[]>([]);
-	const toggle = (criterion: string) =>
-		setPicked((current) =>
-			current.includes(criterion)
-				? current.filter((c) => c !== criterion)
-				: [...current, criterion],
-		);
+	const criteria = brief.trade_offs.map((row) => row.criterion);
+	const positions = search.priorities ?? [];
+	const picked = positions.flatMap((n) => criteria[n] ?? []);
 	const params = { projectId: project.id, reviewId: review.id };
+	const toggle = (criterion: string) => {
+		const position = criteria.indexOf(criterion);
+		if (position === -1) {
+			return;
+		}
+		const next = positions.includes(position)
+			? positions.filter((n) => n !== position)
+			: [...positions, position];
+		void navigate({
+			to: "/p/$projectId/r/$reviewId/brief",
+			params,
+			search: (previous) => ({
+				...previous,
+				priorities: next.length === 0 ? undefined : next,
+			}),
+			replace: true,
+		});
+	};
 	const openSource = (tag: string) =>
 		void navigate({
 			to: "/p/$projectId/r/$reviewId/brief",
@@ -750,7 +963,7 @@ function BriefView({ brief }: { brief: Brief }) {
 		>
 			<SectionBar prefix={prefix} />
 			<Section prefix={prefix} name="summary" title="Summary">
-				<Header brief={brief} onOpen={openSource} />
+				<Header brief={brief} leaning={leaning} onOpen={openSource} />
 			</Section>
 
 			<Section prefix={prefix} name="options" title="Options">
@@ -872,9 +1085,16 @@ function BriefView({ brief }: { brief: Brief }) {
 
 export function BriefCanvas() {
 	const api = useApi();
-	const { review } = useReview();
+	const { project, review } = useReview();
 	const search = useSearch({ from: FROM });
 	const brief = useQuery(briefQuery(api, review.id, search.run));
+	const runId = brief.data?.run_id;
+	const leaning = useQuery({
+		...leaningQuery(api, runId ?? ""),
+		enabled: runId !== undefined,
+	});
+	const [skippedRun, setSkippedRun] = useState<string | null>(null);
+	useBriefSeen(brief.data?.id);
 
 	if (isApiError(brief.error, "not-found")) {
 		return (
@@ -899,5 +1119,25 @@ export function BriefCanvas() {
 			</Canvas>
 		);
 	}
-	return <BriefView brief={brief.data} />;
+	const isAsking = project.is_view_first_on && skippedRun !== brief.data.run_id;
+	if (isAsking && leaning.isPending) {
+		return (
+			<Canvas title="Decision brief">
+				<Loading what="the brief" />
+			</Canvas>
+		);
+	}
+	if (isAsking && leaning.data === null) {
+		const { run_id: briefRun } = brief.data;
+		return (
+			<Canvas title="Decision brief">
+				<ViewFirstQuestion
+					runId={briefRun}
+					options={brief.data.options.map((option) => option.name)}
+					onSkip={() => setSkippedRun(briefRun)}
+				/>
+			</Canvas>
+		);
+	}
+	return <BriefView brief={brief.data} leaning={leaning.data ?? null} />;
 }

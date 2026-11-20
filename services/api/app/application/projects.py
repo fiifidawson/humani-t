@@ -17,6 +17,7 @@ from uuid import UUID
 from app.application.accounts import Current
 from app.application.audit import AuditLog
 from app.application.encryption import ScopeEncryption
+from app.application.project_labels import NO_LABELS, ProjectLabels, read_labels
 from app.application.runs import RunService
 from app.domain.accounts import (
     ForbiddenError,
@@ -52,6 +53,11 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def name_context(project_id: UUID) -> EncryptionContext:
+    """How a project's name is bound: table "projects", column "name", the project."""
+    return EncryptionContext(project_id, _NAME_PURPOSE, str(project_id))
+
+
 @dataclass(frozen=True, slots=True)
 class MaskingView:
     """The owner's switch, whether masking applies now, and whether it may be turned off."""
@@ -72,6 +78,8 @@ class ProjectView:
     archived_at: datetime | None
     status: ProjectStatus
     masking: MaskingView
+    is_view_first_on: bool = False
+    labels: ProjectLabels = NO_LABELS
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +162,7 @@ class ProjectService:
             None,
             ProjectStatus.PLANNING,
             self._masking_view(project),
+            project.is_view_first_on,
         )
 
     async def list_mine(
@@ -166,7 +175,7 @@ class ProjectService:
                 membership = await uow.memberships.get(project.id, current.user.id)
                 if membership is None or (project.is_archived and not include_archived):
                     continue
-                views.append(await self._view(uow, project, membership.role))
+                views.append(await self._view(uow, project, membership.role, current.user.id))
         return views
 
     async def get(self, current: Current, project_id: UUID) -> ProjectView:
@@ -174,7 +183,7 @@ class ProjectService:
             project, membership = await self._access(
                 uow, current, project_id, Action.READ_PROJECT
             )
-            return await self._view(uow, project, membership.role)
+            return await self._view(uow, project, membership.role, current.user.id)
 
     async def rename(
         self, current: Current, project_id: UUID, name: str, request_id: str | None = None
@@ -187,17 +196,9 @@ class ProjectService:
             renamed = project.renamed(await self._seal_name(uow, project_id, name))
             await uow.projects.save(renamed)
             await self._record(uow, current, request_id, "project.renamed", project_id)
-            status = await _status(uow, renamed)
+            view = await self._view(uow, renamed, membership.role, current.user.id)
             await uow.commit()
-        return ProjectView(
-            project_id,
-            name,
-            membership.role,
-            project.created_at,
-            project.archived_at,
-            status,
-            self._masking_view(renamed),
-        )
+        return view
 
     async def set_masking(
         self, current: Current, project_id: UUID, *, is_on: bool, request_id: str | None = None
@@ -227,10 +228,33 @@ class ProjectService:
                     details={"is_masking_on": is_on},
                 )
                 await uow.commit()
-            view = await self._view(uow, changed, membership.role)
+            view = await self._view(uow, changed, membership.role, current.user.id)
         if not is_on and self._runs is not None:
             await self._runs.release_privacy_gates(current, project_id, request_id)
         return view
+
+    async def set_view_first(
+        self, current: Current, project_id: UUID, *, is_on: bool, request_id: str | None = None
+    ) -> ProjectView:
+        """Switch "Your view first" on or off: whether a brief asks for a leaning first."""
+        async with self._storage.unit_of_work() as uow:
+            project, membership = await self._access(
+                uow, current, project_id, Action.UPDATE_PROJECT
+            )
+            changed = project.with_view_first(is_on=is_on)
+            if changed != project:
+                await uow.projects.save(changed)
+                await self._audit.record(
+                    uow,
+                    current.actor(request_id),
+                    "project.view_first_changed",
+                    "project",
+                    str(project_id),
+                    scope_id=project_id,
+                    details={"is_view_first_on": is_on},
+                )
+                await uow.commit()
+            return await self._view(uow, changed, membership.role, current.user.id)
 
     async def archive(
         self, current: Current, project_id: UUID, request_id: str | None = None
@@ -262,6 +286,10 @@ class ProjectService:
             )
             await self._encryption.destroy_scope(uow, project_id)
             await uow.memberships.remove_all_for_project(project_id)
+            # Who pinned what, and where it was filed, go with the members.
+            await uow.pins.remove_for_project(project_id)
+            await uow.placements.remove(project_id)
+            await uow.project_tags.remove(project_id)
             await uow.projects.save(project.deleted(self._clock()))
             await self._record(uow, current, request_id, "project.deleted", project_id)
             await uow.commit()
@@ -356,6 +384,7 @@ class ProjectService:
                 await uow.memberships.list_for_project(project_id), user_id, None
             )
             await uow.memberships.remove(project_id, user_id)
+            await uow.pins.remove(user_id, project_id)
             await self._record_member(uow, current, request_id, "membership.removed", target)
             await uow.commit()
 
@@ -372,7 +401,7 @@ class ProjectService:
                 action = "project.archived" if archive else "project.unarchived"
                 await self._record(uow, current, request_id, action, project_id)
                 await uow.commit()
-            return await self._view(uow, changed, membership.role)
+            return await self._view(uow, changed, membership.role, current.user.id)
 
     async def _access(
         self,
@@ -405,7 +434,9 @@ class ProjectService:
             raise NotFoundError("No such member.")
         return membership
 
-    async def _view(self, uow: UnitOfWork, project: Project, role: Role) -> ProjectView:
+    async def _view(
+        self, uow: UnitOfWork, project: Project, role: Role, user_id: UUID
+    ) -> ProjectView:
         name = await self._encryption.decrypt(
             uow, self._name_context(project.id), project.name_sealed
         )
@@ -417,6 +448,8 @@ class ProjectService:
             project.archived_at,
             await _status(uow, project),
             self._masking_view(project),
+            project.is_view_first_on,
+            await read_labels(uow, self._encryption, project.id, user_id),
         )
 
     def _masking_view(self, project: Project) -> MaskingView:
@@ -446,7 +479,7 @@ class ProjectService:
 
     @staticmethod
     def _name_context(project_id: UUID) -> EncryptionContext:
-        return EncryptionContext(project_id, _NAME_PURPOSE, str(project_id))
+        return name_context(project_id)
 
     async def _record(
         self,

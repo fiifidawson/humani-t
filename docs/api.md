@@ -49,10 +49,11 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/admin/users/{id}/disable` | admin | Disable an account |
 | `POST` | `/api/v1/admin/users/{id}/enable` | admin | Let a disabled account sign in again |
 | `POST` | `/api/v1/projects` | projects | Create a project; the caller becomes its owner |
-| `GET` | `/api/v1/projects` | projects | The caller's projects, newest first |
+| `GET` | `/api/v1/projects` | projects | The caller's projects, filtered and sorted, with what grouping needs |
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
 | `PATCH` | `/api/v1/projects/{project_id}` | projects | Rename (owner) |
 | `PUT` | `/api/v1/projects/{project_id}/masking` | projects | Switch masking on or off (owner; recent sign-in to turn it off) |
+| `PUT` | `/api/v1/projects/{project_id}/view-first` | projects | Switch "Your view first" on or off (owner) |
 | `POST` | `/api/v1/projects/{project_id}/archive` | projects | Hide from the default list (owner) |
 | `POST` | `/api/v1/projects/{project_id}/unarchive` | projects | Bring back (owner) |
 | `DELETE` | `/api/v1/projects/{project_id}` | projects | Delete by destroying the project's key (owner, recent sign-in) |
@@ -60,8 +61,18 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/projects/{project_id}/members` | projects | Give an existing account a role (owner, recent sign-in) |
 | `PATCH` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Change a member's role (owner, recent sign-in) |
 | `DELETE` | `/api/v1/projects/{project_id}/members/{user_id}` | projects | Remove a member (owner, recent sign-in), or leave (anyone) |
+| `GET` | `/api/v1/collections` | collections | Every collection, counting the caller's own projects only |
+| `POST` | `/api/v1/collections` | collections | Create a collection (any signed-in user) |
+| `PATCH` | `/api/v1/collections/{collection_id}` | collections | Rename it (its creator or an administrator) |
+| `DELETE` | `/api/v1/collections/{collection_id}` | collections | Delete it; its projects stay, in no collection (its creator or an administrator) |
+| `PUT` | `/api/v1/projects/{project_id}/collection` | collections | File the project in a collection, or in none (owner) |
+| `PUT` | `/api/v1/projects/{project_id}/tags` | collections | Replace the project's tags (owner) |
+| `PUT` | `/api/v1/projects/{project_id}/pin` | collections | Pin it for yourself (any member) |
+| `DELETE` | `/api/v1/projects/{project_id}/pin` | collections | Unpin it (any member) |
+| `POST` | `/api/v1/project-actions` | collections | Move, tag or archive several projects; reports what it skipped |
 | `GET` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | The project's instructions to the model and every version (any member) |
 | `PUT` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | Save them as the next version (owner) |
+| `GET` | `/api/v1/search?q=&scope=` | search | Search the caller's projects; results grouped by project |
 | `POST` | `/api/v1/projects/{project_id}/reviews` | reviews | Ask a question in the project (owner, reviewer) |
 | `GET` | `/api/v1/projects/{project_id}/reviews` | reviews | The project's reviews, newest first (any member) |
 | `GET` | `/api/v1/projects/{project_id}/reviews/{review_id}` | reviews | One review (any member) |
@@ -70,6 +81,17 @@ Then <http://127.0.0.1:8731/docs>.
 | `GET` | `/api/v1/runs/{run_id}/events` | runs | Follow a run as Server-Sent Events (any member) |
 | `POST` | `/api/v1/runs/{run_id}/cancel` | runs | Cancel a run; finished stages are kept (owner, reviewer) |
 | `POST` | `/api/v1/gates/{gate_id}` | runs | Decide a gate so the run continues (owner; reviewer for a vocabulary) |
+| `GET` | `/api/v1/runs/{run_id}/leaning` | briefs | Your own answer to "Your view first" for this run's brief, or `null` (any member) |
+| `PUT` | `/api/v1/runs/{run_id}/leaning` | briefs | Say which option you lean towards before reading, once (any member) |
+| `GET` | `/api/v1/needs-you` | history | What waits for the caller across their projects |
+| `POST` | `/api/v1/needs-you/dismissals` | history | Hide one Needs you item for the caller until it changes |
+| `GET` | `/api/v1/activity` | history | Recent activity in the caller's projects |
+| `GET` | `/api/v1/projects/{project_id}/history` | history | The project's timeline, grouped by review (any member) |
+| `GET` | `/api/v1/projects/{project_id}/paper-marks` | marks | The caller's seen and saved marks on the project's papers (any member) |
+| `PUT` | `/api/v1/projects/{project_id}/papers/{paper_id}/seen` | marks | Mark a paper opened (any member) |
+| `PUT`, `DELETE` | `/api/v1/projects/{project_id}/papers/{paper_id}/saved` | marks | Save a paper, or take it off the saved list (any member) |
+| `GET` | `/api/v1/saved-papers` | marks | The caller's saved papers |
+| `PUT` | `/api/v1/briefs/{brief_id}/seen` | marks | Mark a brief opened (any member) |
 
 ---
 
@@ -151,11 +173,15 @@ The table is the domain function `can(role, action)` in `app/domain/projects.py`
   "status": "brief_ready",
   "is_masking_on": true,
   "is_masking_effective": true,
-  "can_turn_masking_off": false
+  "can_turn_masking_off": false,
+  "is_view_first_on": false,
+  "collection_id": null,
+  "tags": ["Mali", "cash transfers"],
+  "is_pinned": false
 }
 ```
 
-`role` is the caller's own role. The name is stored encrypted under the project's own key; only members ever see it in the clear.
+`role` is the caller's own role. `collection_id`, `tags` and `is_pinned` are described under [Collections, tags and pins](#collections-tags-and-pins); `is_pinned` is the caller's own pin. The name is stored encrypted under the project's own key; only members ever see it in the clear.
 
 `status` is derived, never set (UI_UX_SPEC §11.1), by `project_status` in `app/domain/projects.py`. It comes from the newest review and that review's latest run:
 
@@ -178,6 +204,8 @@ The masking fields come from the API, so the web app shows them without deciding
 | `is_masking_effective` | Whether text is masked before it reaches the model now: the switch, unless the model is hosted and the operator has not set `allow_unmasked_hosted_inference`, when it is `true` whatever the switch says. |
 | `can_turn_masking_off` | `false` while the deployment requires masking for every project. |
 
+`is_view_first_on` says whether the brief asks each member which option they lean towards before showing it (UI_UX_SPEC §6.9). Off for every new project (§16 Q3).
+
 ### `POST /api/v1/projects`
 
 **Request** `{"name": "Cholera response, Sana'a"}`. The name is trimmed and must be 1 to 200 characters with no control or bidirectional-override characters (`422` otherwise). Unknown fields are refused (`422`), so the owner, id and dates cannot be set by the client.
@@ -186,7 +214,33 @@ The masking fields come from the API, so the web app shows them without deciding
 
 ### `GET /api/v1/projects`
 
-The caller's projects, newest first, each with the caller's role. Archived projects are left out unless `?include_archived=true`.
+The caller's projects, each a `ProjectOut` with what the All projects page groups, filters and sorts by (UI_UX_SPEC §7.2). Only projects the caller is a member of are ever read, so no filter can bring in anyone else's.
+
+```json
+{
+  "…": "every ProjectOut field",
+  "last_activity_at": "2026-11-18T10:58:00Z",
+  "pinned_at": null,
+  "members": [{ "user_id": "2b9e…", "display_name": "Kofi Mensah", "role": "reviewer" }],
+  "relevant_papers": 52,
+  "papers_found": 340,
+  "brief_version": 2
+}
+```
+
+`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, and its latest brief. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
+
+Query parameters, all optional, all of which must hold:
+
+| Parameter | Meaning |
+| --- | --- |
+| `sort` | `last_activity` (default, newest first), `name` (A to Z, ignoring case), `created` (newest first), `relevant_papers` (most first, projects with none last). Ties go to the most recent activity. |
+| `status` | Repeatable; any of these `ProjectOut.status` values. `archived` brings archived projects in. |
+| `tag` | Repeatable; every one of these tags, ignoring case. |
+| `owner`, `member` | A user id: projects that person owns, or belongs to. |
+| `created_from`, `created_to` | Dates, inclusive, in UTC. `422` if the range ends before it starts. |
+| `collection` | A collection id, or `none` for projects in no collection. |
+| `include_archived` | `true` to include archived projects. Left out otherwise, unless `status` asks for them. |
 
 ### `GET`, `PATCH /api/v1/projects/{project_id}`, `POST …/archive`, `POST …/unarchive`
 
@@ -199,6 +253,10 @@ The caller's projects, newest first, each with the caller's role. Archived proje
 Owner only. **Request** `{"is_masking_on": false}`. **Response** `200` with the `ProjectOut`. Turning masking off needs a sign-in in the last 15 minutes; turning it on never does. `409` with `"masking_required": true` and the detail "This deployment sends text to a hosted model, so masking stays on." when masking cannot be turned off; the request is valid, but the deployment's configuration refuses it, as with the last owner. Setting the value it already has changes nothing and records nothing. Turning masking off also approves the project's open `privacy_review` gates, as the caller, so a waiting run carries on; each shows as `gate.resolved` in its run's events.
 
 With masking effectively off, typed text (the question, clarifying answers, change requests, follow-up questions) is sent without the name, place and pattern detectors; the `mask` stage keeps paper text as written; uploaded documents are used once scanned and read, with no privacy review and no `privacy_review` gate; and the prompt guard no longer refuses identifiers. The project's masking rules still apply to every text, and the guard still refuses a rule term. Receipts, follow-up questions, stage manifests and the brief's trace record which way each text was sent.
+
+### `PUT /api/v1/projects/{project_id}/view-first`
+
+Owner only, no recent sign-in. **Request** `{"is_view_first_on": true}`. **Response** `200` with the `ProjectOut`. Setting the value it already has changes nothing and records nothing. Answers are kept when it is turned off.
 
 ### `DELETE /api/v1/projects/{project_id}`
 
@@ -223,7 +281,67 @@ The last owner can neither be demoted nor removed, nor leave: `409` with `"last_
 
 ### Audit
 
-Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
+Every project action is recorded with ids only: `project.created`, `project.renamed`, `project.archived`, `project.unarchived`, `project.masking_changed` (sealed details: `{"is_masking_on": …}`), `project.view_first_changed` (sealed details: `{"is_view_first_on": …}`), `project.deleted` (target: the project), and `membership.added`, `membership.role_changed`, `membership.removed` (target: the member's user id). Each carries the project's id as `scope_id`, the actor and the request id. Refused attempts are not recorded.
+
+---
+
+## Collections, tags and pins
+
+How people group and find projects (UI_UX_SPEC §7.1 to §7.3; [ADR-0016](adr/0016-collections-are-shared-labels.md)). A **collection** is a label shared across the deployment, one level deep, with no access rules of its own: it grants nothing and reveals no project to anyone outside it. A project is in at most one. **Tags** are a project's own free labels, as many as 20, each up to 40 characters. A **pin** is one person's bookmark.
+
+### `CollectionOut`
+
+```json
+{ "id": "9a0d…", "name": "Sahel 2026", "project_count": 4, "can_manage": true, "created_at": "2026-11-19T09:00:00Z" }
+```
+
+`project_count` counts the caller's own projects in it, archived ones aside; never anyone else's. `can_manage` says whether the caller may rename or delete it: its creator, or an instance administrator.
+
+### `GET /api/v1/collections`
+
+Every collection, by name, to any signed-in user. Collection names are visible to everyone in the deployment; a label meant only for a team belongs in a tag.
+
+### `POST /api/v1/collections`
+
+**Request** `{"name": "Sahel 2026"}`. Any signed-in user. The name is trimmed with its spaces collapsed, 1 to 80 characters, with no control or bidirectional-override characters (`422` otherwise). `409` with `"collection_name_taken": true` if another collection uses the name in any spelling ("sahel  2026" and "Sahel 2026" are one name). **Response** `201` with the `CollectionOut` and `Location`. The collection gets its own data key, and its name is stored only sealed under it.
+
+### `PATCH`, `DELETE /api/v1/collections/{collection_id}`
+
+Its creator or an administrator; anyone else gets `403`, a missing collection `404`. `PATCH` with `{"name": "…"}` renames it for everyone, with the same rules as on create; a collection may take its own name in another case. `DELETE` answers `204`: every project it held, whoever owns it, is then in no collection, and its key is destroyed so its name is unreadable in any copy.
+
+### `PUT /api/v1/projects/{project_id}/collection`
+
+Owner only. **Request** `{"collection_id": "9a0d…"}`, or `null` to take the project out. **Response** `200` with the `ProjectOut`. `422` if the collection does not exist; nothing moves. Moving it where it already is changes and records nothing.
+
+### `PUT /api/v1/projects/{project_id}/tags`
+
+Owner only. **Request** `{"tags": ["Mali", "cash transfers"]}` replaces the project's tags; `[]` removes them all. Each tag is trimmed with its spaces collapsed; a repeat, ignoring case, is dropped and the first spelling kept. `422` for a blank tag, one over 40 characters, more than 20, or control characters. **Response** `200` with the `ProjectOut`. Tags are sealed under the project's key and die with it.
+
+### `PUT`, `DELETE /api/v1/projects/{project_id}/pin`
+
+Any member, for themselves only. `204`. Pinning again keeps the first pin's date. A pin goes when the project is deleted or the person leaves it. Home shows up to 8 pinned projects, newest pin first.
+
+### `POST /api/v1/project-actions`
+
+Bulk actions from the All projects list (UI_UX_SPEC §7.2). One of:
+
+```json
+{ "action": "move", "project_ids": ["…"], "collection_id": "9a0d…" }
+{ "action": "add_tag", "project_ids": ["…"], "tag": "Mali" }
+{ "action": "archive", "project_ids": ["…"] }
+```
+
+`project_ids` holds 1 to 200 ids; `collection_id` may be `null`. **Response** `200`:
+
+```json
+{ "changed": ["…"], "skipped": [{ "project_id": "…", "reason": "not_allowed" }] }
+```
+
+A mixed selection is normal: each project the caller owns is changed, each in its own transaction, and every other is listed in `skipped`, in the order given. `not_found` covers a missing project **and** one the caller is not in, with nothing to tell them apart; `not_allowed` is a project where the caller's role may not do this; `too_many_tags` is one already holding 20 tags. Adding a tag keeps the tags already there. An unknown collection, a blank tag or an unknown action refuses the whole request with `422` before anything changes.
+
+### Audit
+
+`collection.created`, `collection.renamed`, `collection.deleted` (target and `scope_id`: the collection); `project.collection_changed` (sealed details: `{"collection_id": …}`) and `project.tags_changed` (sealed details: `{"count": …}`, never the tags), with the project as target and `scope_id`. Bulk actions record one event per project changed. Pins are not audited: a pin is a bookmark, not a decision about the project.
 
 ---
 
@@ -357,7 +475,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `GET /api/v1/runs/{run_id}/manifest`
 
-**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did.
+**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did. `model_ids` includes every model a stage named, the Brief stage's per role among them.
 
 ### Stage summaries
 
@@ -573,13 +691,65 @@ The source panel. **Response** `200` with `EvidenceOut`: `{"tag", "source_kind",
 
 How the brief was made. **Response** `200` with `TraceOut`: `{"brief_id", "model_id", "rounds", "kept_round", "max_rounds", "stopped_because", "steps": [AgentStep], "totals": {"calls", "prompt_tokens", "completion_tokens"}, "manifest": {"model_ids", "prompt_versions", "retriever", "max_rounds", "instructions_version"?}, "is_masked", "instructions": {"version", "text"} | null}`. `is_masked` says whether the brief's question and passages were masked; `null` for a brief written before this was recorded. `instructions` is the project's writing instructions exactly as the Writer received them, masked where masking applies; `null` when it had none, as for every brief written before they existed. `instructions_version` is in the manifest only when they were added. Each step is exactly the `agent.step` event the run streamed: `round` (0 for the Planner and the first retrieval), `role` (`planner`, `retriever`, `writer`, `checks`, `critic`), `status` (`ok`, `refused`, `invalid`, `error`), `seconds`, and as the role has them `tokens {"prompt", "completion"}`, `model_id`, `prompt_version`, `output`, `error`, `queries`, `passages_found`, `passages_new`, `passages_total` and, for checks, `problems`. Absent fields are omitted, not null.
 
+### `GET`, `PUT /api/v1/runs/{run_id}/leaning`
+
+"Your view first" (UI_UX_SPEC §6.9): which option the caller leaned towards before reading the brief this run wrote. Keyed by run and by member: each member reads and writes only their own answer, and nobody else's is ever returned. **Who:** any member, viewers included; a non-member gets the same `404` as a missing run.
+
+`GET` returns `200` with `{"run_id", "option", "answered_at"}`, or `null` until the caller answers. `option` is `null` for "Not sure".
+
+`PUT` with `{"option": "Cash transfers"}` or `{"option": null}` stores the answer once and returns it. `option` must be one of the brief's option names (`422` otherwise). `409` when the caller already answered (the first answer stays) or when the project does not ask (`is_view_first_on` is false); `404` when the run has no brief. The option is sealed under the project's key (`leanings.option`, bound to the run and the member), so deleting the project makes it unreadable. Skipping the question stores nothing.
+
 ### The `answer` stage
 
 Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pipeline, masks the review's question with the project's rules, then runs the loop: Planner (round 0), Retriever (BM25, [ADR-0007](./adr/0007-bm25-retrieval-for-the-brief.md)), then per round Writer, checks and Critic, retrieving again what the Critic asked for. It stops when the Critic accepts a draft the checks pass (`accepted`), at `HUMANI_T_BRIEF_MAX_ROUNDS`, default 3 (`max_rounds`), when a role answers invalidly twice in a row (`invalid_output`), or when a round did no better than the kept draft and the Critic's searches found no new passage (`no_progress`: "no new evidence and no better score"). Every model call goes through `GuardedInference.for_project`, which adds the project's rules. A run with no included passages fails with a plain message; so does a refused prompt or an unreachable model server. Run again after a crash, the stage returns the brief already stored. Its summary holds `brief_id`, `version`, `options`, `passages`, `rounds`, `kept_round`, `stopped_because` and `warnings` (a count), and its `manifest` holds `model_ids` and `prompt_versions` per role, `retriever`, `max_rounds`, `is_masked` and, when the Writer got the project's writing instructions, `instructions_version`.
 
 ### Audit
 
-`brief.created` by the system, with the brief as target and the project as `scope_id`; its sealed details hold the run id and version. Reading a brief is not audited, like reading a review.
+`brief.created` by the system, with the brief as target and the project as `scope_id`; its sealed details hold the run id and version. `brief.leaning_recorded` by the member, with the run as target and no details: the answer itself is never in the log. Reading a brief is not audited, like reading a review.
+
+---
+
+## Brief versions and comparisons
+
+Read-only, for any member; a non-member gets the same `404` as a missing id. Every comparison is computed by the API from what was stored when each brief and run was made, never stored itself, and reads from `before` (the older) to `after` (the newer), whichever order the ids are given in. Nothing is audited, as reading a brief is not.
+
+### `GET /api/v1/reviews/{review_id}/brief/versions`
+
+Every version of the review's brief, newest first: one per run of the Brief stage, numbered from 1 within the review. **Response** `200` `[{"id", "version", "run_id", "created_at", "model_id", "is_latest"}]`; `[]` before the first. Open one with `GET …/brief?run_id=`; without `run_id` that route still returns the latest. Briefs stored before this endpoint existed already carried their version (one `decision_briefs` row per run since migration 0011), so they are listed as they are.
+
+### `GET /api/v1/briefs/{brief_id}/compare/{other_brief_id}`
+
+What changed between two versions of one review's brief. **Response** `200` `{"before": {"id", "version", "run_id", "created_at"}, "after": {…}, "options_added": [name], "options_removed": [name], "strength_changes": [{"option", "before", "after"}], "sources_added": [{"paper_id", "source_kind", "tag", "title"}], "sources_removed": […]}`. Options match by name, ignoring case and spacing, so a renamed option shows as one removed and one added. Sources match by paper (or document), never by tag, since a tag is a paper's place in one run's list; `tag` is the one it had in the version that cites it, and a citation the checks flagged (no passage) names no source. `422` for one version twice or versions of two reviews.
+
+### `GET /api/v1/runs/{run_id}/compare/{other_run_id}`
+
+Two runs of one review side by side (UI_UX_SPEC §7.4), built on their [manifests](#get-apiv1runsrun_idmanifest). **Response** `200`:
+
+```json
+{
+  "before": {"run_id", "number": 1, "created_at", "has_record": true},
+  "after": {"run_id", "number": 3, "created_at", "has_record": true},
+  "cannot_compare": null,
+  "setup": {
+    "vocabulary_versions": {"before": [2], "after": [3]},
+    "sources": {"before", "after"}, "model_ids": {"before", "after"},
+    "queries_added": [{"source", "query"}], "queries_removed": [{"source", "query"}],
+    "prompt_versions": [{"name": "screen", "before": "screen-2", "after": "screen-3"}],
+    "settings_changed": [{"name": "discover.limit_per_source", "before": 25, "after": 50}]
+  },
+  "discovery": {
+    "before": {"identified", "after_deduplication"}, "after": {…},
+    "only_before": [{"paper_id", "title"}], "only_after": [...], "in_both": 4
+  },
+  "screening": {
+    "before": {"include", "exclude", "uncertain", "unscreened"}, "after": {…},
+    "changed": [{"paper_id", "title", "before": "include", "after": "exclude", "reason"}]
+  },
+  "brief": {"options_added", "options_removed", "strength_changes", "sources_added", "sources_removed"}
+}
+```
+
+`number` is the run's place among the review's runs, from 1, oldest first. A rewritten query is in both `queries_removed` and `queries_added`. `settings_changed` lists only what differs: `criteria_version`, `plan_version`, `instructions_version` and `masking`, then each stage's own facts (`stage.fact`) for stages both runs finished, so a run that redid only the brief shows no discovery settings as changed. Labels are the ones the screening table shows (under the review's latest rules); a run that did not screen is labelled by the run that screened its papers. `reason` is why the newer run labelled the paper so. `brief` is `null` unless both runs wrote a brief. When either run's stages recorded nothing (`has_record` false), every part is `null` and `cannot_compare` says why: "Run 1 can't be compared: it has no record of its setup." `422` for one run twice or runs of two reviews.
 
 ---
 
@@ -706,6 +876,82 @@ The worker (`python -m app.worker`, or the in-process worker in development) cla
 
 ---
 
+## History and marks
+
+Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity.
+
+### `GET /api/v1/needs-you`
+
+**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id"}`; fields a kind does not use are `null`. Kinds, and who sees them:
+
+| `kind` | Listed while | For | `key` |
+| --- | --- | --- | --- |
+| `gate` | the review's latest run waits at an open gate | members who may decide it (`privacy_review`: owners) | `gate:<gate_id>` |
+| `draft` | the review is drafting and its latest plan version is not accepted | owners and reviewers | `draft:<review_id>:<version>` |
+| `failed_run` | the review's latest run failed; `stopped_at` is the stage it did not finish | owners and reviewers | `failed_run:<run_id>` |
+| `unread_brief` | the review's newest brief has not been opened by the caller | every member | `unread_brief:<brief_id>` |
+
+### `POST /api/v1/needs-you/dismissals`
+
+**Request** `{"key": "failed_run:…"}`. **Response** `204`; dismissing again is also `204`. `404` unless the key is an item waiting for the caller now. The dismissal is per person and holds the key only. A changed thing has a new key (a new run, plan version or brief), so it is listed again.
+
+### `GET /api/v1/activity`
+
+**Response** `200` `{"events": [ActivityEventOut]}`, the newest 40 across the caller's live, unarchived projects. `ActivityEventOut` is `{"kind", "action", "at", "project": {"id", "name"}, "review_id", "actor": {"id", "display_name"}|null, "run_id", "run_number", "run_state", "seconds", "stopped_at", "error", "model_ids", "stages", "version", "brief_id", "thread_id", "document_id", "document_number", "text", "papers_moved"}`. `action` is one of `review_started`, `plan_drafted`, `plan_accepted`, `labels_changed`, `run` (one line per run, at its latest state), `brief_ready`, `question_asked`, `document_added`; `kind` is the timeline filter it falls under (`review`, `run`, `brief`, `question`, `document`). `text` is a question as stored (masked when masking was on) or a document's name. Home lines leave `stages` empty and `error` null: the run's log is not read for them.
+
+### `GET /api/v1/projects/{project_id}/history`
+
+**Response** `200` `{"groups": [{"review": {"id", "question", "started_at"}|null, "events": [ActivityEventOut]}]}`. Groups are ordered by their latest event and lines are newest first; `review: null` holds project-wide lines (documents). Run lines carry `stages` (`{"stage", "state", "seconds"}`, `state` one of `done`, `running`, `waiting`, `stopped`, `not_run`), the models the run's stages recorded in their manifests, and the plain-words `error` of a run that stopped. Brief lines carry the brief's model. **Who:** any member; a non-member gets the same `404` as a missing project.
+
+### Seen and saved marks
+
+A mark is per person (UI_UX_SPEC §7.5). A paper is matched across projects by the dedup rule's key, `PaperRecord.identity`: the DOI when there is one, else the normalised title and year. A mark keeps that identity sealed under the paper's own project key (`paper_marks.identity`, bound to person, paper and kind), so it is unreadable once that project is deleted. To find the same paper in another project, the identity is digested under that project's identity key and looked up as a re-run looks papers up. Marks in projects the caller has left, or that were deleted, are never opened.
+
+`PUT /api/v1/projects/{project_id}/papers/{paper_id}/seen` and `PUT …/saved` mark a paper of the project, `DELETE …/saved` takes it off the saved list; each answers `204`, and marking again keeps the first time. `404` for a paper of another project. `PUT /api/v1/briefs/{brief_id}/seen` marks a brief opened (`204`), so Needs you stops listing it for the caller.
+
+`GET /api/v1/projects/{project_id}/paper-marks` answers `{"papers": [{"paper_id", "is_seen", "is_saved", "seen_in_other_projects": [{"id", "name"}]}]}` for each of the project's papers with a mark. `is_seen` is true when the caller opened the same paper here or in any project they belong to; `seen_in_other_projects` names only those projects. `is_saved` is for this paper in this project.
+
+`GET /api/v1/saved-papers` answers `{"papers": [{"paper_id", "project": {"id", "name"}, "review_id", "title", "year", "doi", "link", "saved_at"}]}`, newest saved first, from projects the caller still belongs to.
+
+### Audit
+
+None. Marks and dismissals record what one person read or chose to hide, not a decision about the evidence; they hold ids only.
+
+## Search across projects
+
+One search over every project the caller is a member of (UI_UX_SPEC §7.6, [ADR 0018](adr/0018-search-decrypts-and-matches-per-request.md)). Project text is sealed under each project's key, so there is no index: each search opens the caller's projects one by one, newest first, and matches in the application. A text matches when it holds every word of the query, ignoring case and accents.
+
+It searches only text every member already reads: project names and review questions (`projects`), the claims of each review's latest brief (`briefs`), the titles and abstracts of the papers of the review's newest run with papers (`papers`), that brief's cited passages, which are masked text (`passages`), and follow-up questions, stored masked (`questions`). Raw document text is never searched.
+
+**Who:** any signed-in person; results come only from projects they are a member of, so a non-member's project never appears, not even as an empty group. Not audited: nothing is written.
+
+### `GET /api/v1/search?q=&scope=`
+
+`q` is 2 to 200 characters after trimming (spaces collapsed). `scope` is one of `projects`, `briefs`, `papers`, `passages`, `questions`; leave it out for all. **Response** `200`:
+
+```json
+{
+  "query": "price rises",
+  "scope": null,
+  "groups": [
+    {
+      "project_id": "…", "project_name": "Cash vs vouchers, Gao", "is_archived": false,
+      "hits": [
+        {"scope": "briefs", "text": "Prices can rise in small markets", "review_id": "…", "run_id": "…", "brief_version": 2,
+         "paper_id": null, "tag": null, "title": null, "thread_id": null, "question_id": null}
+      ]
+    }
+  ],
+  "is_truncated": false
+}
+```
+
+`text` is the matching text on one line, cut to about 160 characters around the first match with `…`. Ids that do not apply to the hit's scope are `null`: a project name has none; a review question has `review_id`; a brief claim `review_id`, `run_id`, `brief_version`; a paper `review_id`, `run_id`, `paper_id`, `tag` (`P0012`) and `title`; a passage `review_id`, `run_id` and `tag` (the brief's citation, `P0001` or `D3`); a follow-up question `review_id`, `thread_id`, `question_id`. Groups are newest project first; within one, hits follow the scope order above.
+
+**Limits:** at most 5 hits per scope in a project and 50 in all; at most 100 projects are searched, and the search stops once 50 hits are found. `is_truncated` is `true` when any limit was reached. `422` for a query out of bounds or an unknown scope. `429` with `Retry-After` after 60 searches in a minute by one person.
+
+---
+
 ## Semantics
 
 ### How a query is built
@@ -826,4 +1072,3 @@ Every response carries security headers (CSP, HSTS, `nosniff`, `Cache-Control: n
 ## Not here
 
 - **Google Scholar** is not a source and will not be: it has no API, and its terms forbid automated access ([dependencies §4](dependencies.md#4-outside-services-and-the-libraries-that-reach-them)).
-- **P3 features** (collections, tags, pins, seen and saved marks, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).

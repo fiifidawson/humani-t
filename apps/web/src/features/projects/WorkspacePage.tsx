@@ -25,7 +25,7 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
-import { Folder, Settings, ShieldCheck } from "lucide-react";
+import { Folder, History, Settings, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
@@ -41,6 +41,7 @@ import { PageHeading } from "../../ui/PageHeading";
 
 import { Composer } from "../chat/Composer";
 import { PendingReply } from "../chat/PendingReply";
+import { CollectionBadge, ProjectMenu } from "../collections/ProjectMenu";
 import { ChatCard } from "../reviews/ChatCard";
 import { modeLabel, type PlanMode } from "../reviews/format";
 import { ModeChoice } from "../reviews/ModeChoice";
@@ -278,6 +279,7 @@ export function WorkspacePage() {
 						size="workspace"
 					/>
 				</Box>
+				<CollectionBadge collectionId={project.data.collection_id} />
 				<Badge
 					variant="outline"
 					colorPalette="gray"
@@ -291,6 +293,12 @@ export function WorkspacePage() {
 					<Link to="/p/$projectId/documents" params={{ projectId }}>
 						<Folder />
 						Documents
+					</Link>
+				</Button>
+				<Button asChild variant="outline" size="sm" flex="none">
+					<Link to="/p/$projectId/history" params={{ projectId }}>
+						<History />
+						History
 					</Link>
 				</Button>
 				<IconButton
@@ -308,6 +316,7 @@ export function WorkspacePage() {
 						<Settings />
 					</Link>
 				</IconButton>
+				<ProjectMenu project={project.data} />
 			</Flex>
 			<Outlet />
 		</Flex>

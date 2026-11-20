@@ -1,6 +1,9 @@
 import type { components } from "../../api/schema.gen";
 
 export type Project = components["schemas"]["ProjectOut"];
+/** A project as the list returns it, with what grouping, filters and sorting read. */
+export type ProjectSummary = components["schemas"]["ProjectSummaryOut"];
+export type Collection = components["schemas"]["CollectionOut"];
 export type Role = components["schemas"]["Role"];
 
 const ROLE_LABELS: Readonly<Record<Role, string>> = {

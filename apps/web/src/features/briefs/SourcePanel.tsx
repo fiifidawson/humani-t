@@ -32,6 +32,7 @@ import { Loading } from "../../ui/Loading";
 import { ResizeHandle } from "../../ui/ResizeHandle";
 import { Reveal } from "../../ui/Reveal";
 import { MEDIUM_SCREEN, useMediaQuery } from "../../ui/useMediaQuery";
+import { useSeenOnOpen } from "../history/PaperMarks";
 import { MaskedText } from "../reviews/MaskedText";
 import type { BriefSource } from "./Claim";
 import { SECTIONS, screeningWord } from "./words";
@@ -87,6 +88,7 @@ export function Passages({ passages }: { passages: readonly Passage[] }) {
 
 function Found({ evidence }: { evidence: Evidence }) {
 	const [isWhyOpen, setWhyOpen] = useState(false);
+	useSeenOnOpen(evidence.source_kind === "paper" ? evidence.paper_id : null);
 	const id = useId();
 	const details = evidence.source;
 	const label = screeningWord(details?.screening_label ?? null);
@@ -235,7 +237,11 @@ export function SourcePanelFrame({
 	useEffect(() => {
 		// Capture phase: the canvas listens to Esc too, and this panel goes first.
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !event.defaultPrevented) {
+			// Esc in a dialog, such as search, closes only the dialog.
+			const isInDialog =
+				event.target instanceof Element &&
+				event.target.closest("[role=dialog]") !== null;
+			if (event.key === "Escape" && !event.defaultPrevented && !isInDialog) {
 				event.preventDefault();
 				onClose();
 			}

@@ -1,17 +1,18 @@
 /**
- * The left rail (UI_UX_SPEC §4.1): where to go, recent projects, and the
- * person's own controls. Needs-you, pinned projects and collections come with
- * the API that serves them (§15, P3).
+ * The left rail (UI_UX_SPEC §4.1): where to go, recent projects, collections,
+ * and the person's own controls.
  */
 
 import { Box, chakra, Flex, IconButton, Text } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { House, LayoutGrid, LogOut, PanelLeft, Plus } from "lucide-react";
+import { House, LayoutGrid, LogOut, PanelLeft, Plus, Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { unwrapEmpty } from "../api/client";
 import { useApi } from "../app/api-context";
+import { needsYouQuery } from "../app/historyQueries";
 import { projectListQuery, sessionQuery } from "../app/queries";
+import { RailCollections } from "../features/collections/RailCollections";
 import { initials } from "../ui/initials";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { rail, railItem } from "./railStyles";
@@ -46,6 +47,7 @@ export function Rail({
 	const navigate = useNavigate();
 	const session = useQuery(sessionQuery(api));
 	const projects = useQuery(projectListQuery(api));
+	const needsYou = useQuery(needsYouQuery(api)).data?.count ?? 0;
 	const recent = [...(projects.data ?? [])]
 		.sort((a, b) => b.created_at.localeCompare(a.created_at))
 		.slice(0, RECENT_COUNT);
@@ -88,6 +90,23 @@ export function Rail({
 						<Link to="/" activeOptions={{ exact: true }} onClick={onNavigate}>
 							<House size={18} />
 							<span className="rail-label">Home</span>
+							{needsYou === 0 ? null : (
+								<Text
+									as="span"
+									className="rail-label"
+									ms="auto"
+									px="1.5"
+									rounded="full"
+									bg="brand.solid"
+									color="brand.contrast"
+									fontSize="xs"
+									fontVariantNumeric="tabular-nums"
+								>
+									<chakra.span srOnly>, </chakra.span>
+									{needsYou}
+									<chakra.span srOnly> need you</chakra.span>
+								</Text>
+							)}
 						</Link>
 					</RailLink>
 				</li>
@@ -100,6 +119,14 @@ export function Rail({
 						>
 							<LayoutGrid size={18} />
 							<span className="rail-label">All projects</span>
+						</Link>
+					</RailLink>
+				</li>
+				<li>
+					<RailLink>
+						<Link to="/saved" onClick={onNavigate}>
+							<Star size={18} />
+							<span className="rail-label">Saved papers</span>
 						</Link>
 					</RailLink>
 				</li>
@@ -146,6 +173,7 @@ export function Rail({
 					</chakra.ul>
 				</>
 			)}
+			<RailCollections onNavigate={onNavigate} />
 			<Flex
 				direction="column"
 				gap="1"

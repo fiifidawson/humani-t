@@ -949,9 +949,148 @@
         "tags": [
           "projects"
         ],
-        "summary": "Projects the caller belongs to, newest first",
+        "summary": "Projects the caller belongs to, filtered and sorted",
+        "description": "Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2).",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSort",
+              "default": "last_activity"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ProjectStatus"
+              },
+              "description": "Any of these; `archived` brings archived ones in.",
+              "title": "Status"
+            },
+            "description": "Any of these; `archived` brings archived ones in."
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "maxItems": 20,
+              "description": "Every one of these, ignoring case.",
+              "title": "Tag"
+            },
+            "description": "Every one of these, ignoring case."
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Projects this person owns.",
+              "title": "Owner"
+            },
+            "description": "Projects this person owns."
+          },
+          {
+            "name": "member",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Projects this person is in.",
+              "title": "Member"
+            },
+            "description": "Projects this person is in."
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, in UTC.",
+              "title": "Created From"
+            },
+            "description": "Inclusive, in UTC."
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, in UTC.",
+              "title": "Created To"
+            },
+            "description": "Inclusive, in UTC."
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "const": "none",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A collection id, or \"none\" for projects in none.",
+              "title": "Collection"
+            },
+            "description": "A collection id, or \"none\" for projects in none."
+          },
           {
             "name": "include_archived",
             "in": "query",
@@ -971,7 +1110,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProjectOut"
+                    "$ref": "#/components/schemas/ProjectSummaryOut"
                   },
                   "title": "Response List Projects Api V1 Projects Get"
                 }
@@ -1169,6 +1308,60 @@
           },
           "409": {
             "description": "The deployment requires masking: it stays on"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/view-first": {
+      "put": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Switch \"Your view first\" on or off",
+        "description": "Owners only. When on, the brief asks each member which option they lean towards.",
+        "operationId": "set_project_view_first_api_v1_projects__project_id__view_first_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectViewFirstIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2518,6 +2711,147 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{review_id}/brief/versions": {
+      "get": {
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "Every version of a review's brief, newest first",
+        "description": "One version per run of the Brief stage; empty before the first.",
+        "operationId": "list_brief_versions_api_v1_reviews__review_id__brief_versions_get",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BriefVersionOut"
+                  },
+                  "title": "Response List Brief Versions Api V1 Reviews  Review Id  Brief Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/briefs/{brief_id}/compare/{other_brief_id}": {
+      "get": {
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "What changed between two versions of a review's brief",
+        "operationId": "compare_brief_versions_api_v1_briefs__brief_id__compare__other_brief_id__get",
+        "parameters": [
+          {
+            "name": "brief_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Brief Id"
+            }
+          },
+          {
+            "name": "other_brief_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Other Brief Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefComparisonOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The same version twice, or versions of two reviews"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/compare/{other_run_id}": {
+      "get": {
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "Two runs of one review side by side: setup, discovery, screening and brief",
+        "description": "`cannot_compare` says why, and every part is null, when a run has no record.",
+        "operationId": "compare_runs_api_v1_runs__run_id__compare__other_run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "other_run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Other Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunComparisonOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The same run twice, or runs of two reviews"
           }
         }
       }
@@ -3995,6 +4329,935 @@
           }
         }
       }
+    },
+    "/api/v1/runs/{run_id}/leaning": {
+      "get": {
+        "tags": [
+          "briefs"
+        ],
+        "summary": "Which option you leaned towards before reading this run's brief",
+        "description": "`null` until you answer. Nobody else's answer is ever returned.",
+        "operationId": "read_leaning_api_v1_runs__run_id__leaning_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LeaningOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Read Leaning Api V1 Runs  Run Id  Leaning Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "briefs"
+        ],
+        "summary": "Say which option you lean towards, before reading the brief",
+        "description": "Once per member and brief; the first answer stays.",
+        "operationId": "record_leaning_api_v1_runs__run_id__leaning_put",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaningIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaningOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or the run has no brief"
+          },
+          "409": {
+            "description": "Already answered, or the project does not ask"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/collections": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Every collection, with the caller's own counts",
+        "operationId": "list_collections_api_v1_collections_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CollectionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Collections Api V1 Collections Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Create a collection",
+        "description": "Any signed-in user. Its name is visible to everyone in the deployment.",
+        "operationId": "create_collection_api_v1_collections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another collection uses this name (`collection_name_taken`)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/collections/{collection_id}": {
+      "patch": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Rename a collection",
+        "operationId": "rename_collection_api_v1_collections__collection_id__patch",
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not its creator or an administrator"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Delete a collection; the projects in it stay, in no collection",
+        "operationId": "delete_collection_api_v1_collections__collection_id__delete",
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/collection": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "File the project in a collection, or in none",
+        "operationId": "move_project_api_v1_projects__project_id__collection_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCollectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "No such collection"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/tags": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Replace the project's tags",
+        "description": "Owners only. Tags are trimmed and repeats dropped, ignoring case.",
+        "operationId": "set_project_tags_api_v1_projects__project_id__tags_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTagsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/pin": {
+      "put": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Pin the project for yourself",
+        "operationId": "pin_project_api_v1_projects__project_id__pin_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Unpin the project",
+        "operationId": "unpin_project_api_v1_projects__project_id__pin_delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/project-actions": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Move, tag or archive several projects at once",
+        "description": "Each project the caller owns is changed; every other one is listed in `skipped`.\n\nA project the caller is not in is skipped as `not_found`, exactly like a missing one.\n`422` for an unknown collection, before anything changes.",
+        "operationId": "bulk_project_action_api_v1_project_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MoveProjectsIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TagProjectsIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ArchiveProjectsIn"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/needs-you": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "What waits for the caller: gates, drafts, failures, briefs",
+        "description": "Only what the caller's role can act on, from live projects that are not archived.",
+        "operationId": "read_needs_you_api_v1_needs_you_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedsYouOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/needs-you/dismissals": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Hide one Needs you item for the caller until it changes",
+        "operationId": "dismiss_api_v1_needs_you_dismissals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Nothing waiting for the caller has this key"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activity": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Recent activity in the caller's projects, newest first",
+        "operationId": "read_activity_api_v1_activity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/history": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Everything that happened in the project, grouped by review",
+        "operationId": "read_history_api_v1_projects__project_id__history_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectHistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/papers/{paper_id}/seen": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Mark a paper as opened by the caller",
+        "operationId": "see_paper_api_v1_projects__project_id__papers__paper_id__seen_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/papers/{paper_id}/saved": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Add a paper to the caller's saved list",
+        "operationId": "save_paper_api_v1_projects__project_id__papers__paper_id__saved_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Take a paper off the caller's saved list",
+        "operationId": "unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such paper in this project"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/paper-marks": {
+      "get": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "The caller's seen and saved marks on the project's papers",
+        "operationId": "read_paper_marks_api_v1_projects__project_id__paper_marks_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPaperMarksOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/saved-papers": {
+      "get": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "The caller's saved papers, newest first",
+        "description": "Only from projects the caller still belongs to; a deleted project's are gone.",
+        "operationId": "read_saved_papers_api_v1_saved_papers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedPapersOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/briefs/{brief_id}/seen": {
+      "put": {
+        "tags": [
+          "marks"
+        ],
+        "summary": "Mark a brief as opened by the caller, so Needs you stops listing it",
+        "operationId": "see_brief_api_v1_briefs__brief_id__seen_put",
+        "parameters": [
+          {
+            "name": "brief_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Brief Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such brief"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": [
+          "search"
+        ],
+        "summary": "Find projects, briefs, papers, passages and questions in your projects",
+        "operationId": "search_api_v1_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 1000,
+              "description": "2 to 200 characters.",
+              "title": "Q"
+            },
+            "description": "2 to 200 characters."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SearchScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Leave out for every scope.",
+              "title": "Scope"
+            },
+            "description": "Leave out for every scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches lately; see Retry-After"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4025,6 +5288,282 @@
         },
         "type": "object",
         "title": "AcceptedOut"
+      },
+      "ActivityAction": {
+        "type": "string",
+        "enum": [
+          "review_started",
+          "plan_drafted",
+          "plan_accepted",
+          "labels_changed",
+          "run",
+          "brief_ready",
+          "question_asked",
+          "document_added"
+        ],
+        "title": "ActivityAction"
+      },
+      "ActivityEventOut": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ActivityKind",
+            "description": "The timeline filter this line falls under."
+          },
+          "action": {
+            "$ref": "#/components/schemas/ActivityAction"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id",
+            "description": "Null for a project-wide line: a document."
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who did it; null when the model did."
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Number"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds",
+            "description": "How long the run has taken so far."
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why a run stopped, in plain words. Timeline only."
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Model Ids",
+            "description": "The models a run, brief or answer used."
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageLineOut"
+            },
+            "type": "array",
+            "title": "Stages",
+            "description": "A run's stages. Timeline only."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "brief_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "The question as stored (masked when masking is on), or a document name."
+          },
+          "papers_moved": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Papers Moved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "action",
+          "at",
+          "project",
+          "review_id",
+          "actor",
+          "run_id",
+          "run_number",
+          "run_state",
+          "seconds",
+          "stopped_at",
+          "error",
+          "model_ids",
+          "stages",
+          "version",
+          "brief_id",
+          "thread_id",
+          "document_id",
+          "document_number",
+          "text",
+          "papers_moved"
+        ],
+        "title": "ActivityEventOut"
+      },
+      "ActivityKind": {
+        "type": "string",
+        "enum": [
+          "review",
+          "run",
+          "brief",
+          "question",
+          "document"
+        ],
+        "title": "ActivityKind",
+        "description": "The timeline's \"Show:\" filters: each action falls under exactly one."
+      },
+      "ActivityOut": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityEventOut"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "ActivityOut"
       },
       "AgentRole": {
         "type": "string",
@@ -4430,6 +5969,32 @@
         ],
         "title": "AnswersIn"
       },
+      "ArchiveProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "archive",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids"
+        ],
+        "title": "ArchiveProjectsIn"
+      },
       "AssessmentOut": {
         "properties": {
           "option": {
@@ -4473,6 +6038,129 @@
           "user_id"
         ],
         "title": "AuthorOut"
+      },
+      "BeforeAfterOut": {
+        "properties": {
+          "before": {
+            "title": "Before",
+            "description": "As the older run recorded it; null if it recorded none."
+          },
+          "after": {
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "before",
+          "after"
+        ],
+        "title": "BeforeAfterOut"
+      },
+      "BriefChangesOut": {
+        "properties": {
+          "options_added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options Added"
+          },
+          "options_removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options Removed"
+          },
+          "strength_changes": {
+            "items": {
+              "$ref": "#/components/schemas/StrengthChangeOut"
+            },
+            "type": "array",
+            "title": "Strength Changes"
+          },
+          "sources_added": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSourceOut"
+            },
+            "type": "array",
+            "title": "Sources Added",
+            "description": "Matched by paper, not by tag."
+          },
+          "sources_removed": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSourceOut"
+            },
+            "type": "array",
+            "title": "Sources Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "options_added",
+          "options_removed",
+          "strength_changes",
+          "sources_added",
+          "sources_removed"
+        ],
+        "title": "BriefChangesOut"
+      },
+      "BriefComparisonOut": {
+        "properties": {
+          "options_added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options Added"
+          },
+          "options_removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options Removed"
+          },
+          "strength_changes": {
+            "items": {
+              "$ref": "#/components/schemas/StrengthChangeOut"
+            },
+            "type": "array",
+            "title": "Strength Changes"
+          },
+          "sources_added": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSourceOut"
+            },
+            "type": "array",
+            "title": "Sources Added",
+            "description": "Matched by paper, not by tag."
+          },
+          "sources_removed": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSourceOut"
+            },
+            "type": "array",
+            "title": "Sources Removed"
+          },
+          "before": {
+            "$ref": "#/components/schemas/ComparedVersionOut"
+          },
+          "after": {
+            "$ref": "#/components/schemas/ComparedVersionOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "options_added",
+          "options_removed",
+          "strength_changes",
+          "sources_added",
+          "sources_removed",
+          "before",
+          "after"
+        ],
+        "title": "BriefComparisonOut"
       },
       "BriefOut": {
         "properties": {
@@ -4625,6 +6313,109 @@
           "stopped_because"
         ],
         "title": "BriefOut"
+      },
+      "BriefSourceOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "source_kind": {
+            "$ref": "#/components/schemas/PassageSourceKind"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag",
+            "description": "Its tag in the version that cites it."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "source_kind",
+          "tag",
+          "title"
+        ],
+        "title": "BriefSourceOut"
+      },
+      "BriefVersionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id",
+            "description": "The run whose Brief stage wrote this version."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "is_latest": {
+            "type": "boolean",
+            "title": "Is Latest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "run_id",
+          "created_at",
+          "model_id",
+          "is_latest"
+        ],
+        "title": "BriefVersionOut"
+      },
+      "BulkOut": {
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Changed"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedOut"
+            },
+            "type": "array",
+            "title": "Skipped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "changed",
+          "skipped"
+        ],
+        "title": "BulkOut"
       },
       "ChangeKind": {
         "type": "string",
@@ -4821,6 +6612,141 @@
           "hypothesis"
         ],
         "title": "ClaimSupport"
+      },
+      "CollectionIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CollectionIn"
+      },
+      "CollectionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "project_count": {
+            "type": "integer",
+            "title": "Project Count",
+            "description": "The caller's own projects in it, archived ones aside. Never anyone else's."
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage",
+            "description": "Whether the caller may rename or delete it."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "project_count",
+          "can_manage",
+          "created_at"
+        ],
+        "title": "CollectionOut"
+      },
+      "ComparedPaperOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title"
+        ],
+        "title": "ComparedPaperOut"
+      },
+      "ComparedRunOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number",
+            "description": "Its place among the review's runs, from 1, oldest first."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "has_record": {
+            "type": "boolean",
+            "title": "Has Record",
+            "description": "False when no stage recorded its setup."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "number",
+          "created_at",
+          "has_record"
+        ],
+        "title": "ComparedRunOut"
+      },
+      "ComparedVersionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "run_id",
+          "created_at"
+        ],
+        "title": "ComparedVersionOut"
       },
       "CompiledQueryOut": {
         "properties": {
@@ -5298,6 +7224,78 @@
           "criteria"
         ],
         "title": "DiffOut"
+      },
+      "DiscoveryCountsOut": {
+        "properties": {
+          "identified": {
+            "type": "integer",
+            "title": "Identified",
+            "description": "Records the sources returned."
+          },
+          "after_deduplication": {
+            "type": "integer",
+            "title": "After Deduplication"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identified",
+          "after_deduplication"
+        ],
+        "title": "DiscoveryCountsOut"
+      },
+      "DiscoveryOut": {
+        "properties": {
+          "before": {
+            "$ref": "#/components/schemas/DiscoveryCountsOut"
+          },
+          "after": {
+            "$ref": "#/components/schemas/DiscoveryCountsOut"
+          },
+          "only_before": {
+            "items": {
+              "$ref": "#/components/schemas/ComparedPaperOut"
+            },
+            "type": "array",
+            "title": "Only Before"
+          },
+          "only_after": {
+            "items": {
+              "$ref": "#/components/schemas/ComparedPaperOut"
+            },
+            "type": "array",
+            "title": "Only After"
+          },
+          "in_both": {
+            "type": "integer",
+            "title": "In Both"
+          }
+        },
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "only_before",
+          "only_after",
+          "in_both"
+        ],
+        "title": "DiscoveryOut"
+      },
+      "DismissalIn": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "DismissalIn"
       },
       "DocumentDecision": {
         "type": "string",
@@ -5894,6 +7892,14 @@
         ],
         "title": "GateDecisionIn"
       },
+      "GateKind": {
+        "type": "string",
+        "enum": [
+          "vocabulary",
+          "privacy_review"
+        ],
+        "title": "GateKind"
+      },
       "GateRequiredData": {
         "properties": {
           "gate_id": {
@@ -6082,6 +8088,35 @@
         "type": "object",
         "title": "HealthOut"
       },
+      "HistoryGroupOut": {
+        "properties": {
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for project-wide lines."
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityEventOut"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "review",
+          "events"
+        ],
+        "title": "HistoryGroupOut"
+      },
       "InstructionsSentOut": {
         "properties": {
           "version": {
@@ -6202,6 +8237,46 @@
         ],
         "title": "JobFinishedEvent"
       },
+      "LabelChangeOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "before": {
+            "$ref": "#/components/schemas/ScreeningLabel"
+          },
+          "after": {
+            "$ref": "#/components/schemas/ScreeningLabel"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why the newer run labelled it so."
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title",
+          "before",
+          "after",
+          "reason"
+        ],
+        "title": "LabelChangeOut"
+      },
       "LabelRulesIn": {
         "properties": {
           "possibly_min_met": {
@@ -6296,6 +8371,62 @@
           "papers_moved"
         ],
         "title": "LabelRulesVersionOut"
+      },
+      "LeaningIn": {
+        "properties": {
+          "option": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option",
+            "description": "One of the brief's option names, or null for \"Not sure\"."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "option"
+        ],
+        "title": "LeaningIn"
+      },
+      "LeaningOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "option": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option",
+            "description": "null when the member was not sure."
+          },
+          "answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Answered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "option",
+          "answered_at"
+        ],
+        "title": "LeaningOut"
       },
       "LoginIn": {
         "properties": {
@@ -6754,6 +8885,29 @@
         ],
         "title": "MemberOut"
       },
+      "MemberRefOut": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "role"
+        ],
+        "title": "MemberRefOut"
+      },
       "MemberRoleIn": {
         "properties": {
           "role": {
@@ -6918,6 +9072,225 @@
         ],
         "title": "ModelInstructionsVersionOut"
       },
+      "MoveProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "move",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids",
+          "collection_id"
+        ],
+        "title": "MoveProjectsIn"
+      },
+      "NamedChangeOut": {
+        "properties": {
+          "before": {
+            "title": "Before",
+            "description": "As the older run recorded it; null if it recorded none."
+          },
+          "after": {
+            "title": "After"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "`stage.fact` for a stage's own setting, e.g. `discover.limit_per_source`."
+          }
+        },
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "name"
+        ],
+        "title": "NamedChangeOut"
+      },
+      "NeedsYouItemOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "What `POST /needs-you/dismissals` names. Ids only."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NeedsYouKind"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At",
+            "description": "When it started waiting."
+          },
+          "gate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate Id"
+          },
+          "gate_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GateKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Number",
+            "description": "The run's number in its review, from 1."
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At",
+            "description": "The stage a failed run did not finish."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "The draft's plan version, or the brief's."
+          },
+          "brief_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "project",
+          "review_id",
+          "at",
+          "gate_id",
+          "gate_kind",
+          "run_id",
+          "run_number",
+          "stopped_at",
+          "version",
+          "brief_id"
+        ],
+        "title": "NeedsYouItemOut"
+      },
+      "NeedsYouKind": {
+        "type": "string",
+        "enum": [
+          "gate",
+          "draft",
+          "failed_run",
+          "unread_brief"
+        ],
+        "title": "NeedsYouKind"
+      },
+      "NeedsYouOut": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "How many items; the rail shows it."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NeedsYouItemOut"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "items"
+        ],
+        "title": "NeedsYouOut"
+      },
       "OptionOut": {
         "properties": {
           "name": {
@@ -6998,6 +9371,40 @@
           "masked_text"
         ],
         "title": "PaperDetailOut"
+      },
+      "PaperMarksOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "is_seen": {
+            "type": "boolean",
+            "title": "Is Seen",
+            "description": "Opened here or in another project, by this person."
+          },
+          "is_saved": {
+            "type": "boolean",
+            "title": "Is Saved"
+          },
+          "seen_in_other_projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRefOut"
+            },
+            "type": "array",
+            "title": "Seen In Other Projects",
+            "description": "Only projects the caller is a member of."
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "is_seen",
+          "is_saved",
+          "seen_in_other_projects"
+        ],
+        "title": "PaperMarksOut"
       },
       "PaperOut": {
         "properties": {
@@ -7627,6 +10034,46 @@
         ],
         "title": "ProblemOut"
       },
+      "ProjectCollectionIn": {
+        "properties": {
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "null takes the project out of any."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "collection_id"
+        ],
+        "title": "ProjectCollectionIn"
+      },
+      "ProjectHistoryOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryGroupOut"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "By latest activity, newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "ProjectHistoryOut"
+      },
       "ProjectIn": {
         "properties": {
           "name": {
@@ -7707,6 +10154,37 @@
             "type": "boolean",
             "title": "Can Turn Masking Off",
             "description": "false while the deployment requires masking for every project."
+          },
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On",
+            "description": "Whether the brief asks members which option they lean towards first."
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "The one collection the project is filed in; null for none (ADR 0016)."
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "The project's tags, in the owner's order."
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "description": "Whether the caller has pinned it. Pins are per user."
           }
         },
         "type": "object",
@@ -7719,9 +10197,49 @@
           "status",
           "is_masking_on",
           "is_masking_effective",
-          "can_turn_masking_off"
+          "can_turn_masking_off",
+          "is_view_first_on",
+          "collection_id",
+          "tags",
+          "is_pinned"
         ],
         "title": "ProjectOut"
+      },
+      "ProjectPaperMarksOut": {
+        "properties": {
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/PaperMarksOut"
+            },
+            "type": "array",
+            "title": "Papers",
+            "description": "Only papers with a mark."
+          }
+        },
+        "type": "object",
+        "required": [
+          "papers"
+        ],
+        "title": "ProjectPaperMarksOut"
+      },
+      "ProjectRefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ProjectRefOut"
       },
       "ProjectRenameIn": {
         "properties": {
@@ -7739,6 +10257,16 @@
         ],
         "title": "ProjectRenameIn"
       },
+      "ProjectSort": {
+        "type": "string",
+        "enum": [
+          "last_activity",
+          "name",
+          "created",
+          "relevant_papers"
+        ],
+        "title": "ProjectSort"
+      },
       "ProjectStatus": {
         "type": "string",
         "enum": [
@@ -7753,6 +10281,206 @@
         ],
         "title": "ProjectStatus",
         "description": "What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand."
+      },
+      "ProjectSummaryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "description": "The caller's own role in this project."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus",
+            "description": "UI_UX_SPEC §11.1: derived from the newest review and its latest run."
+          },
+          "is_masking_on": {
+            "type": "boolean",
+            "title": "Is Masking On",
+            "description": "The owner's switch, as stored (ADR 0014)."
+          },
+          "is_masking_effective": {
+            "type": "boolean",
+            "title": "Is Masking Effective",
+            "description": "Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking."
+          },
+          "can_turn_masking_off": {
+            "type": "boolean",
+            "title": "Can Turn Masking Off",
+            "description": "false while the deployment requires masking for every project."
+          },
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On",
+            "description": "Whether the brief asks members which option they lean towards first."
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Id",
+            "description": "The one collection the project is filed in; null for none (ADR 0016)."
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "The project's tags, in the owner's order."
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "description": "Whether the caller has pinned it. Pins are per user."
+          },
+          "last_activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Activity At",
+            "description": "The latest of: created, archived, its newest review, run or brief."
+          },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRefOut"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "relevant_papers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevant Papers",
+            "description": "Included papers of the newest run with papers, under the latest rules."
+          },
+          "papers_found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Papers Found",
+            "description": "That run's papers after duplicates."
+          },
+          "brief_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "created_at",
+          "archived_at",
+          "status",
+          "is_masking_on",
+          "is_masking_effective",
+          "can_turn_masking_off",
+          "is_view_first_on",
+          "collection_id",
+          "tags",
+          "is_pinned",
+          "last_activity_at",
+          "pinned_at",
+          "members",
+          "relevant_papers",
+          "papers_found",
+          "brief_version"
+        ],
+        "title": "ProjectSummaryOut"
+      },
+      "ProjectTagsIn": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "title": "ProjectTagsIn"
+      },
+      "ProjectViewFirstIn": {
+        "properties": {
+          "is_view_first_on": {
+            "type": "boolean",
+            "title": "Is View First On"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_view_first_on"
+        ],
+        "title": "ProjectViewFirstIn"
       },
       "ProvenanceOut": {
         "properties": {
@@ -8129,6 +10857,31 @@
         ],
         "title": "ReviewOut"
       },
+      "ReviewRefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question",
+          "started_at"
+        ],
+        "title": "ReviewRefOut"
+      },
       "ReviewStatus": {
         "type": "string",
         "enum": [
@@ -8239,6 +10992,80 @@
           "untouchable"
         ],
         "title": "RulesPreviewOut"
+      },
+      "RunComparisonOut": {
+        "properties": {
+          "before": {
+            "$ref": "#/components/schemas/ComparedRunOut"
+          },
+          "after": {
+            "$ref": "#/components/schemas/ComparedRunOut"
+          },
+          "cannot_compare": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cannot Compare",
+            "description": "Why the runs cannot be compared; null when they can."
+          },
+          "setup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "discovery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscoveryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "screening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreeningOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefChangesOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null unless both runs wrote a brief."
+          }
+        },
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "cannot_compare",
+          "setup",
+          "discovery",
+          "screening",
+          "brief"
+        ],
+        "title": "RunComparisonOut"
       },
       "RunIn": {
         "properties": {
@@ -8408,6 +11235,94 @@
           }
         }
       },
+      "SavedPaperOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRefOut"
+          },
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "saved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Saved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "project",
+          "review_id",
+          "title",
+          "year",
+          "doi",
+          "link",
+          "saved_at"
+        ],
+        "title": "SavedPaperOut"
+      },
+      "SavedPapersOut": {
+        "properties": {
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPaperOut"
+            },
+            "type": "array",
+            "title": "Papers",
+            "description": "Newest saved first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "papers"
+        ],
+        "title": "SavedPapersOut"
+      },
       "ScreenedItemData": {
         "properties": {
           "paper_id": {
@@ -8517,6 +11432,39 @@
         ],
         "title": "ScreeningLabel"
       },
+      "ScreeningOut": {
+        "properties": {
+          "before": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Before",
+            "description": "include, exclude, uncertain and unscreened."
+          },
+          "after": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "After"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/LabelChangeOut"
+            },
+            "type": "array",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "changed"
+        ],
+        "title": "ScreeningOut"
+      },
       "ScreeningTier": {
         "type": "string",
         "enum": [
@@ -8528,6 +11476,213 @@
         ],
         "title": "ScreeningTier",
         "description": "The names people see, derived from label and priority."
+      },
+      "SearchGroupOut": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "project_name": {
+            "type": "string",
+            "title": "Project Name"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "project_name",
+          "is_archived",
+          "hits"
+        ],
+        "title": "SearchGroupOut"
+      },
+      "SearchHitOut": {
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/SearchScope"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Where it matched, on one line; cut with … when long."
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "brief_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Version",
+            "description": "Briefs: the brief's version."
+          },
+          "paper_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paper Id"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Papers and passages: the tag a brief cites, P0012."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Papers: the paper's title."
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "text",
+          "review_id",
+          "run_id",
+          "brief_version",
+          "paper_id",
+          "tag",
+          "title",
+          "thread_id",
+          "question_id"
+        ],
+        "title": "SearchHitOut"
+      },
+      "SearchOut": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The query as searched: trimmed, spaces collapsed."
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchScope"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: every scope."
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroupOut"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "By project, newest project first."
+          },
+          "is_truncated": {
+            "type": "boolean",
+            "title": "Is Truncated",
+            "description": "A cap was reached, so there may be more."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "scope",
+          "groups",
+          "is_truncated"
+        ],
+        "title": "SearchOut"
+      },
+      "SearchScope": {
+        "type": "string",
+        "enum": [
+          "projects",
+          "briefs",
+          "papers",
+          "passages",
+          "questions"
+        ],
+        "title": "SearchScope",
+        "description": "What a hit is, in the order a project's hits are listed."
       },
       "SentTextKind": {
         "type": "string",
@@ -8627,6 +11782,61 @@
         ],
         "title": "SessionOut"
       },
+      "SetupOut": {
+        "properties": {
+          "vocabulary_versions": {
+            "$ref": "#/components/schemas/BeforeAfterOut"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/BeforeAfterOut"
+          },
+          "model_ids": {
+            "$ref": "#/components/schemas/BeforeAfterOut"
+          },
+          "queries_added": {
+            "items": {
+              "$ref": "#/components/schemas/SourceQueryOut"
+            },
+            "type": "array",
+            "title": "Queries Added"
+          },
+          "queries_removed": {
+            "items": {
+              "$ref": "#/components/schemas/SourceQueryOut"
+            },
+            "type": "array",
+            "title": "Queries Removed",
+            "description": "A rewritten query is in both."
+          },
+          "prompt_versions": {
+            "items": {
+              "$ref": "#/components/schemas/NamedChangeOut"
+            },
+            "type": "array",
+            "title": "Prompt Versions",
+            "description": "Every prompt either run used."
+          },
+          "settings_changed": {
+            "items": {
+              "$ref": "#/components/schemas/NamedChangeOut"
+            },
+            "type": "array",
+            "title": "Settings Changed",
+            "description": "Only those that differ."
+          }
+        },
+        "type": "object",
+        "required": [
+          "vocabulary_versions",
+          "sources",
+          "model_ids",
+          "queries_added",
+          "queries_removed",
+          "prompt_versions",
+          "settings_changed"
+        ],
+        "title": "SetupOut"
+      },
       "SignedInOut": {
         "properties": {
           "status": {
@@ -8669,6 +11879,34 @@
         ],
         "title": "SignedInOut",
         "description": "Where the sign-in stands. Fields that do not apply are left out.\n\n`mfa_required` carries `methods` and no `user`: the password alone does not\nearn the account's details."
+      },
+      "SkipReason": {
+        "type": "string",
+        "enum": [
+          "not_found",
+          "not_allowed",
+          "too_many_tags"
+        ],
+        "title": "SkipReason"
+      },
+      "SkippedOut": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SkipReason",
+            "description": "not_found also covers a project the caller is not in; not_allowed, one where their role may not do this; too_many_tags, one already at the tag limit."
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "reason"
+        ],
+        "title": "SkippedOut"
       },
       "SourceDetailsOut": {
         "properties": {
@@ -8854,6 +12092,24 @@
         ],
         "title": "SourceOut"
       },
+      "SourceQueryOut": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "query"
+        ],
+        "title": "SourceQueryOut"
+      },
       "SpanOut": {
         "properties": {
           "start": {
@@ -8971,6 +12227,35 @@
           "data"
         ],
         "title": "StageFinishedEvent"
+      },
+      "StageLineOut": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StageState"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "seconds"
+        ],
+        "title": "StageLineOut"
       },
       "StageProgressData": {
         "properties": {
@@ -9135,6 +12420,17 @@
         ],
         "title": "StageStartedEvent"
       },
+      "StageState": {
+        "type": "string",
+        "enum": [
+          "done",
+          "running",
+          "waiting",
+          "stopped",
+          "not_run"
+        ],
+        "title": "StageState"
+      },
       "StepStatus": {
         "type": "string",
         "enum": [
@@ -9154,6 +12450,60 @@
           "no_progress"
         ],
         "title": "StopReason"
+      },
+      "StrengthChangeOut": {
+        "properties": {
+          "option": {
+            "type": "string",
+            "title": "Option",
+            "description": "As the newer version names it."
+          },
+          "before": {
+            "$ref": "#/components/schemas/EvidenceStrength"
+          },
+          "after": {
+            "$ref": "#/components/schemas/EvidenceStrength"
+          }
+        },
+        "type": "object",
+        "required": [
+          "option",
+          "before",
+          "after"
+        ],
+        "title": "StrengthChangeOut"
+      },
+      "TagProjectsIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "add_tag",
+            "title": "Action"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Project Ids"
+          },
+          "tag": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Tag"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_ids",
+          "tag"
+        ],
+        "title": "TagProjectsIn"
       },
       "TermChangeOut": {
         "properties": {
@@ -10205,6 +13555,10 @@
       "description": "Reading a decision brief, its cited sources and how it was made. Briefs are written by a run's `answer` stage. A non-member gets 404."
     },
     {
+      "name": "comparisons",
+      "description": "A brief's versions, and what changed between two versions or two runs of one review, computed from what was stored. Read-only; a non-member gets 404."
+    },
+    {
       "name": "exports",
       "description": "Downloads of a review's results: the screening dataset, included papers, PRISMA counts, the run manifest and the brief. Audited, never cached."
     },
@@ -10215,6 +13569,10 @@
     {
       "name": "masking",
       "description": "A project's masking rules: terms always masked in every text. Owners only; terms are raw text, sealed at rest, and every listing is audited."
+    },
+    {
+      "name": "search",
+      "description": "Search across the caller's projects, over the text members already see. Raw document text is never searched."
     },
     {
       "name": "documents",

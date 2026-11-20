@@ -157,6 +157,8 @@ class Project:
     # The owner's switch only. Whether text is masked is decided when it is sent
     # (`domain.masking.is_masking_applied`), because the operator's policy can overrule it.
     is_masking_on: bool = True
+    # "Your view first" (UI_UX_SPEC §6.9): off unless an owner turns it on (§16 Q3).
+    is_view_first_on: bool = False
 
     def __post_init__(self) -> None:
         require_aware(
@@ -181,6 +183,9 @@ class Project:
 
     def with_masking(self, *, is_on: bool) -> Project:
         return replace(self, is_masking_on=is_on)
+
+    def with_view_first(self, *, is_on: bool) -> Project:
+        return replace(self, is_view_first_on=is_on)
 
     def archived(self, at: datetime) -> Project:
         """Archive; archiving again keeps the first date."""

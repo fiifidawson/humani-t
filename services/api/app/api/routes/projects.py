@@ -11,10 +11,11 @@ from collections.abc import Awaitable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from app.api.access import require
-from app.api.dependencies import ProjectsDep
+from app.api.dependencies import ProjectListDep, ProjectsDep
+from app.api.schemas.collections import ProjectListParams, ProjectSummaryOut
 from app.api.schemas.projects import (
     MemberIn,
     MemberOut,
@@ -23,6 +24,7 @@ from app.api.schemas.projects import (
     ProjectMaskingIn,
     ProjectOut,
     ProjectRenameIn,
+    ProjectViewFirstIn,
 )
 from app.api.session import CurrentDep, request_id
 from app.application.accounts import Current
@@ -62,12 +64,19 @@ async def create_project(
     return created
 
 
-@router.get("", summary="Projects the caller belongs to, newest first")
+@router.get("", summary="Projects the caller belongs to, filtered and sorted")
 async def list_projects(
-    current: CurrentDep, projects: ProjectsDep, include_archived: bool = False
-) -> list[ProjectOut]:
-    views = await projects.list_mine(current, include_archived=include_archived)
-    return [ProjectOut.from_view(view) for view in views]
+    current: CurrentDep,
+    project_list: ProjectListDep,
+    params: Annotated[ProjectListParams, Query()],
+) -> list[ProjectSummaryOut]:
+    """Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2)."""
+    try:
+        query = params.to_domain()
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    summaries = await project_list.list(current, query)
+    return [ProjectSummaryOut.from_summary(s) for s in summaries]
 
 
 @router.get("/{project_id}", summary="One project")
@@ -104,6 +113,21 @@ async def set_project_masking(
     """Owners only. The project's own masking rules apply either way (ADR 0014)."""
     view = await projects.set_masking(
         current, project_id, is_on=payload.is_masking_on, request_id=request_id(request)
+    )
+    return ProjectOut.from_view(view)
+
+
+@router.put("/{project_id}/view-first", summary='Switch "Your view first" on or off')
+async def set_project_view_first(
+    project_id: UUID,
+    payload: ProjectViewFirstIn,
+    request: Request,
+    current: _Updater,
+    projects: ProjectsDep,
+) -> ProjectOut:
+    """Owners only. When on, the brief asks each member which option they lean towards."""
+    view = await projects.set_view_first(
+        current, project_id, is_on=payload.is_view_first_on, request_id=request_id(request)
     )
     return ProjectOut.from_view(view)
 

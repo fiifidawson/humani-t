@@ -94,3 +94,11 @@ class PostgresDecisionBriefRepository:
             .where(decision_briefs.c.review_id == review_id)
         )
         return int(count or 0)
+
+    async def list_for_review(self, review_id: UUID) -> list[BriefRecord]:
+        result = await self._connection.execute(
+            select(decision_briefs)
+            .where(decision_briefs.c.review_id == review_id)
+            .order_by(decision_briefs.c.version.desc())
+        )
+        return [_to_brief(row) for row in result]

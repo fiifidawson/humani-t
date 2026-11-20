@@ -174,3 +174,16 @@ class TestBriefStorage:
 
         async with storage.unit_of_work() as uow:
             assert await uow.briefs.get(record.id) is None
+
+    async def test_a_reviews_briefs_are_listed_newest_version_first(self, storage):
+        review = await _review(storage)
+        other = await _review(storage)
+        older = _record(await _run(storage, review), version=1)
+        newer = _record(await _run(storage, review, minutes=5), version=2, minutes=5)
+        elsewhere = _record(await _run(storage, other), version=1)
+        for record in (older, newer, elsewhere):
+            await _add(storage, record)
+
+        async with storage.unit_of_work() as uow:
+            assert await uow.briefs.list_for_review(review.id) == [newer, older]
+            assert await uow.briefs.list_for_review(uuid.uuid4()) == []

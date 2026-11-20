@@ -23,6 +23,8 @@ from app.application.briefs import (
     ScreenedSources,
     StoredBriefCitations,
 )
+from app.application.collections import CollectionService
+from app.application.comparisons import ComparisonService
 from app.application.documents import (
     DocumentEvidence,
     DocumentProcessor,
@@ -31,8 +33,11 @@ from app.application.documents import (
 )
 from app.application.encryption import ScopeEncryption
 from app.application.exports import ExportService
+from app.application.history import HistoryService
 from app.application.inference import GuardedInference
 from app.application.label_rules import LabelRulesService, PlanCriteria
+from app.application.leanings import LeaningService
+from app.application.marks import MarkService
 from app.application.masking import (
     DocumentsAwaitingReview,
     MaskingChoice,
@@ -45,6 +50,9 @@ from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.planning import PlanService
+from app.application.project_labels import SealedTags
+from app.application.project_list import ProjectListService
+from app.application.project_search import ProjectSearchService
 from app.application.projects import ProjectService
 from app.application.queries_stage import QueriesStage, QueryCompiler
 from app.application.questions import QuestionService, QuestionWorker
@@ -137,12 +145,17 @@ class Providers:
     plans: PlanService
     masking_rules: MaskingRuleService
     briefs: BriefService
+    leanings: LeaningService
     questions: QuestionService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     answers: QuestionWorker
     documents: DocumentService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     document_processor: DocumentProcessor
+    collections: CollectionService
+    project_list: ProjectListService
+    history: HistoryService
+    marks: MarkService
 
     async def close(self) -> None:
         """Release every pool and client: once, at shutdown or at the end of a CLI run."""
@@ -535,6 +548,22 @@ def build_providers(
         clock=clock,
     )
     document_sanitizer = _document_sanitizer(ner)
+    projects = ProjectService(
+        storage=storage,
+        encryption=encryption,
+        audit=audit,
+        masking=policy,
+        runs=runs,
+        clock=clock,
+    )
+    papers = PaperService(
+        storage=storage,
+        store=pipeline.store,
+        masked=pipeline.masked,
+        encryption=encryption,
+        citations=StoredBriefCitations(encryption),
+        criteria=criteria,
+    )
     return Providers(
         storage=storage,
         encryption=encryption,
@@ -551,14 +580,7 @@ def build_providers(
         ),
         email=email,
         rate_limiter=limiter,
-        projects=ProjectService(
-            storage=storage,
-            encryption=encryption,
-            audit=audit,
-            masking=policy,
-            runs=runs,
-            clock=clock,
-        ),
+        projects=projects,
         mfa=MfaService(
             storage=storage,
             encryption=encryption,
@@ -578,14 +600,7 @@ def build_providers(
         stages=stages,
         reviews=ReviewService(storage=storage, encryption=encryption, audit=audit, clock=clock),
         runs=runs,
-        papers=PaperService(
-            storage=storage,
-            store=pipeline.store,
-            masked=pipeline.masked,
-            encryption=encryption,
-            citations=StoredBriefCitations(encryption),
-            criteria=criteria,
-        ),
+        papers=papers,
         label_rules=LabelRulesService(
             storage=storage, store=pipeline.store, criteria=criteria, audit=audit, clock=clock
         ),
@@ -593,6 +608,9 @@ def build_providers(
         plans=plans,
         masking_rules=masking_rules,
         briefs=BriefService(storage=storage, encryption=encryption),
+        leanings=LeaningService(
+            storage=storage, encryption=encryption, audit=audit, clock=clock
+        ),
         questions=QuestionService(
             storage=storage,
             encryption=encryption,
@@ -642,6 +660,14 @@ def build_providers(
             limits=_extraction_limits(settings),
             worker_id=f"documents-{uuid.uuid4().hex[:12]}",
             clock=clock,
+        ),
+        collections=CollectionService(
+            storage=storage, encryption=encryption, audit=audit, projects=projects, clock=clock
+        ),
+        project_list=ProjectListService(storage=storage, projects=projects, papers=papers),
+        history=HistoryService(storage=storage, encryption=encryption, clock=clock),
+        marks=MarkService(
+            storage=storage, encryption=encryption, store=pipeline.store, clock=clock
         ),
     )
 
@@ -738,6 +764,13 @@ def get_briefs(providers: ProvidersDep) -> BriefService:
 BriefsDep = Annotated[BriefService, Depends(get_briefs)]
 
 
+def get_leanings(providers: ProvidersDep) -> LeaningService:
+    return providers.leanings
+
+
+LeaningsDep = Annotated[LeaningService, Depends(get_leanings)]
+
+
 def get_exports(providers: ProvidersDep) -> ExportService:
     # Stateless, so built per request over the same services the screens use.
     return ExportService(
@@ -749,6 +782,16 @@ def get_exports(providers: ProvidersDep) -> ExportService:
 
 
 ExportsDep = Annotated[ExportService, Depends(get_exports)]
+
+
+def get_comparisons(providers: ProvidersDep) -> ComparisonService:
+    # Stateless, so built per request over the paper service the screens use.
+    return ComparisonService(
+        storage=providers.storage, encryption=providers.encryption, papers=providers.papers
+    )
+
+
+ComparisonsDep = Annotated[ComparisonService, Depends(get_comparisons)]
 
 
 def get_questions(providers: ProvidersDep) -> QuestionService:
@@ -763,3 +806,45 @@ def get_documents(providers: ProvidersDep) -> DocumentService:
 
 
 DocumentsDep = Annotated[DocumentService, Depends(get_documents)]
+
+
+def get_collections(providers: ProvidersDep) -> CollectionService:
+    return providers.collections
+
+
+CollectionsDep = Annotated[CollectionService, Depends(get_collections)]
+
+
+def get_project_list(providers: ProvidersDep) -> ProjectListService:
+    return providers.project_list
+
+
+ProjectListDep = Annotated[ProjectListService, Depends(get_project_list)]
+
+
+def get_history(providers: ProvidersDep) -> HistoryService:
+    return providers.history
+
+
+HistoryDep = Annotated[HistoryService, Depends(get_history)]
+
+
+def get_marks(providers: ProvidersDep) -> MarkService:
+    return providers.marks
+
+
+MarksDep = Annotated[MarkService, Depends(get_marks)]
+
+
+def get_search(providers: ProvidersDep) -> ProjectSearchService:
+    # Stateless, so built per request.
+    return ProjectSearchService(
+        storage=providers.storage,
+        encryption=providers.encryption,
+        store=PaperStore(providers.encryption),
+        limiter=providers.rate_limiter,
+        tags=SealedTags(providers.encryption),
+    )
+
+
+SearchDep = Annotated[ProjectSearchService, Depends(get_search)]
