@@ -269,6 +269,29 @@ describe("appearance", () => {
 	});
 });
 
+describe("keyboard", () => {
+	it("turns single-key shortcuts off and on, and remembers it (WCAG 2.1.4)", async () => {
+		signedIn();
+		const { user } = renderApp("/settings");
+		const appearance = await section("Appearance");
+		const shortcuts = within(appearance).getByRole("checkbox", {
+			name: "Single-key shortcuts",
+		});
+
+		expect(shortcuts).toBeChecked();
+		await user.click(shortcuts);
+
+		expect(shortcuts).not.toBeChecked();
+		expect(window.localStorage.getItem("humani-t:single-key-shortcuts")).toBe(
+			"off",
+		);
+		await user.click(shortcuts);
+		expect(
+			window.localStorage.getItem("humani-t:single-key-shortcuts"),
+		).toBeNull();
+	});
+});
+
 describe("the account page", () => {
 	it("has no accessibility violations", async () => {
 		signedIn();

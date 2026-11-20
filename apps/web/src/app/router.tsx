@@ -21,6 +21,7 @@ import type { components } from "../api/schema.gen";
 import { safeRedirect } from "../features/auth/redirect";
 import { SignInPage } from "../features/auth/SignInPage";
 import { HomePage } from "../features/projects/HomePage";
+import { parseProjectsSearch } from "../features/projects/projectListView";
 import { AppShell } from "../shell/AppShell";
 import {
 	NotFoundPage,
@@ -161,10 +162,23 @@ const homeRoute = createRoute({
 const projectsRoute = createRoute({
 	getParentRoute: () => signedInRoute,
 	path: "projects",
+	validateSearch: parseProjectsSearch,
 	component: lazyRouteComponent(
 		() => import("../features/projects/ProjectsPage"),
 		"ProjectsPage",
 	),
+});
+
+/** One collection (§3.2): the All projects page, filtered to it. */
+const collectionRoute = createRoute({
+	getParentRoute: () => signedInRoute,
+	path: "c/$collectionId",
+	beforeLoad: ({ params }) => {
+		throw redirect({
+			to: "/projects",
+			search: { collection: params.collectionId },
+		});
+	},
 });
 
 const newProjectRoute = createRoute({
@@ -308,9 +322,21 @@ export interface BriefSearch {
 	run?: string | undefined;
 	/** The source panel's tag (UI_UX_SPEC §3.2 "a passage is a query parameter"). */
 	source?: string | undefined;
+	/** Picked trade-off criteria, as positions in the brief's list: names are project text. */
+	priorities?: number[] | undefined;
 }
 
 const SOURCE_TAG = /^[PD]\d{1,6}$/;
+
+function positions(value: unknown): number[] | undefined {
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+	const kept = value.filter(
+		(n): n is number => Number.isInteger(n) && n >= 0 && n < 100,
+	);
+	return kept.length === 0 ? undefined : [...new Set(kept)];
+}
 
 const briefRoute = createRoute({
 	getParentRoute: () => reviewRoute,
@@ -321,6 +347,7 @@ const briefRoute = createRoute({
 			typeof search["source"] === "string" && SOURCE_TAG.test(search["source"])
 				? search["source"]
 				: undefined,
+		priorities: positions(search["priorities"]),
 	}),
 	component: lazyRouteComponent(
 		() => import("../features/briefs/BriefCanvas"),
@@ -342,6 +369,25 @@ const traceRoute = createRoute({
 	),
 });
 
+export interface CompareSearch {
+	/** The two runs to compare; the API reads them oldest first, whatever the order. */
+	a?: string | undefined;
+	b?: string | undefined;
+}
+
+const compareRoute = createRoute({
+	getParentRoute: () => reviewRoute,
+	path: "compare",
+	validateSearch: (search: Record<string, unknown>): CompareSearch => ({
+		a: typeof search["a"] === "string" ? search["a"] : undefined,
+		b: typeof search["b"] === "string" ? search["b"] : undefined,
+	}),
+	component: lazyRouteComponent(
+		() => import("../features/reviews/CompareRunsCanvas"),
+		"CompareRunsCanvas",
+	),
+});
+
 export interface DocumentsSearch {
 	/** The document whose masked text is open. */
 	document?: string | undefined;
@@ -360,6 +406,24 @@ const documentsRoute = createRoute({
 	),
 });
 
+const historyRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "history",
+	component: lazyRouteComponent(
+		() => import("../features/history/HistoryPage"),
+		"HistoryPage",
+	),
+});
+
+const savedRoute = createRoute({
+	getParentRoute: () => signedInRoute,
+	path: "saved",
+	component: lazyRouteComponent(
+		() => import("../features/history/SavedPage"),
+		"SavedPage",
+	),
+});
+
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
@@ -368,6 +432,7 @@ const routeTree = rootRoute.addChildren([
 	signedInRoute.addChildren([
 		homeRoute,
 		projectsRoute,
+		collectionRoute,
 		newProjectRoute,
 		workspaceRoute.addChildren([
 			projectHomeRoute,
@@ -379,11 +444,14 @@ const routeTree = rootRoute.addChildren([
 				papersRoute,
 				briefRoute,
 				traceRoute,
+				compareRoute,
 			]),
 			documentsRoute,
 			threadRoute,
+			historyRoute,
 		]),
 		accountRoute,
+		savedRoute,
 	]),
 ]);
 

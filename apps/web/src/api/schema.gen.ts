@@ -519,7 +519,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Projects the caller belongs to, newest first */
+        /**
+         * Projects the caller belongs to, filtered and sorted
+         * @description Only the caller's own projects, whatever the filters (UI_UX_SPEC §7.2).
+         */
         get: operations["list_projects_api_v1_projects_get"];
         put?: never;
         /**
@@ -570,6 +573,26 @@ export interface paths {
          * @description Owners only. The project's own masking rules apply either way (ADR 0014).
          */
         put: operations["set_project_masking_api_v1_projects__project_id__masking_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/view-first": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch "Your view first" on or off
+         * @description Owners only. When on, the brief asks each member which option they lean towards.
+         */
+        put: operations["set_project_view_first_api_v1_projects__project_id__view_first_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -941,6 +964,63 @@ export interface paths {
          * @description Each step is the `agent.step` event the run streamed; absent fields are omitted.
          */
         get: operations["read_trace_api_v1_briefs__brief_id__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{review_id}/brief/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every version of a review's brief, newest first
+         * @description One version per run of the Brief stage; empty before the first.
+         */
+        get: operations["list_brief_versions_api_v1_reviews__review_id__brief_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/briefs/{brief_id}/compare/{other_brief_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What changed between two versions of a review's brief */
+        get: operations["compare_brief_versions_api_v1_briefs__brief_id__compare__other_brief_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/compare/{other_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Two runs of one review side by side: setup, discovery, screening and brief
+         * @description `cannot_compare` says why, and every part is null, when a run has no record.
+         */
+        get: operations["compare_runs_api_v1_runs__run_id__compare__other_run_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1380,6 +1460,324 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/leaning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which option you leaned towards before reading this run's brief
+         * @description `null` until you answer. Nobody else's answer is ever returned.
+         */
+        get: operations["read_leaning_api_v1_runs__run_id__leaning_get"];
+        /**
+         * Say which option you lean towards, before reading the brief
+         * @description Once per member and brief; the first answer stays.
+         */
+        put: operations["record_leaning_api_v1_runs__run_id__leaning_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every collection, with the caller's own counts */
+        get: operations["list_collections_api_v1_collections_get"];
+        put?: never;
+        /**
+         * Create a collection
+         * @description Any signed-in user. Its name is visible to everyone in the deployment.
+         */
+        post: operations["create_collection_api_v1_collections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a collection; the projects in it stay, in no collection */
+        delete: operations["delete_collection_api_v1_collections__collection_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename a collection */
+        patch: operations["rename_collection_api_v1_collections__collection_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** File the project in a collection, or in none */
+        put: operations["move_project_api_v1_projects__project_id__collection_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the project's tags
+         * @description Owners only. Tags are trimmed and repeats dropped, ignoring case.
+         */
+        put: operations["set_project_tags_api_v1_projects__project_id__tags_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Pin the project for yourself */
+        put: operations["pin_project_api_v1_projects__project_id__pin_put"];
+        post?: never;
+        /** Unpin the project */
+        delete: operations["unpin_project_api_v1_projects__project_id__pin_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/project-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move, tag or archive several projects at once
+         * @description Each project the caller owns is changed; every other one is listed in `skipped`.
+         *
+         *     A project the caller is not in is skipped as `not_found`, exactly like a missing one.
+         *     `422` for an unknown collection, before anything changes.
+         */
+        post: operations["bulk_project_action_api_v1_project_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/needs-you": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What waits for the caller: gates, drafts, failures, briefs
+         * @description Only what the caller's role can act on, from live projects that are not archived.
+         */
+        get: operations["read_needs_you_api_v1_needs_you_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/needs-you/dismissals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hide one Needs you item for the caller until it changes */
+        post: operations["dismiss_api_v1_needs_you_dismissals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent activity in the caller's projects, newest first */
+        get: operations["read_activity_api_v1_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everything that happened in the project, grouped by review */
+        get: operations["read_history_api_v1_projects__project_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/papers/{paper_id}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a paper as opened by the caller */
+        put: operations["see_paper_api_v1_projects__project_id__papers__paper_id__seen_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/papers/{paper_id}/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Add a paper to the caller's saved list */
+        put: operations["save_paper_api_v1_projects__project_id__papers__paper_id__saved_put"];
+        post?: never;
+        /** Take a paper off the caller's saved list */
+        delete: operations["unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/paper-marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's seen and saved marks on the project's papers */
+        get: operations["read_paper_marks_api_v1_projects__project_id__paper_marks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's saved papers, newest first
+         * @description Only from projects the caller still belongs to; a deleted project's are gone.
+         */
+        get: operations["read_saved_papers_api_v1_saved_papers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/briefs/{brief_id}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a brief as opened by the caller, so Needs you stops listing it */
+        put: operations["see_brief_api_v1_briefs__brief_id__seen_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find projects, briefs, papers, passages and questions in your projects */
+        get: operations["search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1399,6 +1797,88 @@ export interface components {
              * @default If an account exists for that email, a reset link has been sent.
              */
             status: string;
+        };
+        /**
+         * ActivityAction
+         * @enum {string}
+         */
+        ActivityAction: "review_started" | "plan_drafted" | "plan_accepted" | "labels_changed" | "run" | "brief_ready" | "question_asked" | "document_added";
+        /** ActivityEventOut */
+        ActivityEventOut: {
+            /** @description The timeline filter this line falls under. */
+            kind: components["schemas"]["ActivityKind"];
+            action: components["schemas"]["ActivityAction"];
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * @description Null for a project-wide line: a document.
+             */
+            review_id: string | null;
+            /** @description Who did it; null when the model did. */
+            actor: components["schemas"]["UserRefOut"] | null;
+            /** Run Id */
+            run_id: string | null;
+            /** Run Number */
+            run_number: number | null;
+            run_state: components["schemas"]["RunState"] | null;
+            /**
+             * Seconds
+             * @description How long the run has taken so far.
+             */
+            seconds: number | null;
+            /** Stopped At */
+            stopped_at: string | null;
+            /**
+             * Error
+             * @description Why a run stopped, in plain words. Timeline only.
+             */
+            error: string | null;
+            /**
+             * Model Ids
+             * @description The models a run, brief or answer used.
+             */
+            model_ids: string[];
+            /**
+             * Stages
+             * @description A run's stages. Timeline only.
+             */
+            stages: components["schemas"]["StageLineOut"][];
+            /** Version */
+            version: number | null;
+            /** Brief Id */
+            brief_id: string | null;
+            /** Thread Id */
+            thread_id: string | null;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Number */
+            document_number: number | null;
+            /**
+             * Text
+             * @description The question as stored (masked when masking is on), or a document name.
+             */
+            text: string | null;
+            /** Papers Moved */
+            papers_moved: number | null;
+        };
+        /**
+         * ActivityKind
+         * @description The timeline's "Show:" filters: each action falls under exactly one.
+         * @enum {string}
+         */
+        ActivityKind: "review" | "run" | "brief" | "question" | "document";
+        /** ActivityOut */
+        ActivityOut: {
+            /**
+             * Events
+             * @description Newest first.
+             */
+            events: components["schemas"]["ActivityEventOut"][];
         };
         /**
          * AgentRole
@@ -1559,6 +2039,16 @@ export interface components {
              */
             draft_now: boolean;
         };
+        /** ArchiveProjectsIn */
+        ArchiveProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "archive";
+            /** Project Ids */
+            project_ids: string[];
+        };
         /** AssessmentOut */
         AssessmentOut: {
             /** Option */
@@ -1574,6 +2064,50 @@ export interface components {
             kind: string;
             /** User Id */
             user_id: string | null;
+        };
+        /** BeforeAfterOut */
+        BeforeAfterOut: {
+            /**
+             * Before
+             * @description As the older run recorded it; null if it recorded none.
+             */
+            before: unknown;
+            /** After */
+            after: unknown;
+        };
+        /** BriefChangesOut */
+        BriefChangesOut: {
+            /** Options Added */
+            options_added: string[];
+            /** Options Removed */
+            options_removed: string[];
+            /** Strength Changes */
+            strength_changes: components["schemas"]["StrengthChangeOut"][];
+            /**
+             * Sources Added
+             * @description Matched by paper, not by tag.
+             */
+            sources_added: components["schemas"]["BriefSourceOut"][];
+            /** Sources Removed */
+            sources_removed: components["schemas"]["BriefSourceOut"][];
+        };
+        /** BriefComparisonOut */
+        BriefComparisonOut: {
+            /** Options Added */
+            options_added: string[];
+            /** Options Removed */
+            options_removed: string[];
+            /** Strength Changes */
+            strength_changes: components["schemas"]["StrengthChangeOut"][];
+            /**
+             * Sources Added
+             * @description Matched by paper, not by tag.
+             */
+            sources_added: components["schemas"]["BriefSourceOut"][];
+            /** Sources Removed */
+            sources_removed: components["schemas"]["BriefSourceOut"][];
+            before: components["schemas"]["ComparedVersionOut"];
+            after: components["schemas"]["ComparedVersionOut"];
         };
         /** BriefOut */
         BriefOut: {
@@ -1647,6 +2181,54 @@ export interface components {
             /** Max Rounds */
             max_rounds: number;
             stopped_because: components["schemas"]["StopReason"];
+        };
+        /** BriefSourceOut */
+        BriefSourceOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            source_kind: components["schemas"]["PassageSourceKind"];
+            /**
+             * Tag
+             * @description Its tag in the version that cites it.
+             */
+            tag: string;
+            /** Title */
+            title: string | null;
+        };
+        /** BriefVersionOut */
+        BriefVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             * @description The run whose Brief stage wrote this version.
+             */
+            run_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model Id */
+            model_id: string;
+            /** Is Latest */
+            is_latest: boolean;
+        };
+        /** BulkOut */
+        BulkOut: {
+            /** Changed */
+            changed: string[];
+            /** Skipped */
+            skipped: components["schemas"]["SkippedOut"][];
         };
         /**
          * ChangeKind
@@ -1738,6 +2320,89 @@ export interface components {
          * @enum {string}
          */
         ClaimSupport: "evidence" | "hypothesis";
+        /** CollectionIn */
+        CollectionIn: {
+            /** Name */
+            name: string;
+        };
+        /** CollectionOut */
+        CollectionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Project Count
+             * @description The caller's own projects in it, archived ones aside. Never anyone else's.
+             */
+            project_count: number;
+            /**
+             * Can Manage
+             * @description Whether the caller may rename or delete it.
+             */
+            can_manage: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ComparedPaperOut */
+        ComparedPaperOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /** Title */
+            title: string;
+        };
+        /** ComparedRunOut */
+        ComparedRunOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Number
+             * @description Its place among the review's runs, from 1, oldest first.
+             */
+            number: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Has Record
+             * @description False when no stage recorded its setup.
+             */
+            has_record: boolean;
+        };
+        /** ComparedVersionOut */
+        ComparedVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /**
          * CompiledQueryOut
          * @description A compiled Boolean query, in both structured and readable form.
@@ -1943,6 +2608,32 @@ export interface components {
             terms: components["schemas"]["TermChangeOut"][];
             /** Criteria */
             criteria: components["schemas"]["CriterionChangeOut"][];
+        };
+        /** DiscoveryCountsOut */
+        DiscoveryCountsOut: {
+            /**
+             * Identified
+             * @description Records the sources returned.
+             */
+            identified: number;
+            /** After Deduplication */
+            after_deduplication: number;
+        };
+        /** DiscoveryOut */
+        DiscoveryOut: {
+            before: components["schemas"]["DiscoveryCountsOut"];
+            after: components["schemas"]["DiscoveryCountsOut"];
+            /** Only Before */
+            only_before: components["schemas"]["ComparedPaperOut"][];
+            /** Only After */
+            only_after: components["schemas"]["ComparedPaperOut"][];
+            /** In Both */
+            in_both: number;
+        };
+        /** DismissalIn */
+        DismissalIn: {
+            /** Key */
+            key: string;
         };
         /**
          * DocumentDecision
@@ -2220,6 +2911,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * GateKind
+         * @enum {string}
+         */
+        GateKind: "vocabulary" | "privacy_review";
         /** GateRequiredData */
         GateRequiredData: {
             /**
@@ -2322,6 +3018,16 @@ export interface components {
              */
             status: string;
         };
+        /** HistoryGroupOut */
+        HistoryGroupOut: {
+            /** @description Null for project-wide lines. */
+            review: components["schemas"]["ReviewRefOut"] | null;
+            /**
+             * Events
+             * @description Newest first.
+             */
+            events: components["schemas"]["ActivityEventOut"][];
+        };
         /** InstructionsSentOut */
         InstructionsSentOut: {
             /** Version */
@@ -2384,6 +3090,23 @@ export interface components {
             event: "job.finished";
             data: components["schemas"]["JobFinishedData"];
         };
+        /** LabelChangeOut */
+        LabelChangeOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /** Title */
+            title: string;
+            before: components["schemas"]["ScreeningLabel"];
+            after: components["schemas"]["ScreeningLabel"];
+            /**
+             * Reason
+             * @description Why the newer run labelled it so.
+             */
+            reason: string | null;
+        };
         /**
          * LabelRulesIn
          * @example {
@@ -2432,6 +3155,32 @@ export interface components {
              * @description Papers of the newest run that changed tier.
              */
             papers_moved: number;
+        };
+        /** LeaningIn */
+        LeaningIn: {
+            /**
+             * Option
+             * @description One of the brief's option names, or null for "Not sure".
+             */
+            option: string | null;
+        };
+        /** LeaningOut */
+        LeaningOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Option
+             * @description null when the member was not sure.
+             */
+            option: string | null;
+            /**
+             * Answered At
+             * Format: date-time
+             */
+            answered_at: string;
         };
         /** LoginIn */
         LoginIn: {
@@ -2654,6 +3403,17 @@ export interface components {
              */
             email?: string | null;
         };
+        /** MemberRefOut */
+        MemberRefOut: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+        };
         /** MemberRoleIn */
         MemberRoleIn: {
             role: components["schemas"]["Role"];
@@ -2728,6 +3488,94 @@ export interface components {
              */
             saved_at: string;
         };
+        /** MoveProjectsIn */
+        MoveProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "move";
+            /** Project Ids */
+            project_ids: string[];
+            /** Collection Id */
+            collection_id: string | null;
+        };
+        /** NamedChangeOut */
+        NamedChangeOut: {
+            /**
+             * Before
+             * @description As the older run recorded it; null if it recorded none.
+             */
+            before: unknown;
+            /** After */
+            after: unknown;
+            /**
+             * Name
+             * @description `stage.fact` for a stage's own setting, e.g. `discover.limit_per_source`.
+             */
+            name: string;
+        };
+        /** NeedsYouItemOut */
+        NeedsYouItemOut: {
+            /**
+             * Key
+             * @description What `POST /needs-you/dismissals` names. Ids only.
+             */
+            key: string;
+            kind: components["schemas"]["NeedsYouKind"];
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /**
+             * At
+             * Format: date-time
+             * @description When it started waiting.
+             */
+            at: string;
+            /** Gate Id */
+            gate_id: string | null;
+            gate_kind: components["schemas"]["GateKind"] | null;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Run Number
+             * @description The run's number in its review, from 1.
+             */
+            run_number: number | null;
+            /**
+             * Stopped At
+             * @description The stage a failed run did not finish.
+             */
+            stopped_at: string | null;
+            /**
+             * Version
+             * @description The draft's plan version, or the brief's.
+             */
+            version: number | null;
+            /** Brief Id */
+            brief_id: string | null;
+        };
+        /**
+         * NeedsYouKind
+         * @enum {string}
+         */
+        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief";
+        /** NeedsYouOut */
+        NeedsYouOut: {
+            /**
+             * Count
+             * @description How many items; the rail shows it.
+             */
+            count: number;
+            /**
+             * Items
+             * @description Newest first.
+             */
+            items: components["schemas"]["NeedsYouItemOut"][];
+        };
         /** OptionOut */
         OptionOut: {
             /** Name */
@@ -2755,6 +3603,26 @@ export interface components {
              * @description The kept text, masked; None until masked.
              */
             masked_text: string | null;
+        };
+        /** PaperMarksOut */
+        PaperMarksOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /**
+             * Is Seen
+             * @description Opened here or in another project, by this person.
+             */
+            is_seen: boolean;
+            /** Is Saved */
+            is_saved: boolean;
+            /**
+             * Seen In Other Projects
+             * @description Only projects the caller is a member of.
+             */
+            seen_in_other_projects: components["schemas"]["ProjectRefOut"][];
         };
         /** PaperOut */
         PaperOut: {
@@ -3029,6 +3897,22 @@ export interface components {
              */
             where: string | null;
         };
+        /** ProjectCollectionIn */
+        ProjectCollectionIn: {
+            /**
+             * Collection Id
+             * @description null takes the project out of any.
+             */
+            collection_id: string | null;
+        };
+        /** ProjectHistoryOut */
+        ProjectHistoryOut: {
+            /**
+             * Groups
+             * @description By latest activity, newest first.
+             */
+            groups: components["schemas"]["HistoryGroupOut"][];
+        };
         /** ProjectIn */
         ProjectIn: {
             /** Name */
@@ -3074,6 +3958,44 @@ export interface components {
              * @description false while the deployment requires masking for every project.
              */
             can_turn_masking_off: boolean;
+            /**
+             * Is View First On
+             * @description Whether the brief asks members which option they lean towards first.
+             */
+            is_view_first_on: boolean;
+            /**
+             * Collection Id
+             * @description The one collection the project is filed in; null for none (ADR 0016).
+             */
+            collection_id: string | null;
+            /**
+             * Tags
+             * @description The project's tags, in the owner's order.
+             */
+            tags: string[];
+            /**
+             * Is Pinned
+             * @description Whether the caller has pinned it. Pins are per user.
+             */
+            is_pinned: boolean;
+        };
+        /** ProjectPaperMarksOut */
+        ProjectPaperMarksOut: {
+            /**
+             * Papers
+             * @description Only papers with a mark.
+             */
+            papers: components["schemas"]["PaperMarksOut"][];
+        };
+        /** ProjectRefOut */
+        ProjectRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** ProjectRenameIn */
         ProjectRenameIn: {
@@ -3081,11 +4003,104 @@ export interface components {
             name: string;
         };
         /**
+         * ProjectSort
+         * @enum {string}
+         */
+        ProjectSort: "last_activity" | "name" | "created" | "relevant_papers";
+        /**
          * ProjectStatus
          * @description What a project shows in lists (UI_UX_SPEC §11.1). Derived, never set by hand.
          * @enum {string}
          */
         ProjectStatus: "planning" | "running" | "needs_you" | "brief_ready" | "done_without_brief" | "failed" | "cancelled" | "archived";
+        /** ProjectSummaryOut */
+        ProjectSummaryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** @description The caller's own role in this project. */
+            role: components["schemas"]["Role"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Archived At */
+            archived_at: string | null;
+            /** @description UI_UX_SPEC §11.1: derived from the newest review and its latest run. */
+            status: components["schemas"]["ProjectStatus"];
+            /**
+             * Is Masking On
+             * @description The owner's switch, as stored (ADR 0014).
+             */
+            is_masking_on: boolean;
+            /**
+             * Is Masking Effective
+             * @description Whether text is masked before it reaches the model now: the switch, unless the deployment's hosted model requires masking.
+             */
+            is_masking_effective: boolean;
+            /**
+             * Can Turn Masking Off
+             * @description false while the deployment requires masking for every project.
+             */
+            can_turn_masking_off: boolean;
+            /**
+             * Is View First On
+             * @description Whether the brief asks members which option they lean towards first.
+             */
+            is_view_first_on: boolean;
+            /**
+             * Collection Id
+             * @description The one collection the project is filed in; null for none (ADR 0016).
+             */
+            collection_id: string | null;
+            /**
+             * Tags
+             * @description The project's tags, in the owner's order.
+             */
+            tags: string[];
+            /**
+             * Is Pinned
+             * @description Whether the caller has pinned it. Pins are per user.
+             */
+            is_pinned: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             * @description The latest of: created, archived, its newest review, run or brief.
+             */
+            last_activity_at: string;
+            /** Pinned At */
+            pinned_at: string | null;
+            /** Members */
+            members: components["schemas"]["MemberRefOut"][];
+            /**
+             * Relevant Papers
+             * @description Included papers of the newest run with papers, under the latest rules.
+             */
+            relevant_papers: number | null;
+            /**
+             * Papers Found
+             * @description That run's papers after duplicates.
+             */
+            papers_found: number | null;
+            /** Brief Version */
+            brief_version: number | null;
+        };
+        /** ProjectTagsIn */
+        ProjectTagsIn: {
+            /** Tags */
+            tags: string[];
+        };
+        /** ProjectViewFirstIn */
+        ProjectViewFirstIn: {
+            /** Is View First On */
+            is_view_first_on: boolean;
+        };
         /**
          * ProvenanceOut
          * @description Where the terms came from. Travels with every result set.
@@ -3257,6 +4272,21 @@ export interface components {
             /** @description Who asked the question. */
             created_by: components["schemas"]["UserRefOut"];
         };
+        /** ReviewRefOut */
+        ReviewRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question */
+            question: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
         /**
          * ReviewStatus
          * @enum {string}
@@ -3301,6 +4331,21 @@ export interface components {
              * @description Decisions rules cannot relabel: no per-criterion answers.
              */
             untouchable: number;
+        };
+        /** RunComparisonOut */
+        RunComparisonOut: {
+            before: components["schemas"]["ComparedRunOut"];
+            after: components["schemas"]["ComparedRunOut"];
+            /**
+             * Cannot Compare
+             * @description Why the runs cannot be compared; null when they can.
+             */
+            cannot_compare: string | null;
+            setup: components["schemas"]["SetupOut"] | null;
+            discovery: components["schemas"]["DiscoveryOut"] | null;
+            screening: components["schemas"]["ScreeningOut"] | null;
+            /** @description Null unless both runs wrote a brief. */
+            brief: components["schemas"]["BriefChangesOut"] | null;
         };
         /** RunIn */
         RunIn: {
@@ -3362,6 +4407,41 @@ export interface components {
          * @description One event on `GET /runs/{run_id}/events`: its `id:`, `event:` and parsed `data:`.
          */
         RunStreamEvent: components["schemas"]["StageStartedEvent"] | components["schemas"]["StageProgressEvent"] | components["schemas"]["StageFinishedEvent"] | components["schemas"]["AgentStepEvent"] | components["schemas"]["GateRequiredEvent"] | components["schemas"]["GateResolvedEvent"] | components["schemas"]["JobFinishedEvent"];
+        /** SavedPaperOut */
+        SavedPaperOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            project: components["schemas"]["ProjectRefOut"];
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /** Link */
+            link: string | null;
+            /**
+             * Saved At
+             * Format: date-time
+             */
+            saved_at: string;
+        };
+        /** SavedPapersOut */
+        SavedPapersOut: {
+            /**
+             * Papers
+             * @description Newest saved first.
+             */
+            papers: components["schemas"]["SavedPaperOut"][];
+        };
         /**
          * ScreenedItemData
          * @description The screen stage's row for one paper, as the live screening list shows it.
@@ -3404,12 +4484,102 @@ export interface components {
          * @enum {string}
          */
         ScreeningLabel: "include" | "exclude" | "uncertain";
+        /** ScreeningOut */
+        ScreeningOut: {
+            /**
+             * Before
+             * @description include, exclude, uncertain and unscreened.
+             */
+            before: {
+                [key: string]: number;
+            };
+            /** After */
+            after: {
+                [key: string]: number;
+            };
+            /** Changed */
+            changed: components["schemas"]["LabelChangeOut"][];
+        };
         /**
          * ScreeningTier
          * @description The names people see, derived from label and priority.
          * @enum {string}
          */
         ScreeningTier: "highly_relevant" | "relevant" | "possibly_relevant" | "excluded" | "uncertain";
+        /** SearchGroupOut */
+        SearchGroupOut: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Hits */
+            hits: components["schemas"]["SearchHitOut"][];
+        };
+        /** SearchHitOut */
+        SearchHitOut: {
+            scope: components["schemas"]["SearchScope"];
+            /**
+             * Text
+             * @description Where it matched, on one line; cut with … when long.
+             */
+            text: string;
+            /** Review Id */
+            review_id: string | null;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Brief Version
+             * @description Briefs: the brief's version.
+             */
+            brief_version: number | null;
+            /** Paper Id */
+            paper_id: string | null;
+            /**
+             * Tag
+             * @description Papers and passages: the tag a brief cites, P0012.
+             */
+            tag: string | null;
+            /**
+             * Title
+             * @description Papers: the paper's title.
+             */
+            title: string | null;
+            /** Thread Id */
+            thread_id: string | null;
+            /** Question Id */
+            question_id: string | null;
+        };
+        /** SearchOut */
+        SearchOut: {
+            /**
+             * Query
+             * @description The query as searched: trimmed, spaces collapsed.
+             */
+            query: string;
+            /** @description null: every scope. */
+            scope: components["schemas"]["SearchScope"] | null;
+            /**
+             * Groups
+             * @description By project, newest project first.
+             */
+            groups: components["schemas"]["SearchGroupOut"][];
+            /**
+             * Is Truncated
+             * @description A cap was reached, so there may be more.
+             */
+            is_truncated: boolean;
+        };
+        /**
+         * SearchScope
+         * @description What a hit is, in the order a project's hits are listed.
+         * @enum {string}
+         */
+        SearchScope: "projects" | "briefs" | "papers" | "passages" | "questions";
         /**
          * SentTextKind
          * @enum {string}
@@ -3460,6 +4630,29 @@ export interface components {
             /** Aal */
             aal: number;
         };
+        /** SetupOut */
+        SetupOut: {
+            vocabulary_versions: components["schemas"]["BeforeAfterOut"];
+            sources: components["schemas"]["BeforeAfterOut"];
+            model_ids: components["schemas"]["BeforeAfterOut"];
+            /** Queries Added */
+            queries_added: components["schemas"]["SourceQueryOut"][];
+            /**
+             * Queries Removed
+             * @description A rewritten query is in both.
+             */
+            queries_removed: components["schemas"]["SourceQueryOut"][];
+            /**
+             * Prompt Versions
+             * @description Every prompt either run used.
+             */
+            prompt_versions: components["schemas"]["NamedChangeOut"][];
+            /**
+             * Settings Changed
+             * @description Only those that differ.
+             */
+            settings_changed: components["schemas"]["NamedChangeOut"][];
+        };
         /**
          * SignedInOut
          * @description Where the sign-in stands. Fields that do not apply are left out.
@@ -3476,6 +4669,21 @@ export interface components {
             user?: components["schemas"]["UserOut"] | null;
             /** Methods */
             methods?: string[] | null;
+        };
+        /**
+         * SkipReason
+         * @enum {string}
+         */
+        SkipReason: "not_found" | "not_allowed" | "too_many_tags";
+        /** SkippedOut */
+        SkippedOut: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** @description not_found also covers a project the caller is not in; not_allowed, one where their role may not do this; too_many_tags, one already at the tag limit. */
+            reason: components["schemas"]["SkipReason"];
         };
         /** SourceDetailsOut */
         SourceDetailsOut: {
@@ -3523,6 +4731,13 @@ export interface components {
              * @description How many times the brief cites this tag.
              */
             citations: number;
+        };
+        /** SourceQueryOut */
+        SourceQueryOut: {
+            /** Source */
+            source: string;
+            /** Query */
+            query: string;
         };
         /** SpanOut */
         SpanOut: {
@@ -3586,6 +4801,14 @@ export interface components {
              */
             event: "stage.finished";
             data: components["schemas"]["StageFinishedData"];
+        };
+        /** StageLineOut */
+        StageLineOut: {
+            /** Stage */
+            stage: string;
+            state: components["schemas"]["StageState"];
+            /** Seconds */
+            seconds: number | null;
         };
         /** StageProgressData */
         StageProgressData: {
@@ -3663,6 +4886,11 @@ export interface components {
             data: components["schemas"]["StageStartedData"];
         };
         /**
+         * StageState
+         * @enum {string}
+         */
+        StageState: "done" | "running" | "waiting" | "stopped" | "not_run";
+        /**
          * StepStatus
          * @enum {string}
          */
@@ -3672,6 +4900,28 @@ export interface components {
          * @enum {string}
          */
         StopReason: "accepted" | "max_rounds" | "invalid_output" | "no_progress";
+        /** StrengthChangeOut */
+        StrengthChangeOut: {
+            /**
+             * Option
+             * @description As the newer version names it.
+             */
+            option: string;
+            before: components["schemas"]["EvidenceStrength"];
+            after: components["schemas"]["EvidenceStrength"];
+        };
+        /** TagProjectsIn */
+        TagProjectsIn: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "add_tag";
+            /** Project Ids */
+            project_ids: string[];
+            /** Tag */
+            tag: string;
+        };
         /** TermChangeOut */
         TermChangeOut: {
             /** Theme */
@@ -4951,6 +6201,21 @@ export interface operations {
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: {
+                sort?: components["schemas"]["ProjectSort"];
+                /** @description Any of these; `archived` brings archived ones in. */
+                status?: components["schemas"]["ProjectStatus"][];
+                /** @description Every one of these, ignoring case. */
+                tag?: string[];
+                /** @description Projects this person owns. */
+                owner?: string | null;
+                /** @description Projects this person is in. */
+                member?: string | null;
+                /** @description Inclusive, in UTC. */
+                created_from?: string | null;
+                /** @description Inclusive, in UTC. */
+                created_to?: string | null;
+                /** @description A collection id, or "none" for projects in none. */
+                collection?: string | "none" | null;
                 include_archived?: boolean;
             };
             header?: never;
@@ -4965,7 +6230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectOut"][];
+                    "application/json": components["schemas"]["ProjectSummaryOut"][];
                 };
             };
             /** @description Validation Error */
@@ -5151,6 +6416,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_project_view_first_api_v1_projects__project_id__view_first_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectViewFirstIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -6000,6 +7300,97 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    list_brief_versions_api_v1_reviews__review_id__brief_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefVersionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_brief_versions_api_v1_briefs__brief_id__compare__other_brief_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brief_id: string;
+                other_brief_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefComparisonOut"];
+                };
+            };
+            /** @description The same version twice, or versions of two reviews */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    compare_runs_api_v1_runs__run_id__compare__other_run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                other_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunComparisonOut"];
+                };
+            };
+            /** @description The same run twice, or runs of two reviews */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7026,6 +8417,724 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    read_leaning_api_v1_runs__run_id__leaning_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaningOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_leaning_api_v1_runs__run_id__leaning_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaningIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaningOut"];
+                };
+            };
+            /** @description No such run, or the run has no brief */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already answered, or the project does not ask */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_collections_api_v1_collections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"][];
+                };
+            };
+        };
+    };
+    create_collection_api_v1_collections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"];
+                };
+            };
+            /** @description Another collection uses this name (`collection_name_taken`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_collection_api_v1_collections__collection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_collection_api_v1_collections__collection_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"];
+                };
+            };
+            /** @description Not its creator or an administrator */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_project_api_v1_projects__project_id__collection_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCollectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description No such collection */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_project_tags_api_v1_projects__project_id__tags_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectTagsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_project_api_v1_projects__project_id__pin_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_project_api_v1_projects__project_id__pin_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_project_action_api_v1_project_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveProjectsIn"] | components["schemas"]["TagProjectsIn"] | components["schemas"]["ArchiveProjectsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_needs_you_api_v1_needs_you_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeedsYouOut"];
+                };
+            };
+        };
+    };
+    dismiss_api_v1_needs_you_dismissals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Nothing waiting for the caller has this key */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_activity_api_v1_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+        };
+    };
+    read_history_api_v1_projects__project_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectHistoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    see_paper_api_v1_projects__project_id__papers__paper_id__seen_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_paper_api_v1_projects__project_id__papers__paper_id__saved_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsave_paper_api_v1_projects__project_id__papers__paper_id__saved_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such paper in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_paper_marks_api_v1_projects__project_id__paper_marks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPaperMarksOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_saved_papers_api_v1_saved_papers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedPapersOut"];
+                };
+            };
+        };
+    };
+    see_brief_api_v1_briefs__brief_id__seen_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brief_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such brief */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_v1_search_get: {
+        parameters: {
+            query: {
+                /** @description 2 to 200 characters. */
+                q: string;
+                /** @description Leave out for every scope. */
+                scope?: components["schemas"]["SearchScope"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many searches lately; see Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

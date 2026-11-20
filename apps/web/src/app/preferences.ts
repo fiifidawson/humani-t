@@ -1,6 +1,6 @@
 /**
- * Per-browser display preferences: theme, reduced motion, the folded rail and panel widths.
- *
+ * Per-browser display preferences: theme, reduced motion, single-key shortcuts, the
+ * folded rail, the rail's open collections and panel widths.
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
  */
@@ -12,6 +12,7 @@ export type ThemeChoice = "system" | "light" | "dark";
 const THEME_KEY = "humani-t:theme";
 const RAIL_KEY = "humani-t:rail-folded";
 const MOTION_KEY = "humani-t:reduce-motion";
+const SHORTCUTS_KEY = "humani-t:single-key-shortcuts";
 const listeners = new Set<() => void>();
 // Where a preference lives when storage refuses it: for this page view only.
 const unsaved = new Map<string, string | null>();
@@ -119,6 +120,20 @@ export function useReducedMotion(): [boolean, (isReduced: boolean) => void] {
 	return [isReduced, setReduced];
 }
 
+/** On unless the person turned them off (WCAG 2.1.4); read at each key press. */
+export function readSingleKeyShortcuts(): boolean {
+	return read(SHORTCUTS_KEY) !== "off";
+}
+
+export function useSingleKeyShortcuts(): [boolean, (isOn: boolean) => void] {
+	const isOn = useSyncExternalStore(subscribe, readSingleKeyShortcuts);
+	const setOn = useCallback(
+		(value: boolean) => write(SHORTCUTS_KEY, value ? null : "off"),
+		[],
+	);
+	return [isOn, setOn];
+}
+
 export function useRailFolded(): [boolean, (isFolded: boolean) => void] {
 	const isFolded = useSyncExternalStore(
 		subscribe,
@@ -129,6 +144,47 @@ export function useRailFolded(): [boolean, (isFolded: boolean) => void] {
 		[],
 	);
 	return [isFolded, setFolded];
+}
+
+const OPEN_COLLECTIONS_KEY = "humani-t:open-collections";
+
+function readOpenCollections(): string {
+	return read(OPEN_COLLECTIONS_KEY) ?? "[]";
+}
+
+/** Which of the rail's collections are unfolded: their ids, which name nothing on their own. */
+export function useOpenCollections(): [
+	ReadonlySet<string>,
+	(collectionId: string, isOpen: boolean) => void,
+] {
+	const stored = useSyncExternalStore(subscribe, readOpenCollections);
+	const open = parseIds(stored);
+	const setOpen = useCallback((collectionId: string, isOpen: boolean) => {
+		const next = parseIds(readOpenCollections());
+		if (isOpen) {
+			next.add(collectionId);
+		} else {
+			next.delete(collectionId);
+		}
+		write(
+			OPEN_COLLECTIONS_KEY,
+			next.size === 0 ? null : JSON.stringify([...next]),
+		);
+	}, []);
+	return [open, setOpen];
+}
+
+function parseIds(stored: string): Set<string> {
+	try {
+		const value: unknown = JSON.parse(stored);
+		return new Set(
+			Array.isArray(value)
+				? value.filter((id): id is string => typeof id === "string")
+				: [],
+		);
+	} catch {
+		return new Set();
+	}
 }
 
 export type PanelName = "chat" | "source";

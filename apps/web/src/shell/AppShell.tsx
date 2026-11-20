@@ -1,6 +1,7 @@
 /**
- * The signed-in frame: header with the two logo slots, rail, main area, footer,
- * and the banner when the session ends. Breakpoints are CSS (railStyles.ts); the
+ * The signed-in frame: header with the two logo slots and search, rail, main
+ * area, footer, the banner when the session ends, and the search and shortcuts
+ * dialogs that open from anywhere. Breakpoints are CSS (railStyles.ts); the
  * rail's drawer below 1024 px is the only layout state kept here.
  */
 
@@ -11,12 +12,15 @@ import {
 	chakra,
 	Flex,
 	IconButton,
+	Kbd,
 } from "@chakra-ui/react";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Menu, TriangleAlert } from "lucide-react";
+import { Menu, Search, TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useSignedOutNotice } from "../app/memory";
 import { useRailFolded } from "../app/preferences";
+import { CommandPalette } from "../features/search/CommandPalette";
+import { ShortcutsDialog } from "../features/search/ShortcutsDialog";
 import { LabMark, ProjectMark } from "../ui/Brand";
 import { SiteFooter } from "../ui/SiteFooter";
 import { SkipLink } from "../ui/SkipLink";
@@ -62,10 +66,11 @@ function SignedOutBanner() {
 interface HeaderProps {
 	isDrawerOpen: boolean;
 	onOpenMenu: () => void;
+	onOpenSearch: () => void;
 }
 
 /** After LiGHT's site header: the project's mark on the left, the lab's on the right. */
-function Header({ isDrawerOpen, onOpenMenu }: HeaderProps) {
+function Header({ isDrawerOpen, onOpenMenu, onOpenSearch }: HeaderProps) {
 	return (
 		<Flex
 			as="header"
@@ -104,7 +109,31 @@ function Header({ isDrawerOpen, onOpenMenu }: HeaderProps) {
 					</Link>
 				</ChakraLink>
 			</Flex>
-			<LabMark />
+			<Flex align="center" gap="4">
+				<chakra.button
+					type="button"
+					display="inline-flex"
+					alignItems="center"
+					gap="2"
+					minH="9"
+					px="3"
+					rounded="card"
+					borderWidth="1px"
+					borderColor="border"
+					color="fg.muted"
+					fontSize="sm"
+					_hover={{ borderColor: "border.emphasized", color: "fg" }}
+					aria-keyshortcuts="Control+K Meta+K"
+					onClick={onOpenSearch}
+				>
+					<Search size={16} aria-hidden="true" />
+					Search
+					<Kbd aria-hidden="true" display={{ base: "none", md: "inline-flex" }}>
+						Ctrl K
+					</Kbd>
+				</chakra.button>
+				<LabMark />
+			</Flex>
 		</Flex>
 	);
 }
@@ -118,7 +147,11 @@ export function AppShell() {
 		[isFolded, setFolded],
 	);
 	const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-	useShortcuts({ toggleRail, closeDrawer });
+	const [isPaletteOpen, setPaletteOpen] = useState(false);
+	const [isShortcutsOpen, setShortcutsOpen] = useState(false);
+	const openPalette = useCallback(() => setPaletteOpen(true), []);
+	const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+	useShortcuts({ toggleRail, closeDrawer, openPalette, openShortcuts });
 	// The workspace fills the screen down to its composer; a footer would push it off.
 	const isWorkspace = location.pathname.startsWith("/p/");
 
@@ -136,6 +169,15 @@ export function AppShell() {
 			<Header
 				isDrawerOpen={isDrawerOpen}
 				onOpenMenu={() => setDrawerOpen(true)}
+				onOpenSearch={openPalette}
+			/>
+			<CommandPalette
+				isOpen={isPaletteOpen}
+				onClose={() => setPaletteOpen(false)}
+			/>
+			<ShortcutsDialog
+				isOpen={isShortcutsOpen}
+				onClose={() => setShortcutsOpen(false)}
 			/>
 			<Flex flex="1" minH="0">
 				<Rail

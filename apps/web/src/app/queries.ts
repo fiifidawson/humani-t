@@ -8,14 +8,18 @@
 
 import { queryOptions } from "@tanstack/react-query";
 import { type ApiClient, unwrap } from "../api/client";
+import type { operations } from "../api/schema.gen";
 
 export const keys = {
 	session: ["session"] as const,
 	projects: ["projects"] as const,
 	projectList: (includeArchived: boolean) =>
 		["projects", "list", { includeArchived }] as const,
-	/** Both project lists, with archived projects and without. */
+	/** Every project list: with archived projects and without, and every filtered one. */
 	projectLists: ["projects", "list"] as const,
+	filteredProjects: (filters: ProjectListFilters) =>
+		["projects", "list", "filtered", filters] as const,
+	collections: ["collections"] as const,
 	project: (projectId: string) => ["projects", "one", projectId] as const,
 	members: (projectId: string) =>
 		["projects", "one", projectId, "members"] as const,
@@ -58,6 +62,11 @@ export const keys = {
 	question: (questionId: string) => ["questions", questionId] as const,
 };
 
+/** The All projects page's filters and sort, as `GET /projects` takes them. */
+export type ProjectListFilters = NonNullable<
+	operations["list_projects_api_v1_projects_get"]["parameters"]["query"]
+>;
+
 export interface PaperFilter {
 	runId: string;
 	/** include, exclude, uncertain or unscreened; `null` for every paper. */
@@ -83,6 +92,22 @@ export const projectListQuery = (api: ApiClient, includeArchived = false) =>
 					params: { query: { include_archived: includeArchived } },
 				}),
 			),
+	});
+
+export const filteredProjectsQuery = (
+	api: ApiClient,
+	filters: ProjectListFilters,
+) =>
+	queryOptions({
+		queryKey: keys.filteredProjects(filters),
+		queryFn: () =>
+			unwrap(api.GET("/api/v1/projects", { params: { query: filters } })),
+	});
+
+export const collectionsQuery = (api: ApiClient) =>
+	queryOptions({
+		queryKey: keys.collections,
+		queryFn: () => unwrap(api.GET("/api/v1/collections")),
 	});
 
 export const projectQuery = (api: ApiClient, projectId: string) =>

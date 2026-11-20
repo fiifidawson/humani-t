@@ -30,8 +30,16 @@ from app.domain.mfa import (
 from app.domain.projects import AlreadyMemberError, Membership, Project, Role
 from app.domain.sessions import Session, SessionPolicy
 from app.storage.postgres.briefs import PostgresDecisionBriefRepository
+from app.storage.postgres.collections import (
+    PostgresCollectionRepository,
+    PostgresPinRepository,
+    PostgresProjectPlacementRepository,
+    PostgresProjectTagsRepository,
+)
 from app.storage.postgres.documents import PostgresDocumentRepository
 from app.storage.postgres.label_rules import PostgresLabelRulesRepository
+from app.storage.postgres.leanings import PostgresLeaningRepository
+from app.storage.postgres.marks import PostgresDismissalRepository, PostgresMarkRepository
 from app.storage.postgres.masking import (
     PostgresMaskingRuleRepository,
     PostgresPaperMaskRepository,
@@ -642,6 +650,13 @@ class PostgresUnitOfWork:
         self.documents = PostgresDocumentRepository(connection)
         self.label_rules = PostgresLabelRulesRepository(connection)
         self.model_instructions = PostgresModelInstructionsRepository(connection)
+        self.leanings = PostgresLeaningRepository(connection)
+        self.collections = PostgresCollectionRepository(connection)
+        self.placements = PostgresProjectPlacementRepository(connection)
+        self.project_tags = PostgresProjectTagsRepository(connection)
+        self.pins = PostgresPinRepository(connection)
+        self.marks = PostgresMarkRepository(connection)
+        self.dismissals = PostgresDismissalRepository(connection)
 
     async def commit(self) -> None:
         await self._connection.commit()

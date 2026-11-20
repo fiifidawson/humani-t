@@ -25,6 +25,7 @@ import { useApi } from "../../app/api-context";
 import {
 	type ThemeChoice,
 	useReducedMotion,
+	useSingleKeyShortcuts,
 	useTheme,
 } from "../../app/preferences";
 import { devicesQuery, keys, mfaQuery } from "../../app/queries";
@@ -485,6 +486,28 @@ function MotionSwitch() {
 	);
 }
 
+function ShortcutsSwitch() {
+	const [isOn, setOn] = useSingleKeyShortcuts();
+	return (
+		<Stack gap="1">
+			<Switch.Root
+				checked={isOn}
+				onCheckedChange={(details) => setOn(details.checked)}
+			>
+				<Switch.HiddenInput />
+				<Switch.Control>
+					<Switch.Thumb />
+				</Switch.Control>
+				<Switch.Label>Single-key shortcuts</Switch.Label>
+			</Switch.Root>
+			<Text fontSize="sm" color="fg.muted">
+				Keys such as [ and ? act on their own. Turn this off if they get in the
+				way of your keyboard or speech software. Ctrl K still works.
+			</Text>
+		</Stack>
+	);
+}
+
 export function AccountPage() {
 	return (
 		<Page isNarrow>
@@ -499,6 +522,7 @@ export function AccountPage() {
 				<Stack gap="6">
 					<AppearanceSection />
 					<MotionSwitch />
+					<ShortcutsSwitch />
 				</Stack>
 			</Section>
 		</Page>

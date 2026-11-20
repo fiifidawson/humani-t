@@ -1,7 +1,6 @@
 /**
- * Home (UI_UX_SPEC §7.1), the P1 part: recent projects, or how to start.
- * Needs-you, pinned projects and activity need endpoints the API does not
- * have yet, so they are left out rather than faked.
+ * Home (UI_UX_SPEC §7.1): Needs you, pinned projects, recent projects, recent
+ * activity and collections, or how to start.
  */
 
 import {
@@ -21,6 +20,9 @@ import { Loading } from "../../ui/Loading";
 import { Page } from "../../ui/Page";
 import { PageHeading } from "../../ui/PageHeading";
 import { SectionHeading } from "../../ui/SectionHeading";
+import { CollectionsRow, PinnedProjects } from "../collections/HomeSections";
+import { NeedsYou } from "../history/NeedsYou";
+import { RecentActivity } from "../history/RecentActivity";
 import {
 	fullDate,
 	newestFirst,
@@ -151,6 +153,7 @@ export function HomePage() {
 	return (
 		<Page>
 			<PageHeading title="Home" />
+			<NeedsYou />
 			{projects.isPending ? <Loading what="projects" /> : null}
 			{projects.isError ? (
 				<ErrorNotice
@@ -159,6 +162,7 @@ export function HomePage() {
 				/>
 			) : null}
 			{projects.isSuccess && projects.data.length === 0 ? <StartHere /> : null}
+			{projects.isSuccess ? <PinnedProjects projects={projects.data} /> : null}
 			{projects.isSuccess && projects.data.length > 0 ? (
 				<section aria-labelledby="recent-heading">
 					<SectionHeading id="recent-heading">Recent projects</SectionHeading>
@@ -180,6 +184,10 @@ export function HomePage() {
 					</Grid>
 				</section>
 			) : null}
+			{projects.isSuccess && projects.data.length > 0 ? (
+				<RecentActivity />
+			) : null}
+			{projects.isSuccess ? <CollectionsRow projects={projects.data} /> : null}
 		</Page>
 	);
 }

@@ -48,6 +48,7 @@ PROJECT_ROUTES = frozenset(
         ("PATCH", f"{PROJECTS}/{{project_id}}"),
         ("DELETE", f"{PROJECTS}/{{project_id}}"),
         ("PUT", f"{PROJECTS}/{{project_id}}/masking"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/view-first"),
         ("POST", f"{PROJECTS}/{{project_id}}/archive"),
         ("POST", f"{PROJECTS}/{{project_id}}/unarchive"),
         ("GET", f"{PROJECTS}/{{project_id}}/members"),
@@ -73,6 +74,44 @@ DOCUMENT_ROUTES = frozenset(
         ("POST", f"{_DOCUMENTS}/{{document_id}}/reject"),
     }
 )
+
+# Collections, tags and pins (walkthrough 17, organise). Collections sit outside any
+# project: they are labels with no access rules of their own (ADR 0016).
+_COLLECTIONS = "/api/v1/collections"
+ORGANISE_ROUTES = frozenset(
+    {
+        ("GET", _COLLECTIONS),
+        ("POST", _COLLECTIONS),
+        ("PATCH", f"{_COLLECTIONS}/{{collection_id}}"),
+        ("DELETE", f"{_COLLECTIONS}/{{collection_id}}"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/collection"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/tags"),
+        ("PUT", f"{PROJECTS}/{{project_id}}/pin"),
+        ("DELETE", f"{PROJECTS}/{{project_id}}/pin"),
+        ("POST", "/api/v1/project-actions"),
+    }
+)
+
+# Needs you, activity, the timeline, and seen and saved marks (walkthrough 17, history).
+_PAPER_MARK = f"{PROJECTS}/{{project_id}}/papers/{{paper_id}}"
+HISTORY_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/needs-you"),
+        ("POST", "/api/v1/needs-you/dismissals"),
+        ("GET", "/api/v1/activity"),
+        ("GET", f"{PROJECTS}/{{project_id}}/history"),
+        ("GET", f"{PROJECTS}/{{project_id}}/paper-marks"),
+        ("PUT", f"{_PAPER_MARK}/seen"),
+        ("PUT", f"{_PAPER_MARK}/saved"),
+        ("DELETE", f"{_PAPER_MARK}/saved"),
+        ("GET", "/api/v1/saved-papers"),
+        ("PUT", "/api/v1/briefs/{brief_id}/seen"),
+    }
+)
+
+# Routes over every project the caller belongs to. No project in the path, so the
+# membership walks below cannot reach them: each filters by membership itself.
+CROSS_PROJECT_ROUTES = frozenset({("GET", "/api/v1/search")})
 
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
@@ -146,6 +185,21 @@ class TestInventory:
         app = make_project_harness().app
 
         assert sorted(DOCUMENT_ROUTES - registered_routes(app)) == []
+
+    def test_every_organise_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(ORGANISE_ROUTES - registered_routes(app)) == []
+
+    def test_every_history_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(HISTORY_ROUTES - registered_routes(app)) == []
+
+    def test_every_cross_project_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(CROSS_PROJECT_ROUTES - registered_routes(app)) == []
 
     def test_every_route_inside_a_project_names_the_project_in_its_path(self):
         """Membership is checked against the path, never a body or query field."""

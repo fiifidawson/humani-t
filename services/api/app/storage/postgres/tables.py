@@ -192,6 +192,7 @@ projects = Table(
     Column("deleted_at", DateTime(timezone=True), nullable=True),
     Column("version", Integer, nullable=False, server_default="0"),
     Column("is_masking_on", Boolean, nullable=False, server_default="true"),
+    Column("is_view_first_on", Boolean, nullable=False, server_default="false"),
 )
 
 memberships = Table(
@@ -554,4 +555,89 @@ model_instruction_versions = Table(
     Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("version >= 1", name="version_counts_from_one"),
+)
+
+leanings = Table(
+    "leanings",
+    metadata,
+    Column("run_id", Uuid, ForeignKey("runs.id"), primary_key=True),
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("option_sealed", LargeBinary, nullable=False),
+    Column("answered_at", DateTime(timezone=True), nullable=False),
+)
+
+# Collections are shared labels (ADR 0016); the name is sealed under the collection's own
+# data key, so the database cannot keep names unique: that is checked under a table lock.
+collections = Table(
+    "collections",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("name_sealed", LargeBinary, nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default="0"),
+)
+
+project_collections = Table(
+    "project_collections",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column(
+        "collection_id",
+        Uuid,
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("moved_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("moved_at", DateTime(timezone=True), nullable=False),
+)
+
+project_tags = Table(
+    "project_tags",
+    metadata,
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True),
+    Column("tags_sealed", LargeBinary, nullable=False),
+    Column("updated_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+project_pins = Table(
+    "project_pins",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), primary_key=True, index=True),
+    Column("pinned_at", DateTime(timezone=True), nullable=False),
+)
+
+# A person's own marks (UI_UX_SPEC §7.5). Ids and times in the clear; the paper's identity
+# sealed under its project's key, so a mark is unreadable once the project is deleted.
+paper_marks = Table(
+    "paper_marks",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("paper_id", Uuid, ForeignKey("papers.id"), primary_key=True),
+    Column("kind", String(16), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("identity_sealed", LargeBinary, nullable=False),
+    Column("marked_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("kind IN ('seen', 'saved')", name="kind_is_known"),
+)
+
+brief_reads = Table(
+    "brief_reads",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("brief_id", Uuid, ForeignKey("decision_briefs.id"), primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False),
+    Column("read_at", DateTime(timezone=True), nullable=False),
+)
+
+needs_you_dismissals = Table(
+    "needs_you_dismissals",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
+    Column("item_key", String(120), primary_key=True),
+    Column("dismissed_at", DateTime(timezone=True), nullable=False),
 )

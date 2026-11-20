@@ -28,9 +28,14 @@ from app.api.routes import (
     admin,
     auth,
     briefs,
+    collections,
+    comparisons,
     documents,
     exports,
+    history,
     label_rules,
+    leanings,
+    marks,
     masking,
     mfa,
     model_instructions,
@@ -40,6 +45,7 @@ from app.api.routes import (
     questions,
     reviews,
     runs,
+    search,
     system,
 )
 from app.api.routes.system import API_NAME, API_VERSION
@@ -111,6 +117,13 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "comparisons",
+        "description": (
+            "A brief's versions, and what changed between two versions or two runs of "
+            "one review, computed from what was stored. Read-only; a non-member gets 404."
+        ),
+    },
+    {
         "name": "exports",
         "description": (
             "Downloads of a review's results: the screening dataset, included papers, "
@@ -129,6 +142,13 @@ TAGS_METADATA = [
         "description": (
             "A project's masking rules: terms always masked in every text. Owners only; "
             "terms are raw text, sealed at rest, and every listing is audited."
+        ),
+    },
+    {
+        "name": "search",
+        "description": (
+            "Search across the caller's projects, over the text members already see. "
+            "Raw document text is never searched."
         ),
     },
     {
@@ -247,12 +267,18 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(papers.router)
     v1.include_router(label_rules.router)
     v1.include_router(briefs.router)
+    v1.include_router(comparisons.router)
     v1.include_router(exports.router)
     v1.include_router(questions.router)
     v1.include_router(plans.router)
     v1.include_router(masking.router)
     v1.include_router(model_instructions.router)
     v1.include_router(documents.router)
+    v1.include_router(leanings.router)
+    v1.include_router(collections.router)
+    v1.include_router(history.router)
+    v1.include_router(marks.router)
+    v1.include_router(search.router)
     app.include_router(v1)
 
 
