@@ -27,6 +27,7 @@ import { Loading } from "../../ui/Loading";
 import { Reveal } from "../../ui/Reveal";
 import { shortDate } from "../projects/format";
 import { duration } from "../reviews/format";
+import { RunComparePicker } from "../runs/RunComparePicker";
 import { isStageId } from "../runs/runEvents";
 import { stageName } from "../runs/stages";
 import { ActivityLink } from "./ActivityLink";
@@ -198,8 +199,18 @@ function ReviewGroup({
 	);
 }
 
-function Timeline({ userId, groups }: { userId: string; groups: Group[] }) {
+function Timeline({
+	projectId,
+	userId,
+	groups,
+}: {
+	projectId: string;
+	userId: string;
+	groups: Group[];
+}) {
 	const [hidden, toggle] = useHiddenKinds(userId);
+	// Groups come latest activity first, so this is the review people are working on.
+	const latestReview = groups.find((group) => group.review !== null)?.review;
 	return (
 		<Stack gap="6">
 			<Flex role="group" aria-label="Show" gap="2" wrap="wrap" align="center">
@@ -233,7 +244,9 @@ function Timeline({ userId, groups }: { userId: string; groups: Group[] }) {
 					/>
 				))
 			)}
-			{/* Compare runs (§7.4): the compare lane's picker goes here, below the timeline. */}
+			{latestReview === undefined || latestReview === null ? null : (
+				<RunComparePicker projectId={projectId} reviewId={latestReview.id} />
+			)}
 		</Stack>
 	);
 }
@@ -259,6 +272,7 @@ export function HistoryPage() {
 					<Loading what="the project's history" />
 				) : (
 					<Timeline
+						projectId={projectId}
 						userId={session.data.user.id}
 						groups={timeline.data.groups}
 					/>

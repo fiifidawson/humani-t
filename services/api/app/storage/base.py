@@ -655,6 +655,10 @@ class DecisionBriefRepository(Protocol):
 
     async def count_for_review(self, review_id: UUID) -> int: ...
 
+    async def list_for_review(self, review_id: UUID) -> list[BriefRecord]:
+        """Every version of the review's brief, the highest version first."""
+        ...
+
 
 class MaskingRuleRepository(Protocol):
     """A project's "always mask this term" rules; each term is stored sealed."""

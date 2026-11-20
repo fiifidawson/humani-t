@@ -356,6 +356,25 @@ const traceRoute = createRoute({
 	),
 });
 
+export interface CompareSearch {
+	/** The two runs to compare; the API reads them oldest first, whatever the order. */
+	a?: string | undefined;
+	b?: string | undefined;
+}
+
+const compareRoute = createRoute({
+	getParentRoute: () => reviewRoute,
+	path: "compare",
+	validateSearch: (search: Record<string, unknown>): CompareSearch => ({
+		a: typeof search["a"] === "string" ? search["a"] : undefined,
+		b: typeof search["b"] === "string" ? search["b"] : undefined,
+	}),
+	component: lazyRouteComponent(
+		() => import("../features/reviews/CompareRunsCanvas"),
+		"CompareRunsCanvas",
+	),
+});
+
 export interface DocumentsSearch {
 	/** The document whose masked text is open. */
 	document?: string | undefined;
@@ -412,6 +431,7 @@ const routeTree = rootRoute.addChildren([
 				papersRoute,
 				briefRoute,
 				traceRoute,
+				compareRoute,
 			]),
 			documentsRoute,
 			threadRoute,

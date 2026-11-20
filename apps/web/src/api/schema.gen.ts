@@ -952,6 +952,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/{review_id}/brief/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every version of a review's brief, newest first
+         * @description One version per run of the Brief stage; empty before the first.
+         */
+        get: operations["list_brief_versions_api_v1_reviews__review_id__brief_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/briefs/{brief_id}/compare/{other_brief_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What changed between two versions of a review's brief */
+        get: operations["compare_brief_versions_api_v1_briefs__brief_id__compare__other_brief_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/compare/{other_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Two runs of one review side by side: setup, discovery, screening and brief
+         * @description `cannot_compare` says why, and every part is null, when a run has no record.
+         */
+        get: operations["compare_runs_api_v1_runs__run_id__compare__other_run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}/exports/{name}": {
         parameters: {
             query?: never;
@@ -1947,6 +2004,50 @@ export interface components {
             /** User Id */
             user_id: string | null;
         };
+        /** BeforeAfterOut */
+        BeforeAfterOut: {
+            /**
+             * Before
+             * @description As the older run recorded it; null if it recorded none.
+             */
+            before: unknown;
+            /** After */
+            after: unknown;
+        };
+        /** BriefChangesOut */
+        BriefChangesOut: {
+            /** Options Added */
+            options_added: string[];
+            /** Options Removed */
+            options_removed: string[];
+            /** Strength Changes */
+            strength_changes: components["schemas"]["StrengthChangeOut"][];
+            /**
+             * Sources Added
+             * @description Matched by paper, not by tag.
+             */
+            sources_added: components["schemas"]["BriefSourceOut"][];
+            /** Sources Removed */
+            sources_removed: components["schemas"]["BriefSourceOut"][];
+        };
+        /** BriefComparisonOut */
+        BriefComparisonOut: {
+            /** Options Added */
+            options_added: string[];
+            /** Options Removed */
+            options_removed: string[];
+            /** Strength Changes */
+            strength_changes: components["schemas"]["StrengthChangeOut"][];
+            /**
+             * Sources Added
+             * @description Matched by paper, not by tag.
+             */
+            sources_added: components["schemas"]["BriefSourceOut"][];
+            /** Sources Removed */
+            sources_removed: components["schemas"]["BriefSourceOut"][];
+            before: components["schemas"]["ComparedVersionOut"];
+            after: components["schemas"]["ComparedVersionOut"];
+        };
         /** BriefOut */
         BriefOut: {
             /**
@@ -2019,6 +2120,47 @@ export interface components {
             /** Max Rounds */
             max_rounds: number;
             stopped_because: components["schemas"]["StopReason"];
+        };
+        /** BriefSourceOut */
+        BriefSourceOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            source_kind: components["schemas"]["PassageSourceKind"];
+            /**
+             * Tag
+             * @description Its tag in the version that cites it.
+             */
+            tag: string;
+            /** Title */
+            title: string | null;
+        };
+        /** BriefVersionOut */
+        BriefVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             * @description The run whose Brief stage wrote this version.
+             */
+            run_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model Id */
+            model_id: string;
+            /** Is Latest */
+            is_latest: boolean;
         };
         /** BulkOut */
         BulkOut: {
@@ -2141,6 +2283,59 @@ export interface components {
              * @description Whether the caller may rename or delete it.
              */
             can_manage: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ComparedPaperOut */
+        ComparedPaperOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /** Title */
+            title: string;
+        };
+        /** ComparedRunOut */
+        ComparedRunOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Number
+             * @description Its place among the review's runs, from 1, oldest first.
+             */
+            number: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Has Record
+             * @description False when no stage recorded its setup.
+             */
+            has_record: boolean;
+        };
+        /** ComparedVersionOut */
+        ComparedVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
             /**
              * Created At
              * Format: date-time
@@ -2352,6 +2547,27 @@ export interface components {
             terms: components["schemas"]["TermChangeOut"][];
             /** Criteria */
             criteria: components["schemas"]["CriterionChangeOut"][];
+        };
+        /** DiscoveryCountsOut */
+        DiscoveryCountsOut: {
+            /**
+             * Identified
+             * @description Records the sources returned.
+             */
+            identified: number;
+            /** After Deduplication */
+            after_deduplication: number;
+        };
+        /** DiscoveryOut */
+        DiscoveryOut: {
+            before: components["schemas"]["DiscoveryCountsOut"];
+            after: components["schemas"]["DiscoveryCountsOut"];
+            /** Only Before */
+            only_before: components["schemas"]["ComparedPaperOut"][];
+            /** Only After */
+            only_after: components["schemas"]["ComparedPaperOut"][];
+            /** In Both */
+            in_both: number;
         };
         /** DismissalIn */
         DismissalIn: {
@@ -2813,6 +3029,23 @@ export interface components {
             event: "job.finished";
             data: components["schemas"]["JobFinishedData"];
         };
+        /** LabelChangeOut */
+        LabelChangeOut: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /** Title */
+            title: string;
+            before: components["schemas"]["ScreeningLabel"];
+            after: components["schemas"]["ScreeningLabel"];
+            /**
+             * Reason
+             * @description Why the newer run labelled it so.
+             */
+            reason: string | null;
+        };
         /**
          * LabelRulesIn
          * @example {
@@ -3179,6 +3412,21 @@ export interface components {
             project_ids: string[];
             /** Collection Id */
             collection_id: string | null;
+        };
+        /** NamedChangeOut */
+        NamedChangeOut: {
+            /**
+             * Before
+             * @description As the older run recorded it; null if it recorded none.
+             */
+            before: unknown;
+            /** After */
+            after: unknown;
+            /**
+             * Name
+             * @description `stage.fact` for a stage's own setting, e.g. `discover.limit_per_source`.
+             */
+            name: string;
         };
         /** NeedsYouItemOut */
         NeedsYouItemOut: {
@@ -3982,6 +4230,21 @@ export interface components {
              */
             untouchable: number;
         };
+        /** RunComparisonOut */
+        RunComparisonOut: {
+            before: components["schemas"]["ComparedRunOut"];
+            after: components["schemas"]["ComparedRunOut"];
+            /**
+             * Cannot Compare
+             * @description Why the runs cannot be compared; null when they can.
+             */
+            cannot_compare: string | null;
+            setup: components["schemas"]["SetupOut"] | null;
+            discovery: components["schemas"]["DiscoveryOut"] | null;
+            screening: components["schemas"]["ScreeningOut"] | null;
+            /** @description Null unless both runs wrote a brief. */
+            brief: components["schemas"]["BriefChangesOut"] | null;
+        };
         /** RunIn */
         RunIn: {
             /**
@@ -4119,6 +4382,22 @@ export interface components {
          * @enum {string}
          */
         ScreeningLabel: "include" | "exclude" | "uncertain";
+        /** ScreeningOut */
+        ScreeningOut: {
+            /**
+             * Before
+             * @description include, exclude, uncertain and unscreened.
+             */
+            before: {
+                [key: string]: number;
+            };
+            /** After */
+            after: {
+                [key: string]: number;
+            };
+            /** Changed */
+            changed: components["schemas"]["LabelChangeOut"][];
+        };
         /**
          * ScreeningTier
          * @description The names people see, derived from label and priority.
@@ -4174,6 +4453,29 @@ export interface components {
             current: boolean;
             /** Aal */
             aal: number;
+        };
+        /** SetupOut */
+        SetupOut: {
+            vocabulary_versions: components["schemas"]["BeforeAfterOut"];
+            sources: components["schemas"]["BeforeAfterOut"];
+            model_ids: components["schemas"]["BeforeAfterOut"];
+            /** Queries Added */
+            queries_added: components["schemas"]["SourceQueryOut"][];
+            /**
+             * Queries Removed
+             * @description A rewritten query is in both.
+             */
+            queries_removed: components["schemas"]["SourceQueryOut"][];
+            /**
+             * Prompt Versions
+             * @description Every prompt either run used.
+             */
+            prompt_versions: components["schemas"]["NamedChangeOut"][];
+            /**
+             * Settings Changed
+             * @description Only those that differ.
+             */
+            settings_changed: components["schemas"]["NamedChangeOut"][];
         };
         /**
          * SignedInOut
@@ -4253,6 +4555,13 @@ export interface components {
              * @description How many times the brief cites this tag.
              */
             citations: number;
+        };
+        /** SourceQueryOut */
+        SourceQueryOut: {
+            /** Source */
+            source: string;
+            /** Query */
+            query: string;
         };
         /** SpanOut */
         SpanOut: {
@@ -4415,6 +4724,16 @@ export interface components {
          * @enum {string}
          */
         StopReason: "accepted" | "max_rounds" | "invalid_output" | "no_progress";
+        /** StrengthChangeOut */
+        StrengthChangeOut: {
+            /**
+             * Option
+             * @description As the newer version names it.
+             */
+            option: string;
+            before: components["schemas"]["EvidenceStrength"];
+            after: components["schemas"]["EvidenceStrength"];
+        };
         /** TagProjectsIn */
         TagProjectsIn: {
             /**
@@ -6770,6 +7089,97 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    list_brief_versions_api_v1_reviews__review_id__brief_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefVersionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_brief_versions_api_v1_briefs__brief_id__compare__other_brief_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brief_id: string;
+                other_brief_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefComparisonOut"];
+                };
+            };
+            /** @description The same version twice, or versions of two reviews */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    compare_runs_api_v1_runs__run_id__compare__other_run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                other_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunComparisonOut"];
+                };
+            };
+            /** @description The same run twice, or runs of two reviews */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

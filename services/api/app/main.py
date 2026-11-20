@@ -29,6 +29,7 @@ from app.api.routes import (
     auth,
     briefs,
     collections,
+    comparisons,
     documents,
     exports,
     history,
@@ -111,6 +112,13 @@ TAGS_METADATA = [
         "description": (
             "Reading a decision brief, its cited sources and how it was made. Briefs "
             "are written by a run's `answer` stage. A non-member gets 404."
+        ),
+    },
+    {
+        "name": "comparisons",
+        "description": (
+            "A brief's versions, and what changed between two versions or two runs of "
+            "one review, computed from what was stored. Read-only; a non-member gets 404."
         ),
     },
     {
@@ -250,6 +258,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(papers.router)
     v1.include_router(label_rules.router)
     v1.include_router(briefs.router)
+    v1.include_router(comparisons.router)
     v1.include_router(exports.router)
     v1.include_router(questions.router)
     v1.include_router(plans.router)

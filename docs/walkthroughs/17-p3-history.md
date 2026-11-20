@@ -62,4 +62,4 @@ uv run pytest tests/test_history_api.py tests/test_marks_api.py tests/test_histo
 | --- | --- | --- | --- |
 | G17.1 | No "Notes" filter | The spec lists one; there are no notes yet | When notes exist |
 | G17.2 | Seen marks cover papers, not document passages | A team document opened in the source panel is not marked | If asked for |
-| G17.3 | Compare runs picker | A marked spot at the bottom of History | The compare lane |
+| G17.3 | Closed: the timeline ends with the Compare runs picker for its latest review | – | – |

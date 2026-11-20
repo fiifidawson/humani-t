@@ -941,7 +941,7 @@ Afterwards, the header shows "You leaned towards Cash transfers before reading."
 
 #### Versions
 
-Each run of the Brief stage makes a new version. The header has a version menu: "Version 2 (latest) · Version 1, 10:31". "Compare with version 1" shows options added or removed, strength changes ("Cash: Weak → Moderate"), and new or removed sources **(new, needs API: brief versions are not stored separately today)**.
+Each run of the Brief stage makes a new version. The header has a version menu: "Version 2 (latest) · Version 1, 10:31". "Compare with version 1" shows options added or removed, strength changes ("Cash: Weak → Moderate"), and new or removed sources. Source: `GET /reviews/{id}/brief/versions`, `GET /briefs/{id}/compare/{other_id}`; the API computes the changes.
 
 #### Downloads and sharing
 
@@ -1205,7 +1205,7 @@ The project's history view (`/p/:project/history`) shows everything that happene
 | Screening | Label counts side by side; papers whose label changed, with the reason |
 | Brief | Options added or removed, evidence strength changes, sources added or removed |
 
-If one run has no manifest, the screen says "Run 1 can't be compared: it has no record of its setup."
+If one run has no manifest, the screen says "Run 1 can't be compared: it has no record of its setup." Source: `GET /runs/{run_id}/compare/{other_run_id}`, at `/p/:project/r/:review/compare?a=&b=`; the picker also sits at the foot of each run's canvas.
 
 ### 7.5 Seen and saved marks
 

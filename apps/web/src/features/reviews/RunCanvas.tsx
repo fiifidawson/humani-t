@@ -17,6 +17,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { WifiOff } from "lucide-react";
 import { useId, useState } from "react";
 import { linkStyle } from "../../ui/LinkButton";
+import { RunComparePicker } from "../runs/RunComparePicker";
 import { StageList } from "../runs/StageList";
 import { stageName } from "../runs/stages";
 import { useRunEvents } from "../runs/useRunEvents";
@@ -231,6 +232,14 @@ function RunView({ live }: { live: LiveRun }) {
 					</chakra.ol>
 				</>
 			)}
+
+			<Box mt="6">
+				<RunComparePicker
+					projectId={project.id}
+					reviewId={review.id}
+					runId={run.id}
+				/>
+			</Box>
 		</Canvas>
 	);
 }

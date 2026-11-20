@@ -24,6 +24,7 @@ from app.application.briefs import (
     StoredBriefCitations,
 )
 from app.application.collections import CollectionService
+from app.application.comparisons import ComparisonService
 from app.application.documents import (
     DocumentEvidence,
     DocumentProcessor,
@@ -767,6 +768,16 @@ def get_exports(providers: ProvidersDep) -> ExportService:
 
 
 ExportsDep = Annotated[ExportService, Depends(get_exports)]
+
+
+def get_comparisons(providers: ProvidersDep) -> ComparisonService:
+    # Stateless, so built per request over the paper service the screens use.
+    return ComparisonService(
+        storage=providers.storage, encryption=providers.encryption, papers=providers.papers
+    )
+
+
+ComparisonsDep = Annotated[ComparisonService, Depends(get_comparisons)]
 
 
 def get_questions(providers: ProvidersDep) -> QuestionService:

@@ -55,6 +55,11 @@ class RunManifest:
         return tuple(s.stage for s in self.stage_facts) == self.stages
 
     @property
+    def has_record(self) -> bool:
+        """Whether any stage recorded a fact; a run without one cannot be compared."""
+        return any(s.facts for s in self.stage_facts)
+
+    @property
     def vocabulary_versions(self) -> tuple[int, ...]:
         return self._versions("vocabulary_version")
 
@@ -96,7 +101,11 @@ class RunManifest:
             model = facts.get("model_id")
             if isinstance(model, str):
                 models.add(model)
-            models.update(_strings(facts.get("model_ids")))
+            named = facts.get("model_ids")
+            # The brief's stage names its model per role, as a mapping.
+            if isinstance(named, dict):
+                named = list(named.values())
+            models.update(_strings(named))
         return tuple(sorted(models))
 
     @property

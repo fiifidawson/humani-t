@@ -49,3 +49,7 @@ class MemoryDecisionBriefRepository:
 
     async def count_for_review(self, review_id: UUID) -> int:
         return sum(1 for b in self._state.briefs.values() if b.review_id == review_id)
+
+    async def list_for_review(self, review_id: UUID) -> list[BriefRecord]:
+        briefs = [b for b in self._state.briefs.values() if b.review_id == review_id]
+        return sorted(briefs, key=lambda b: b.version, reverse=True)

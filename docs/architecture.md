@@ -353,9 +353,17 @@ Review          a question, a Vocabulary, and a set of Criteria
     Claim       a statement in the brief, marked evidence or hypothesis
     Citation    a Claim bound to one retrieved passage, from a paper
                 (PaperRecord) or from a team's uploaded Document
+    BriefComparison  what changed from one version to a later one:
+                options added or removed, strength changes, and sources
+                (matched by paper, not tag) added or removed; computed on
+                read, never stored
   AgentStep     one step of the loop that wrote a brief: round, role, status,
                 timings, tokens; a brief's AgentSteps are its trace
   RunManifest   everything needed to reproduce or diff a run
+    RunComparison  two runs of one review, older first, part by part:
+                setup (from the manifests), discovery, screening and
+                BriefComparison; computed on read, and only when both
+                runs' stages recorded a manifest fact
   Run           one background execution of some of a Review's stages; its
                 row is also its job in the queue (§4.4)
     RunEvent    one entry in a run's log: an id counting from 1 within the

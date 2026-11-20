@@ -464,7 +464,7 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `GET /api/v1/runs/{run_id}/manifest`
 
-**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did.
+**Response** `200` `{"run_id", "review_id", "stages", "outcome", "created_at", "started_at", "finished_at", "is_complete", "vocabulary_versions", "criteria_versions", "plan_versions", "instructions_versions", "sources", "queries", "model_ids", "prompt_versions", "papers_from_runs", "masking", "stage_facts": [{"stage", "seconds", "facts"}]}`, assembled from what each finished stage recorded under `"manifest"` in its `stage.finished` summary, never reconstructed. Versions are lists: when two stages disagree, both show. `prompt_versions` is keyed by stage (`screen`) or `stage.name` (`answer.writer`). `is_complete` is false until every requested stage has finished. `masking` is `on` or `off` as every stage that masked or sent text recorded it (`is_masked` in its facts), `mixed` when the owner changed the switch during the run, and `null` for a run with no such stage or one from before this was recorded ([ADR-0014](adr/0014-masking-is-a-project-choice.md)). `instructions_versions` lists the project's [instruction versions](#model-instructions) the model calls carried; empty when none did. `model_ids` includes every model a stage named, the Brief stage's per role among them.
 
 ### Stage summaries
 
@@ -687,6 +687,50 @@ Reads the run's included passages (masked abstracts, tagged `P<n>`) from the pip
 ### Audit
 
 `brief.created` by the system, with the brief as target and the project as `scope_id`; its sealed details hold the run id and version. Reading a brief is not audited, like reading a review.
+
+---
+
+## Brief versions and comparisons
+
+Read-only, for any member; a non-member gets the same `404` as a missing id. Every comparison is computed by the API from what was stored when each brief and run was made, never stored itself, and reads from `before` (the older) to `after` (the newer), whichever order the ids are given in. Nothing is audited, as reading a brief is not.
+
+### `GET /api/v1/reviews/{review_id}/brief/versions`
+
+Every version of the review's brief, newest first: one per run of the Brief stage, numbered from 1 within the review. **Response** `200` `[{"id", "version", "run_id", "created_at", "model_id", "is_latest"}]`; `[]` before the first. Open one with `GET …/brief?run_id=`; without `run_id` that route still returns the latest. Briefs stored before this endpoint existed already carried their version (one `decision_briefs` row per run since migration 0011), so they are listed as they are.
+
+### `GET /api/v1/briefs/{brief_id}/compare/{other_brief_id}`
+
+What changed between two versions of one review's brief. **Response** `200` `{"before": {"id", "version", "run_id", "created_at"}, "after": {…}, "options_added": [name], "options_removed": [name], "strength_changes": [{"option", "before", "after"}], "sources_added": [{"paper_id", "source_kind", "tag", "title"}], "sources_removed": […]}`. Options match by name, ignoring case and spacing, so a renamed option shows as one removed and one added. Sources match by paper (or document), never by tag, since a tag is a paper's place in one run's list; `tag` is the one it had in the version that cites it, and a citation the checks flagged (no passage) names no source. `422` for one version twice or versions of two reviews.
+
+### `GET /api/v1/runs/{run_id}/compare/{other_run_id}`
+
+Two runs of one review side by side (UI_UX_SPEC §7.4), built on their [manifests](#get-apiv1runsrun_idmanifest). **Response** `200`:
+
+```json
+{
+  "before": {"run_id", "number": 1, "created_at", "has_record": true},
+  "after": {"run_id", "number": 3, "created_at", "has_record": true},
+  "cannot_compare": null,
+  "setup": {
+    "vocabulary_versions": {"before": [2], "after": [3]},
+    "sources": {"before", "after"}, "model_ids": {"before", "after"},
+    "queries_added": [{"source", "query"}], "queries_removed": [{"source", "query"}],
+    "prompt_versions": [{"name": "screen", "before": "screen-2", "after": "screen-3"}],
+    "settings_changed": [{"name": "discover.limit_per_source", "before": 25, "after": 50}]
+  },
+  "discovery": {
+    "before": {"identified", "after_deduplication"}, "after": {…},
+    "only_before": [{"paper_id", "title"}], "only_after": [...], "in_both": 4
+  },
+  "screening": {
+    "before": {"include", "exclude", "uncertain", "unscreened"}, "after": {…},
+    "changed": [{"paper_id", "title", "before": "include", "after": "exclude", "reason"}]
+  },
+  "brief": {"options_added", "options_removed", "strength_changes", "sources_added", "sources_removed"}
+}
+```
+
+`number` is the run's place among the review's runs, from 1, oldest first. A rewritten query is in both `queries_removed` and `queries_added`. `settings_changed` lists only what differs: `criteria_version`, `plan_version`, `instructions_version` and `masking`, then each stage's own facts (`stage.fact`) for stages both runs finished, so a run that redid only the brief shows no discovery settings as changed. Labels are the ones the screening table shows (under the review's latest rules); a run that did not screen is labelled by the run that screened its papers. `reason` is why the newer run labelled the paper so. `brief` is `null` unless both runs wrote a brief. When either run's stages recorded nothing (`has_record` false), every part is `null` and `cannot_compare` says why: "Run 1 can't be compared: it has no record of its setup." `422` for one run twice or runs of two reviews.
 
 ---
 

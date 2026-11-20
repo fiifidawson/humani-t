@@ -17,6 +17,7 @@ import {
 	exampleTrace,
 	type Trace,
 } from "./fakeBriefs";
+import { FakeComparisons } from "./fakeComparisons";
 import { jsonBody, nextId, problem, text } from "./fakeHttp";
 import { FakeQuestions } from "./fakeQuestions";
 import { FakeRules } from "./fakeRules";
@@ -290,6 +291,13 @@ export class FakeReviews {
 		mask,
 		latestRunId: (reviewId) =>
 			this.runs.find((r) => r.review_id === reviewId)?.id ?? null,
+	});
+
+	/** Brief versions and comparisons (fakeComparisons.ts). */
+	readonly comparisons = new FakeComparisons({
+		reach: (reviewId, write) => this.reach(reviewId, write),
+		runs: () => this.runs,
+		briefs: () => this.briefs.map((entry) => entry.brief),
 	});
 
 	/** Label rules and their versions (fakeRules.ts). */
@@ -1087,6 +1095,7 @@ export class FakeReviews {
 
 			...this.questions.handlers(),
 			...this.rules.handlers(),
+			...this.comparisons.handlers(),
 		];
 	}
 }

@@ -147,6 +147,32 @@ describe("the project timeline (UI_UX_SPEC §7.4)", () => {
 		expect(within(again).getAllByRole("listitem")).toHaveLength(2);
 	});
 
+	it("offers to compare two runs of the latest review at its foot", async () => {
+		const api = fakeApi();
+		api.signInAs(api.addUser({ hasTotp: true }));
+		const project = api.addProject("Cash vs vouchers, Gao");
+		const review = api.reviews.add(project.id, "Cash or vouchers in camps?");
+		api.reviews.startPlan(review, "shallow");
+		api.reviews.accept(review);
+		api.reviews.addRun(review, "done");
+		api.reviews.addRun(review, "done");
+		api.history.timelines.set(project.id, [
+			{
+				review: {
+					id: review.id,
+					question: "Cash or vouchers in camps?",
+					started_at: "2026-11-03T10:42:00Z",
+				},
+				events: [],
+			},
+		]);
+		renderApp(`/p/${project.id}/history`);
+
+		expect(
+			await screen.findByRole("group", { name: "Compare runs" }),
+		).toBeInTheDocument();
+	});
+
 	it("says the project does not exist for someone who is not a member", async () => {
 		const api = fakeApi();
 		api.signInAs(api.addUser({ hasTotp: true }));

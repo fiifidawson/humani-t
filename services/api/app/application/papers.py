@@ -20,6 +20,7 @@ from app.application.membership import require_member, require_review_member
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
 from app.domain.briefs import BriefCitations
+from app.domain.comparisons import RunPapers, ScreenedPaper
 from app.domain.discovery import (
     IngestedText,
     PaperSet,
@@ -688,6 +689,45 @@ class PaperService:
             ):
                 finished.append(StageSummary(stage, float(seconds), summary))
         return assemble_manifest(run, finished)
+
+    async def labelled_papers(self, current: Current, run_id: UUID) -> RunPapers:
+        """Every paper the run works from, labelled as the screening table labels it."""
+        async with self._storage.unit_of_work() as uow:
+            run = await uow.runs.get(run_id)
+            if run is None:
+                raise NotFoundError(_RUN_NOT_FOUND)
+            await require_member(
+                uow,
+                current.user.id,
+                run.project_id,
+                Action.READ_PROJECT,
+                not_found=_RUN_NOT_FOUND,
+            )
+            papers = await self._store.run_papers(uow, run)
+            # A run that redid only the brief is labelled by the run that screened its papers.
+            screened = await self._store.screened_by(uow, run)
+            labelled = await self._labelled(
+                uow, run.review_id, await uow.screening.list_for_run(screened.id)
+            )
+            decided = {d.paper_id: d for d in labelled.decisions}
+            listed: list[ScreenedPaper] = []
+            for paper in papers:
+                record = await self._store.open_record(uow, run.project_id, paper.paper_id)
+                stored = decided.get(paper.paper_id)
+                decision = (
+                    None if stored is None else await self._store.open_decision(uow, stored)
+                )
+                listed.append(
+                    ScreenedPaper(
+                        paper.paper_id,
+                        record.title,
+                        None if stored is None else stored.label,
+                        None if decision is None else decision.rationale,
+                    )
+                )
+            sources = await self._store.run_sources(uow, run)
+            identified = prisma_for(sources, len(papers), labelled.decisions).identified
+            return RunPapers(identified, tuple(listed))
 
     async def _run_of(self, uow: UnitOfWork, review_id: UUID, run_id: UUID | None) -> Run:
         """The named run of this review, or its newest run that has papers."""

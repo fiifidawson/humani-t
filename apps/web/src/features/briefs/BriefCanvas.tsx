@@ -38,6 +38,7 @@ import { briefDownloads } from "../reviews/exports";
 import { clockTime, plural } from "../reviews/format";
 import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
+import { BriefVersions } from "./BriefVersions";
 import {
 	type BriefSource,
 	CitationChip,
@@ -167,6 +168,7 @@ function Header({ brief, onOpen }: { brief: Brief; onOpen: OpenSource }) {
 					stoppedBecause(brief.stopped_because, brief.max_rounds),
 				].join(" · ")}
 			</Text>
+			<BriefVersions key={brief.id} brief={brief} />
 			<Box>
 				<Text fontSize="xs" color="fg.muted" mb="1">
 					The question as the model received it
