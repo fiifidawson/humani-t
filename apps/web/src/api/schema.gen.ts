@@ -1761,6 +1761,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find projects, briefs, papers, passages and questions in your projects */
+        get: operations["search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4489,6 +4506,80 @@ export interface components {
          * @enum {string}
          */
         ScreeningTier: "highly_relevant" | "relevant" | "possibly_relevant" | "excluded" | "uncertain";
+        /** SearchGroupOut */
+        SearchGroupOut: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Hits */
+            hits: components["schemas"]["SearchHitOut"][];
+        };
+        /** SearchHitOut */
+        SearchHitOut: {
+            scope: components["schemas"]["SearchScope"];
+            /**
+             * Text
+             * @description Where it matched, on one line; cut with … when long.
+             */
+            text: string;
+            /** Review Id */
+            review_id: string | null;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Brief Version
+             * @description Briefs: the brief's version.
+             */
+            brief_version: number | null;
+            /** Paper Id */
+            paper_id: string | null;
+            /**
+             * Tag
+             * @description Papers and passages: the tag a brief cites, P0012.
+             */
+            tag: string | null;
+            /**
+             * Title
+             * @description Papers: the paper's title.
+             */
+            title: string | null;
+            /** Thread Id */
+            thread_id: string | null;
+            /** Question Id */
+            question_id: string | null;
+        };
+        /** SearchOut */
+        SearchOut: {
+            /**
+             * Query
+             * @description The query as searched: trimmed, spaces collapsed.
+             */
+            query: string;
+            /** @description null: every scope. */
+            scope: components["schemas"]["SearchScope"] | null;
+            /**
+             * Groups
+             * @description By project, newest project first.
+             */
+            groups: components["schemas"]["SearchGroupOut"][];
+            /**
+             * Is Truncated
+             * @description A cap was reached, so there may be more.
+             */
+            is_truncated: boolean;
+        };
+        /**
+         * SearchScope
+         * @description What a hit is, in the order a project's hits are listed.
+         * @enum {string}
+         */
+        SearchScope: "projects" | "briefs" | "papers" | "passages" | "questions";
         /**
          * SentTextKind
          * @enum {string}
@@ -9003,6 +9094,47 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    search_api_v1_search_get: {
+        parameters: {
+            query: {
+                /** @description 2 to 200 characters. */
+                q: string;
+                /** @description Leave out for every scope. */
+                scope?: components["schemas"]["SearchScope"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too many searches lately; see Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

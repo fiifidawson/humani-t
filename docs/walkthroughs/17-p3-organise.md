@@ -1,6 +1,6 @@
 # 17 — P3: organise projects (collections, tags, pins)
 
-> **Milestones:** P3 · **Status:** in progress · **Previous:** [16 — Documents](16-documents.md) · **Next:** the other P3 walkthroughs
+> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [16 — Documents](16-documents.md) · **Next:** [17 — P3 history](17-p3-history.md)
 
 People can now group and find their projects: file each in one shared **collection**, give it any number of **tags**, **pin** it to Home, and sort, filter and group the All projects page, with bulk actions in its list view ([UI_UX_SPEC](../UI_UX_SPEC.md) §7.1 to §7.3, [ADR-0016](../adr/0016-collections-are-shared-labels.md)).
 

@@ -50,7 +50,9 @@ from app.application.model_instructions import ModelInstructionsService
 from app.application.papers import PaperService, PaperStore, ScreenedEvidence
 from app.application.pipeline import DiscoverStage, ExportStage, IngestStage
 from app.application.planning import PlanService
+from app.application.project_labels import SealedTags
 from app.application.project_list import ProjectListService
+from app.application.project_search import ProjectSearchService
 from app.application.projects import ProjectService
 from app.application.queries_stage import QueriesStage, QueryCompiler
 from app.application.questions import QuestionService, QuestionWorker
@@ -832,3 +834,17 @@ def get_marks(providers: ProvidersDep) -> MarkService:
 
 
 MarksDep = Annotated[MarkService, Depends(get_marks)]
+
+
+def get_search(providers: ProvidersDep) -> ProjectSearchService:
+    # Stateless, so built per request.
+    return ProjectSearchService(
+        storage=providers.storage,
+        encryption=providers.encryption,
+        store=PaperStore(providers.encryption),
+        limiter=providers.rate_limiter,
+        tags=SealedTags(providers.encryption),
+    )
+
+
+SearchDep = Annotated[ProjectSearchService, Depends(get_search)]

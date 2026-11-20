@@ -109,6 +109,10 @@ HISTORY_ROUTES = frozenset(
     }
 )
 
+# Routes over every project the caller belongs to. No project in the path, so the
+# membership walks below cannot reach them: each filters by membership itself.
+CROSS_PROJECT_ROUTES = frozenset({("GET", "/api/v1/search")})
+
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
@@ -191,6 +195,11 @@ class TestInventory:
         app = make_project_harness().app
 
         assert sorted(HISTORY_ROUTES - registered_routes(app)) == []
+
+    def test_every_cross_project_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(CROSS_PROJECT_ROUTES - registered_routes(app)) == []
 
     def test_every_route_inside_a_project_names_the_project_in_its_path(self):
         """Membership is checked against the path, never a body or query field."""

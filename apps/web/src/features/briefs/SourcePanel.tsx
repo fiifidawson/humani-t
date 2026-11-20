@@ -237,7 +237,11 @@ export function SourcePanelFrame({
 	useEffect(() => {
 		// Capture phase: the canvas listens to Esc too, and this panel goes first.
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !event.defaultPrevented) {
+			// Esc in a dialog, such as search, closes only the dialog.
+			const isInDialog =
+				event.target instanceof Element &&
+				event.target.closest("[role=dialog]") !== null;
+			if (event.key === "Escape" && !event.defaultPrevented && !isInDialog) {
 				event.preventDefault();
 				onClose();
 			}

@@ -5192,6 +5192,72 @@
           }
         }
       }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": [
+          "search"
+        ],
+        "summary": "Find projects, briefs, papers, passages and questions in your projects",
+        "operationId": "search_api_v1_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 1000,
+              "description": "2 to 200 characters.",
+              "title": "Q"
+            },
+            "description": "2 to 200 characters."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SearchScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Leave out for every scope.",
+              "title": "Scope"
+            },
+            "description": "Leave out for every scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches lately; see Retry-After"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11411,6 +11477,213 @@
         "title": "ScreeningTier",
         "description": "The names people see, derived from label and priority."
       },
+      "SearchGroupOut": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "project_name": {
+            "type": "string",
+            "title": "Project Name"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "project_name",
+          "is_archived",
+          "hits"
+        ],
+        "title": "SearchGroupOut"
+      },
+      "SearchHitOut": {
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/SearchScope"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Where it matched, on one line; cut with … when long."
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "brief_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Version",
+            "description": "Briefs: the brief's version."
+          },
+          "paper_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paper Id"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Papers and passages: the tag a brief cites, P0012."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Papers: the paper's title."
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "text",
+          "review_id",
+          "run_id",
+          "brief_version",
+          "paper_id",
+          "tag",
+          "title",
+          "thread_id",
+          "question_id"
+        ],
+        "title": "SearchHitOut"
+      },
+      "SearchOut": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The query as searched: trimmed, spaces collapsed."
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchScope"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: every scope."
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroupOut"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "By project, newest project first."
+          },
+          "is_truncated": {
+            "type": "boolean",
+            "title": "Is Truncated",
+            "description": "A cap was reached, so there may be more."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "scope",
+          "groups",
+          "is_truncated"
+        ],
+        "title": "SearchOut"
+      },
+      "SearchScope": {
+        "type": "string",
+        "enum": [
+          "projects",
+          "briefs",
+          "papers",
+          "passages",
+          "questions"
+        ],
+        "title": "SearchScope",
+        "description": "What a hit is, in the order a project's hits are listed."
+      },
       "SentTextKind": {
         "type": "string",
         "enum": [
@@ -13296,6 +13569,10 @@
     {
       "name": "masking",
       "description": "A project's masking rules: terms always masked in every text. Owners only; terms are raw text, sealed at rest, and every listing is audited."
+    },
+    {
+      "name": "search",
+      "description": "Search across the caller's projects, over the text members already see. Raw document text is never searched."
     },
     {
       "name": "documents",

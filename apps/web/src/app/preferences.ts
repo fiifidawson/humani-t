@@ -1,7 +1,6 @@
 /**
- * Per-browser display preferences: theme, reduced motion, the folded rail, the
- * rail's open collections and panel widths.
- *
+ * Per-browser display preferences: theme, reduced motion, single-key shortcuts, the
+ * folded rail, the rail's open collections and panel widths.
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
  */
@@ -13,6 +12,7 @@ export type ThemeChoice = "system" | "light" | "dark";
 const THEME_KEY = "humani-t:theme";
 const RAIL_KEY = "humani-t:rail-folded";
 const MOTION_KEY = "humani-t:reduce-motion";
+const SHORTCUTS_KEY = "humani-t:single-key-shortcuts";
 const listeners = new Set<() => void>();
 // Where a preference lives when storage refuses it: for this page view only.
 const unsaved = new Map<string, string | null>();
@@ -118,6 +118,20 @@ export function useReducedMotion(): [boolean, (isReduced: boolean) => void] {
 		write(MOTION_KEY, value ? "true" : null);
 	}, []);
 	return [isReduced, setReduced];
+}
+
+/** On unless the person turned them off (WCAG 2.1.4); read at each key press. */
+export function readSingleKeyShortcuts(): boolean {
+	return read(SHORTCUTS_KEY) !== "off";
+}
+
+export function useSingleKeyShortcuts(): [boolean, (isOn: boolean) => void] {
+	const isOn = useSyncExternalStore(subscribe, readSingleKeyShortcuts);
+	const setOn = useCallback(
+		(value: boolean) => write(SHORTCUTS_KEY, value ? null : "off"),
+		[],
+	);
+	return [isOn, setOn];
 }
 
 export function useRailFolded(): [boolean, (isFolded: boolean) => void] {

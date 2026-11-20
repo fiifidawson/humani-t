@@ -59,6 +59,16 @@ async def read_tags(
     return tuple(str(tag) for tag in json.loads(opened))
 
 
+class SealedTags:
+    """Tags read the one way every use case reads them, for search's `ProjectTagSource`."""
+
+    def __init__(self, encryption: ScopeEncryption) -> None:
+        self._encryption = encryption
+
+    async def tags(self, uow: UnitOfWork, project_id: UUID) -> tuple[str, ...]:
+        return await read_tags(uow, self._encryption, project_id)
+
+
 async def read_labels(
     uow: UnitOfWork, encryption: ScopeEncryption, project_id: UUID, user_id: UUID
 ) -> ProjectLabels:

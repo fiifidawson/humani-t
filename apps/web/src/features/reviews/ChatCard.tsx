@@ -108,6 +108,9 @@ export function ChatCard({
 		<Box
 			as="article"
 			aria-labelledby={id}
+			// Focusable from script only, so j and k can move between cards (§11.5).
+			tabIndex={-1}
+			data-chat-card
 			data-role={role}
 			px="4"
 			py="3"
@@ -144,6 +147,7 @@ export function ChatCard({
 				// Text-style buttons pin themselves to the top (LinkButton); here every
 				// action sits on the row's centre line.
 				<Flex
+					data-card-actions
 					mt="3"
 					gap="2"
 					wrap="wrap"

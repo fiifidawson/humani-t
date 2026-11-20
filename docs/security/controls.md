@@ -108,6 +108,7 @@ Test paths are relative to `services/api/tests/`.
 | Collections reveal no project: a collection's count covers only the caller's own projects, and every project list, filter and group reads only projects the caller is in (ADR 0016) | `application/collections.py`, `application/project_list.py` | `test_collections_api.py::TestCounts`, `TestTheList::test_a_list_never_names_a_project_the_caller_is_not_in` |
 | Bulk actions change only the caller's own projects; a project they are not in is reported exactly as a missing one | `application/collections.py` (`_each`) | `test_collections_api.py::TestBulkActions` |
 | Only a collection's creator or an administrator renames or deletes it; deleting it unfiles every project rather than refusing, which would reveal hidden projects | `domain/collections.py` (`may_manage_collection`) | `test_collections_api.py::TestRenamingAndDeleting` |
+| Search across projects opens only the caller's projects, checking membership again for each; a non-member's, a removed member's or a deleted project never appears, not even as an empty group; raw document text is never searched (ADR 0018) | `application/project_search.py` | `test_project_search_api.py::TestWhoFindsWhat`, `TestPrivacy::test_raw_document_text_is_never_searched` |
 
 ## Cryptography and data (brief rules 15, 17; ASVS V11)
 
@@ -175,6 +176,7 @@ Test paths are relative to `services/api/tests/`.
 | Exactly one `job.finished`, always last; nothing can follow it | `application/run_log.py`, `storage/` (`next_id`) | `test_runs_worker.py::TestExactlyOneFinish`, `test_runs_storage_contract.py::TestEventLog::test_no_event_can_follow_a_finished_run` |
 | Two workers never take one run and never wait for each other (`SKIP LOCKED`); event ids never repeat under concurrent writers | `storage/postgres/runs.py` | `test_runs_storage_contract.py::TestPostgresUnderConcurrency` |
 | A Valkey outage slows wake-ups to polling; nothing fails | `signals/valkey.py` | `test_signals_contract.py::TestValkeyOutage` |
+| Search, which decrypts every project of the caller, is bounded: 60 per minute per person (`429`), a 2–200 character query, 100 projects and 50 hits | `application/project_search.py`, `domain/project_search.py` | `test_project_search_api.py::TestLimits`, `test_project_search_domain.py::TestCaps` |
 
 ## Outbound requests (brief rules 1, 10; `architecture.md` §5.6; ASVS V13)
 

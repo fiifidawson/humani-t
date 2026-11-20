@@ -79,6 +79,7 @@ class TestOpenAPI:
             "/api/v1/projects/{project_id}/papers/{paper_id}/saved",
             "/api/v1/saved-papers",
             "/api/v1/briefs/{brief_id}/seen",
+            "/api/v1/search",
             "/api/v1/projects/{project_id}/documents",
             "/api/v1/projects/{project_id}/documents/{document_id}",
             "/api/v1/projects/{project_id}/documents/{document_id}/masked",
@@ -154,4 +155,5 @@ class TestOpenAPI:
             "label rules",
             "masking",
             "documents",
+            "search",
         }

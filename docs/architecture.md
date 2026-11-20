@@ -289,6 +289,11 @@ Collection      a label shared across the deployment, one level deep, with no
 ProjectPlacement  the one Collection a Project is filed in, if any
 Tags            a Project's free labels, sealed together under its key
 Pin             one User's bookmark on a Project they belong to
+SearchQuery     a few words and an optional scope to look for across the
+                caller's projects; matched in the application on decrypted
+                text, never stored (ADR-0018)
+SearchHit       one match: its scope, an excerpt, and the ids to open it;
+                grouped by project in SearchResults
 ```
 
 A **Project** is what the brief calls a project. It is the boundary for three things:

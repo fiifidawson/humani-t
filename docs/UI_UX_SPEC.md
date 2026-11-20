@@ -1237,7 +1237,7 @@ Borrowed from CiteSee (CHI 2023): people lose track of which papers they have al
 - Results are grouped by project, and only from projects the user is a member of.
 - Scopes: projects (name, question, tags), briefs (bottom lines, claims), papers (titles, abstracts), passages, questions.
 - It also accepts commands: "new project", "go to settings", "toggle dark mode".
-- Search runs on the server over masked text **(new, needs API: `GET /search`)**. Raw document text is never searched.
+- Search runs on the server over masked text (`GET /search`, [ADR 0018](adr/0018-search-decrypts-and-matches-per-request.md)). Raw document text is never searched.
 
 ### 7.7 Archive, delete, retention
 

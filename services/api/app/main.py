@@ -45,6 +45,7 @@ from app.api.routes import (
     questions,
     reviews,
     runs,
+    search,
     system,
 )
 from app.api.routes.system import API_NAME, API_VERSION
@@ -141,6 +142,13 @@ TAGS_METADATA = [
         "description": (
             "A project's masking rules: terms always masked in every text. Owners only; "
             "terms are raw text, sealed at rest, and every listing is audited."
+        ),
+    },
+    {
+        "name": "search",
+        "description": (
+            "Search across the caller's projects, over the text members already see. "
+            "Raw document text is never searched."
         ),
     },
     {
@@ -270,6 +278,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(collections.router)
     v1.include_router(history.router)
     v1.include_router(marks.router)
+    v1.include_router(search.router)
     app.include_router(v1)
 
 

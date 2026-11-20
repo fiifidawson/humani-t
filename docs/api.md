@@ -72,6 +72,7 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/project-actions` | collections | Move, tag or archive several projects; reports what it skipped |
 | `GET` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | The project's instructions to the model and every version (any member) |
 | `PUT` | `/api/v1/projects/{project_id}/model-instructions` | model instructions | Save them as the next version (owner) |
+| `GET` | `/api/v1/search?q=&scope=` | search | Search the caller's projects; results grouped by project |
 | `POST` | `/api/v1/projects/{project_id}/reviews` | reviews | Ask a question in the project (owner, reviewer) |
 | `GET` | `/api/v1/projects/{project_id}/reviews` | reviews | The project's reviews, newest first (any member) |
 | `GET` | `/api/v1/projects/{project_id}/reviews/{review_id}` | reviews | One review (any member) |
@@ -916,6 +917,39 @@ A mark is per person (UI_UX_SPEC §7.5). A paper is matched across projects by t
 
 None. Marks and dismissals record what one person read or chose to hide, not a decision about the evidence; they hold ids only.
 
+## Search across projects
+
+One search over every project the caller is a member of (UI_UX_SPEC §7.6, [ADR 0018](adr/0018-search-decrypts-and-matches-per-request.md)). Project text is sealed under each project's key, so there is no index: each search opens the caller's projects one by one, newest first, and matches in the application. A text matches when it holds every word of the query, ignoring case and accents.
+
+It searches only text every member already reads: project names and review questions (`projects`), the claims of each review's latest brief (`briefs`), the titles and abstracts of the papers of the review's newest run with papers (`papers`), that brief's cited passages, which are masked text (`passages`), and follow-up questions, stored masked (`questions`). Raw document text is never searched.
+
+**Who:** any signed-in person; results come only from projects they are a member of, so a non-member's project never appears, not even as an empty group. Not audited: nothing is written.
+
+### `GET /api/v1/search?q=&scope=`
+
+`q` is 2 to 200 characters after trimming (spaces collapsed). `scope` is one of `projects`, `briefs`, `papers`, `passages`, `questions`; leave it out for all. **Response** `200`:
+
+```json
+{
+  "query": "price rises",
+  "scope": null,
+  "groups": [
+    {
+      "project_id": "…", "project_name": "Cash vs vouchers, Gao", "is_archived": false,
+      "hits": [
+        {"scope": "briefs", "text": "Prices can rise in small markets", "review_id": "…", "run_id": "…", "brief_version": 2,
+         "paper_id": null, "tag": null, "title": null, "thread_id": null, "question_id": null}
+      ]
+    }
+  ],
+  "is_truncated": false
+}
+```
+
+`text` is the matching text on one line, cut to about 160 characters around the first match with `…`. Ids that do not apply to the hit's scope are `null`: a project name has none; a review question has `review_id`; a brief claim `review_id`, `run_id`, `brief_version`; a paper `review_id`, `run_id`, `paper_id`, `tag` (`P0012`) and `title`; a passage `review_id`, `run_id` and `tag` (the brief's citation, `P0001` or `D3`); a follow-up question `review_id`, `thread_id`, `question_id`. Groups are newest project first; within one, hits follow the scope order above.
+
+**Limits:** at most 5 hits per scope in a project and 50 in all; at most 100 projects are searched, and the search stops once 50 hits are found. `is_truncated` is `true` when any limit was reached. `422` for a query out of bounds or an unknown scope. `429` with `Retry-After` after 60 searches in a minute by one person.
+
 ---
 
 ## Semantics
@@ -1038,4 +1072,3 @@ Every response carries security headers (CSP, HSTS, `nosniff`, `Cache-Control: n
 ## Not here
 
 - **Google Scholar** is not a source and will not be: it has no API, and its terms forbid automated access ([dependencies §4](dependencies.md#4-outside-services-and-the-libraries-that-reach-them)).
-- **P3 features** (collections, tags, pins, search across projects, brief versions) have no endpoints yet ([UI_UX_SPEC §15](UI_UX_SPEC.md#15-delivery-phases)).

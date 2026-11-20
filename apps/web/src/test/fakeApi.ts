@@ -22,6 +22,7 @@ import {
 import { FakeInstructions } from "./fakeInstructions";
 import { FakeLeanings } from "./fakeLeanings";
 import { FakeReviews } from "./fakeReviews";
+import { FakeSearch } from "./fakeSearch";
 
 const API = "*/api/v1";
 const CSRF_COOKIE = "__Host-csrf";
@@ -231,6 +232,11 @@ export class FakeApi {
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		projectName: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.name ?? null,
+	});
+	/** `GET /search` over the person's projects (fakeSearch.ts). */
+	readonly search = new FakeSearch({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		projects: () => this.projects,
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -1241,6 +1247,7 @@ export class FakeApi {
 			...this.leanings.handlers(),
 			...this.collections.handlers(),
 			...this.history.handlers(),
+			...this.search.handlers(),
 		];
 	}
 }
