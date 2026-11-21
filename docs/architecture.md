@@ -375,6 +375,15 @@ Review          a question, a Vocabulary, and a set of Criteria
   Leaning       which option one member leaned towards before reading one
                 run's brief ("Your view first"), or none for "Not sure";
                 written once, sealed, seen by that member alone
+  Evaluation    an administrator's comparison of humani-t's answers with up
+                to 2 other systems' over up to 50 questions, in one project;
+                sealed under its key; its row is also its job (ADR 0022)
+    Judgement   a judge model's blind comparison of two answers to one
+                question: the order shown (A, B), six scores each, a, b
+                or tie, and a reason
+    PairResult  humani-t against one other system over every Judgement so
+                far: each check's means and difference, wins, ties and
+                losses; computed on read, never stored
   RunManifest   everything needed to reproduce or diff a run
     RunComparison  two runs of one review, older first, part by part:
                 setup (from the manifests), discovery, screening and

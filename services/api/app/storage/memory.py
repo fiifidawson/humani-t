@@ -42,6 +42,7 @@ from app.storage.memory_collections import (
     MemoryProjectTagsRepository,
 )
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
+from app.storage.memory_evaluations import EvaluationState, MemoryEvaluationRepository
 from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
 from app.storage.memory_leanings import LeaningState, MemoryLeaningRepository
 from app.storage.memory_marks import MarkState, MemoryDismissalRepository, MemoryMarkRepository
@@ -88,6 +89,7 @@ class _MemoryState:
         self.plan_state = PlanState()
         self.brief_state = BriefState()
         self.question_state = QuestionState()
+        self.evaluation_state = EvaluationState()
         self.masking_state = MaskingState()
         self.document_state = DocumentState()
         self.label_rules_state = LabelRulesState()
@@ -124,6 +126,7 @@ class _MemoryState:
         clone.plan_state = self.plan_state.copy()
         clone.brief_state = self.brief_state.copy()
         clone.question_state = self.question_state.copy()
+        clone.evaluation_state = self.evaluation_state.copy()
         clone.masking_state = self.masking_state.copy()
         clone.document_state = self.document_state.copy()
         clone.label_rules_state = self.label_rules_state.copy()
@@ -774,6 +777,7 @@ class MemoryUnitOfWork:
         self.plans = MemoryPlanRepository(state.plan_state)
         self.briefs = MemoryDecisionBriefRepository(state.brief_state)
         self.questions = MemoryQuestionRepository(state.question_state)
+        self.evaluations = MemoryEvaluationRepository(state.evaluation_state)
         self.masking_rules = MemoryMaskingRuleRepository(state.masking_state)
         self.paper_masks = MemoryPaperMaskRepository(state.masking_state)
         self.documents = MemoryDocumentRepository(state.document_state)

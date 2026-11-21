@@ -48,6 +48,10 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/admin/invitations` | admin | Invite someone by email |
 | `POST` | `/api/v1/admin/users/{id}/disable` | admin | Disable an account |
 | `POST` | `/api/v1/admin/users/{id}/enable` | admin | Let a disabled account sign in again |
+| `GET` | `/api/v1/admin/evaluations/judges` | admin | The models an evaluation may be judged by |
+| `GET` | `/api/v1/admin/evaluations` | admin | Evaluations of the projects you are a member of, newest first |
+| `POST` | `/api/v1/admin/evaluations` | admin | Start an evaluation (member who may ask questions); judged in the background |
+| `GET` | `/api/v1/admin/evaluations/{evaluation_id}` | admin | One evaluation, its results and judgements (any member) |
 | `POST` | `/api/v1/projects` | projects | Create a project; the caller becomes its owner |
 | `GET` | `/api/v1/projects` | projects | The caller's projects, filtered and sorted, with what grouping needs |
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
@@ -978,6 +982,47 @@ It searches only text every member already reads: project names and review quest
 **Limits:** at most 5 hits per scope in a project and 50 in all; at most 100 projects are searched, and the search stops once 50 hits are found. `is_truncated` is `true` when any limit was reached. `422` for a query out of bounds or an unknown scope. `429` with `Retry-After` after 60 searches in a minute by one person.
 
 ---
+
+## Evaluations
+
+humani-t's answers against other systems', judged blind by a model the operator configured (UI_UX_SPEC §6.15, [ADR 0022](adr/0022-evaluations-are-judged-blind-inside-their-project.md)). An evaluation belongs to one project: everything in it is sealed under the project's key and goes with the project.
+
+**Who:** instance administrators only; anyone else gets `403` before the body is read. Admin status alone opens nothing: starting one also needs membership of the project with a role that may ask questions (owner or reviewer), reading one any membership. A non-member gets the same `404` as for a missing project or evaluation.
+
+### `GET /api/v1/admin/evaluations/judges`
+
+`200` `{"writer_model": "qwen3.5:9b", "judge_models": ["qwen3.5:9b", "mistral-small:24b"]}`: the deployment's own model first, then `HUMANI_T_JUDGE_MODELS`. The judge should be from a different model family than the writer.
+
+### `POST /api/v1/admin/evaluations`
+
+```json
+{
+  "project_id": "…",
+  "judge_model": "mistral-small:24b",
+  "question_file": "Do cash transfers raise prices?\nWhich markets recover first?",
+  "other_systems": [{"name": "System B", "answers_file": "{\"answer\": \"…\"}\n{\"answer\": \"…\"}"}]
+}
+```
+
+The files travel as their text. `question_file` is plain text, one question per line (blank lines skipped, 1 to 50 questions of at most 2,000 characters, at most 200,000 characters in all). Each `answers_file` is JSON Lines, one `{"answer": "…"}` per question in the same order (at most 8,000 characters an answer, 500,000 in all). At most 2 other systems, each named 1 to 60 characters, distinct, and not `humani-t`; with none, humani-t answers and nothing is judged. The questions and answers are masked as the project's masking choice says before they are stored. humani-t answers from the project's latest review.
+
+`202` with `Location: /api/v1/admin/evaluations/{id}` and an `EvaluationOut`, `status` `queued`. `422` for a file the rules refuse (the message names the line), a judge the deployment does not offer, or a project with no review yet.
+
+### `GET /api/v1/admin/evaluations`
+
+`200` a list of summaries, newest first: `id`, `project_id`, `status` (`queued`, `running`, `finished`, `failed`), `judge_model`, `writer_model` (once the first question is answered), `question_count`, `answered_count`, `system_count`, `created_at`, `finished_at`, `error` (a plain sentence when failed).
+
+### `GET /api/v1/admin/evaluations/{evaluation_id}`
+
+`200` `EvaluationOut`: the summary, plus `systems` (`humani-t` first), `is_masked`, `masked` (counts by type over the upload), `judge_prompt_version`, `answers` (`position`, `question`, humani-t's `answer`), `judgements` (`position`, `question`, `system_a`, `system_b`, `answer_a`, `answer_b`, `scores_a`, `scores_b` with the six quality checks 0 to 2, `winner` `a`, `b` or `tie`, `reason`) and `results`, one per other system judged so far: `first` (humani-t), `second`, `judged`, `wins`, `ties`, `losses` (from humani-t's side) and `metrics`, each `{metric, first_mean, second_mean, difference}` rounded to 2 places. Poll while `queued` or `running`.
+
+### The judging worker
+
+Runs in the worker process. For each question it answers with the follow-up pipeline, then for each other system asks the judge to compare the two answers, shown as A and B in an order drawn at random and recorded. The judge never sees system names or humani-t's citation tags. Progress is saved after each question, so a failure keeps what was judged. A lapsed lease is retried once. If the project's masking was turned on after an upload made with it off, the evaluation stops before anything is sent.
+
+### Audit
+
+`evaluation.started` (target `evaluation`), with the question and system counts. No question, answer or system name.
 
 ## Semantics
 

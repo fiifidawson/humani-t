@@ -32,6 +32,7 @@ from app.application.documents import (
     DocumentService,
 )
 from app.application.encryption import ScopeEncryption
+from app.application.evaluations import EvaluationService, EvaluationWorker
 from app.application.exports import ExportService
 from app.application.history import HistoryService
 from app.application.inference import GuardedInference
@@ -151,6 +152,9 @@ class Providers:
     questions: QuestionService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     answers: QuestionWorker
+    evaluations: EvaluationService
+    # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
+    evaluation_worker: EvaluationWorker
     documents: DocumentService
     # Run by the worker process beside its runs (`app/worker.py`); idle in the API.
     document_processor: DocumentProcessor
@@ -259,6 +263,19 @@ def inference_destination(settings: Settings) -> Destination:
     )
 
 
+def _judges(
+    settings: Settings, inference: GuardedInference, fetcher: HttpFetcher | None
+) -> dict[str, GuardedInference]:
+    """Each judge the operator configured, on the same server and behind the same guard."""
+    judges = {inference.model_id: inference}
+    if fetcher is None:
+        return judges
+    for model in settings.judge_model_ids[1:]:
+        provider = inference_provider(settings, fetcher, model=model)
+        judges[model] = GuardedInference(provider, prompt_guard())
+    return judges
+
+
 def _inference(settings: Settings) -> tuple[GuardedInference, HttpFetcher | None]:
     if settings.demo_inference:
         # The guard stays in front of the stand-in, so a demo run is held to the
@@ -275,15 +292,19 @@ def _inference(settings: Settings) -> tuple[GuardedInference, HttpFetcher | None
     return GuardedInference(inference_provider(settings, fetcher), prompt_guard()), fetcher
 
 
-def inference_provider(settings: Settings, fetcher: HttpFetcher) -> InferenceProvider:
-    """The model server's wire format, as the operator set it. Ollama unless told otherwise."""
+def inference_provider(
+    settings: Settings, fetcher: HttpFetcher, *, model: str | None = None
+) -> InferenceProvider:
+    """The model server's wire format, as the operator set it. Ollama unless told otherwise.
+
+    `model` is another of the operator's models on the same server, such as a judge.
+    """
+    name = model or settings.inference_model
     if settings.inference_api == "openai":
         return OpenAICompatibleInferenceProvider(
-            fetcher, base_url=settings.inference_url, model=settings.inference_model
+            fetcher, base_url=settings.inference_url, model=name
         )
-    return OllamaInferenceProvider(
-        fetcher, base_url=settings.inference_url, model=settings.inference_model
-    )
+    return OllamaInferenceProvider(fetcher, base_url=settings.inference_url, model=name)
 
 
 def prompt_guard() -> PromptGuard:
@@ -495,6 +516,7 @@ def build_providers(
         clock=clock,
     )
     masks = PaperMaskStore(encryption, masking, clock)
+    judges = _judges(settings, inference, inference_client)
     files = file_store or _file_store(settings)
     document_evidence = DocumentEvidence(encryption, masking_rules)
     plans = PlanService(
@@ -561,6 +583,18 @@ def build_providers(
         runs=runs,
         clock=clock,
     )
+    answers = QuestionWorker(
+        storage=storage,
+        encryption=encryption,
+        inference=inference,
+        retriever=Bm25Retriever(),
+        evidence=ScreenedEvidence(pipeline.store, pipeline.masked, criteria, document_evidence),
+        rules=masking_rules,
+        instructions=instructions,
+        worker_id=f"answers-{uuid.uuid4().hex[:12]}",
+        signals=signals,
+        clock=clock,
+    )
     papers = PaperService(
         storage=storage,
         store=pipeline.store,
@@ -625,17 +659,25 @@ def build_providers(
             signals=signals,
             clock=clock,
         ),
-        answers=QuestionWorker(
+        answers=answers,
+        evaluations=EvaluationService(
             storage=storage,
             encryption=encryption,
-            inference=inference,
-            retriever=Bm25Retriever(),
-            evidence=ScreenedEvidence(
-                pipeline.store, pipeline.masked, criteria, document_evidence
-            ),
+            audit=audit,
+            sanitizer=planning_sanitizer(settings, ner),
             rules=masking_rules,
-            instructions=instructions,
-            worker_id=f"answers-{uuid.uuid4().hex[:12]}",
+            signals=signals,
+            writer_model=inference.model_id,
+            judge_models=tuple(judges),
+            clock=clock,
+        ),
+        evaluation_worker=EvaluationWorker(
+            storage=storage,
+            encryption=encryption,
+            answers=answers,
+            judges=judges,
+            rules=masking_rules,
+            worker_id=f"evaluations-{uuid.uuid4().hex[:12]}",
             signals=signals,
             clock=clock,
         ),
@@ -809,6 +851,13 @@ def get_questions(providers: ProvidersDep) -> QuestionService:
 
 
 QuestionsDep = Annotated[QuestionService, Depends(get_questions)]
+
+
+def get_evaluations(providers: ProvidersDep) -> EvaluationService:
+    return providers.evaluations
+
+
+EvaluationsDep = Annotated[EvaluationService, Depends(get_evaluations)]
 
 
 def get_documents(providers: ProvidersDep) -> DocumentService:

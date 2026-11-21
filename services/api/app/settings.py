@@ -273,6 +273,14 @@ class Settings(BaseSettings):
             "allow_hosted_inference; off keeps every project's text masked (ADR 0014)."
         ),
     )
+    judge_models: str = Field(
+        default="",
+        description=(
+            "Other models on the same model server that may judge evaluations, "
+            "comma-separated. Empty: inference_model only. The judge should be from a "
+            "different model family than the writer."
+        ),
+    )
     paper_sources: str = Field(
         default="",
         description="Comma-separated sources to search: openalex, europepmc, arxiv.",
@@ -481,6 +489,12 @@ class Settings(BaseSettings):
         return None if value == "" else value
 
     @property
+    def judge_model_ids(self) -> tuple[str, ...]:
+        """The models evaluations may be judged by: inference_model first, then the others."""
+        extra = (m.strip() for m in self.judge_models.split(",") if m.strip())
+        return tuple(dict.fromkeys((self.inference_model, *extra)))
+
+    @property
     def paper_source_ids(self) -> tuple[str, ...]:
         return tuple(s.strip().lower() for s in self.paper_sources.split(",") if s.strip())
 
@@ -532,6 +546,12 @@ class Settings(BaseSettings):
                     f"inference_model {self.inference_model!r} is an Ollama cloud model, "
                     "hosted on ollama.com; set allow_hosted_inference to use it"
                 )
+            for model in self.judge_model_ids[1:]:
+                if _OLLAMA_CLOUD_MODEL.search(model):
+                    raise ValueError(
+                        f"judge_models names {model!r}, an Ollama cloud model hosted on "
+                        "ollama.com; set allow_hosted_inference to use it"
+                    )
         if self.is_production and url.scheme == "http" and not _is_internal_host(host):
             raise ValueError(
                 "production requires https for an inference_url outside the deployment"
@@ -550,9 +570,8 @@ class Settings(BaseSettings):
         if self.demo_inference:
             return False
         host = (urlsplit(self.inference_url.strip()).hostname or "").rstrip(".").lower()
-        return bool(_OLLAMA_CLOUD_MODEL.search(self.inference_model)) or not _is_internal_host(
-            host
-        )
+        is_cloud = any(_OLLAMA_CLOUD_MODEL.search(m) for m in self.judge_model_ids)
+        return is_cloud or not _is_internal_host(host)
 
     @model_validator(mode="after")
     def _paper_sources_are_known(self) -> Self:

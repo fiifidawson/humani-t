@@ -512,6 +512,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/evaluations/judges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The models an evaluation may be judged by
+         * @description Only models the operator configured. The judge should be from another model family.
+         */
+        get: operations["judge_models_api_v1_admin_evaluations_judges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evaluations of the projects you are a member of, newest first */
+        get: operations["list_evaluations_api_v1_admin_evaluations_get"];
+        put?: never;
+        /**
+         * Start an evaluation; it is answered and judged in the background
+         * @description The files are masked as the project chooses before they are stored or sent.
+         */
+        post: operations["start_evaluation_api_v1_admin_evaluations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/evaluations/{evaluation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One evaluation: poll it until it has finished */
+        get: operations["read_evaluation_api_v1_admin_evaluations__evaluation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -2022,47 +2080,6 @@ export interface components {
              */
             answer?: string | null;
         };
-        /** AnswerOut */
-        AnswerOut: {
-            /**
-             * Claims
-             * @description Up to 6; empty when nothing answers it.
-             */
-            claims: components["schemas"]["ClaimOut"][];
-            /** Nothing Found */
-            nothing_found: boolean;
-            /**
-             * Message
-             * @description "Nothing in this project answers that." when nothing answers it.
-             */
-            message: string | null;
-            /**
-             * Run Id
-             * @description The run whose evidence was searched.
-             */
-            run_id: string | null;
-            /**
-             * Sources
-             * @description Every cited tag, by first appearance.
-             */
-            sources: components["schemas"]["AnswerSourceOut"][];
-            /**
-             * Steps
-             * @description How the answer was made, in order.
-             */
-            steps: components["schemas"]["AgentStepOut"][];
-            /** Rounds */
-            rounds: number;
-            /** Kept Round */
-            kept_round: number;
-            /**
-             * Stopped Because
-             * @description Null when no model was asked.
-             */
-            stopped_because: string | null;
-            /** Warnings */
-            warnings: components["schemas"]["ProblemOut"][];
-        };
         /** AnswerSourceOut */
         AnswerSourceOut: {
             /** Tag */
@@ -2939,6 +2956,141 @@ export interface components {
          * @enum {string}
          */
         EntityType: "PERSON" | "LOCATION" | "DATE" | "EMAIL" | "PHONE" | "MEDICAL_RECORD" | "ID_NUMBER" | "PASSPORT" | "IBAN" | "CARD_NUMBER" | "IP_ADDRESS" | "COORDINATES";
+        /** EvaluationIn */
+        EvaluationIn: {
+            /**
+             * Project Id
+             * Format: uuid
+             * @description A project the administrator is a member of.
+             */
+            project_id: string;
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Question File
+             * @description Plain text: one question per line.
+             */
+            question_file: string;
+            /**
+             * Other Systems
+             * @default []
+             */
+            other_systems: components["schemas"]["OtherSystemIn"][];
+        };
+        /** EvaluationOut */
+        EvaluationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            status: components["schemas"]["EvaluationStatus"];
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Writer Model
+             * @description Known once the first question is answered.
+             */
+            writer_model: string | null;
+            /** Question Count */
+            question_count: number;
+            /**
+             * Answered Count
+             * @description Questions answered and judged so far.
+             */
+            answered_count: number;
+            /**
+             * System Count
+             * @description Other systems compared with humani-t.
+             */
+            system_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Systems
+             * @description humani-t first, then the other systems.
+             */
+            systems: string[];
+            /**
+             * Is Masked
+             * @description Whether the upload was masked before it was stored.
+             */
+            is_masked: boolean;
+            /**
+             * Masked
+             * @description Masked values by type, over the whole upload.
+             */
+            masked: {
+                [key: string]: number;
+            };
+            /** Judge Prompt Version */
+            judge_prompt_version: string;
+            /** Results */
+            results: components["schemas"]["PairResultOut"][];
+            /** Answers */
+            answers: components["schemas"]["app__api__schemas__evaluations__AnswerOut"][];
+            /** Judgements */
+            judgements: components["schemas"]["JudgementOut"][];
+        };
+        /**
+         * EvaluationStatus
+         * @enum {string}
+         */
+        EvaluationStatus: "queued" | "running" | "finished" | "failed";
+        /** EvaluationSummaryOut */
+        EvaluationSummaryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            status: components["schemas"]["EvaluationStatus"];
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Writer Model
+             * @description Known once the first question is answered.
+             */
+            writer_model: string | null;
+            /** Question Count */
+            question_count: number;
+            /**
+             * Answered Count
+             * @description Questions answered and judged so far.
+             */
+            answered_count: number;
+            /**
+             * System Count
+             * @description Other systems compared with humani-t.
+             */
+            system_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Error */
+            error: string | null;
+        };
         /** EvidenceOut */
         EvidenceOut: {
             /** Tag */
@@ -3200,6 +3352,43 @@ export interface components {
              */
             event: "job.finished";
             data: components["schemas"]["JobFinishedData"];
+        };
+        /** JudgeModelsOut */
+        JudgeModelsOut: {
+            /**
+             * Writer Model
+             * @description The model that writes humani-t's answers.
+             */
+            writer_model: string;
+            /**
+             * Judge Models
+             * @description Only models the operator configured; the writer's own is first.
+             */
+            judge_models: string[];
+        };
+        /** JudgementOut */
+        JudgementOut: {
+            /** Position */
+            position: number;
+            /** Question */
+            question: string;
+            /**
+             * System A
+             * @description Which system wrote answer A. The judge never saw it.
+             */
+            system_a: string;
+            /** System B */
+            system_b: string;
+            /** Answer A */
+            answer_a: string;
+            /** Answer B */
+            answer_b: string;
+            scores_a: components["schemas"]["QualityOut"];
+            scores_b: components["schemas"]["QualityOut"];
+            /** @description a, b or tie, as the judge said it. */
+            winner: components["schemas"]["Verdict"];
+            /** Reason */
+            reason: string;
         };
         /** LabelChangeOut */
         LabelChangeOut: {
@@ -3529,6 +3718,20 @@ export interface components {
         MemberRoleIn: {
             role: components["schemas"]["Role"];
         };
+        /** MetricOut */
+        MetricOut: {
+            /** Metric */
+            metric: string;
+            /** First Mean */
+            first_mean: number;
+            /** Second Mean */
+            second_mean: number;
+            /**
+             * Difference
+             * @description first_mean minus second_mean.
+             */
+            difference: number;
+        };
         /** MfaStatusOut */
         MfaStatusOut: {
             /** Is Enrolled */
@@ -3713,6 +3916,36 @@ export interface components {
             benefits: components["schemas"]["ClaimOut"][];
             /** Risks */
             risks: components["schemas"]["ClaimOut"][];
+        };
+        /** OtherSystemIn */
+        OtherSystemIn: {
+            /** Name */
+            name: string;
+            /**
+             * Answers File
+             * @description JSON Lines: one {"answer": "…"} per line, in the questions' order.
+             */
+            answers_file: string;
+        };
+        /**
+         * PairResultOut
+         * @description Two systems over every question judged so far, from the first system's side.
+         */
+        PairResultOut: {
+            /** First */
+            first: string;
+            /** Second */
+            second: string;
+            /** Judged */
+            judged: number;
+            /** Metrics */
+            metrics: components["schemas"]["MetricOut"][];
+            /** Wins */
+            wins: number;
+            /** Ties */
+            ties: number;
+            /** Losses */
+            losses: number;
         };
         /** PaperDetailOut */
         PaperDetailOut: {
@@ -5358,6 +5591,12 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Verdict
+         * @description Which answer the judge preferred, by the letter it saw.
+         * @enum {string}
+         */
+        Verdict: "a" | "b" | "tie";
         /** VersionOut */
         VersionOut: {
             /** Version */
@@ -5477,6 +5716,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** AnswerOut */
+        app__api__schemas__evaluations__AnswerOut: {
+            /** Position */
+            position: number;
+            /**
+             * Question
+             * @description As stored and sent: masked when masking is on.
+             */
+            question: string;
+            /**
+             * Answer
+             * @description humani-t's answer, as the judge read it.
+             */
+            answer: string;
+        };
         /** QuestionOut */
         app__api__schemas__plans__QuestionOut: {
             /** Id */
@@ -5489,6 +5743,47 @@ export interface components {
             answer: string | null;
             /** Skipped */
             skipped: boolean;
+        };
+        /** AnswerOut */
+        app__api__schemas__questions__AnswerOut: {
+            /**
+             * Claims
+             * @description Up to 6; empty when nothing answers it.
+             */
+            claims: components["schemas"]["ClaimOut"][];
+            /** Nothing Found */
+            nothing_found: boolean;
+            /**
+             * Message
+             * @description "Nothing in this project answers that." when nothing answers it.
+             */
+            message: string | null;
+            /**
+             * Run Id
+             * @description The run whose evidence was searched.
+             */
+            run_id: string | null;
+            /**
+             * Sources
+             * @description Every cited tag, by first appearance.
+             */
+            sources: components["schemas"]["AnswerSourceOut"][];
+            /**
+             * Steps
+             * @description How the answer was made, in order.
+             */
+            steps: components["schemas"]["AgentStepOut"][];
+            /** Rounds */
+            rounds: number;
+            /** Kept Round */
+            kept_round: number;
+            /**
+             * Stopped Because
+             * @description Null when no model was asked.
+             */
+            stopped_because: string | null;
+            /** Warnings */
+            warnings: components["schemas"]["ProblemOut"][];
         };
         /** QuestionOut */
         app__api__schemas__questions__QuestionOut: {
@@ -5550,7 +5845,7 @@ export interface components {
              * @description Why it failed, in plain words.
              */
             error: string | null;
-            answer: components["schemas"]["AnswerOut"] | null;
+            answer: components["schemas"]["app__api__schemas__questions__AnswerOut"] | null;
         };
     };
     responses: never;
@@ -6373,6 +6668,117 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    judge_models_api_v1_admin_evaluations_judges_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeModelsOut"];
+                };
+            };
+        };
+    };
+    list_evaluations_api_v1_admin_evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationSummaryOut"][];
+                };
+            };
+        };
+    };
+    start_evaluation_api_v1_admin_evaluations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
+                };
+            };
+            /** @description No such project, or you are not a member of it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_evaluation_api_v1_admin_evaluations__evaluation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
+                };
             };
             /** @description Validation Error */
             422: {

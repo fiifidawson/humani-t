@@ -1076,6 +1076,7 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
   - Results: a table per system pair with the six metrics (mean, difference), and wins, ties and losses.
   - Each judgement: the question, the two answers side by side as A and B in the order the judge saw them, the scores and the reason, then a "Reveal systems" toggle.
   - A note on fairness: "The judge should be from a different model family than the writer."
+  - **Built (P4, ADR 0022):** `/admin/evaluations` lists the evaluations of projects the administrator belongs to; **New evaluation** takes a project, a question file (plain text, one question per line), up to 2 other systems' answers (one JSON Lines file per system, `{"answer": "…"}` per question, in order) and a judge from the models the operator configured. Each evaluation page has a table per pair, the judgements as A and B with **Reveal systems**, and the line "Made by … Judged by …". The rail shows **Evaluations** to administrators only; the API refuses everyone else.
 
 ### 6.16 Account
 
