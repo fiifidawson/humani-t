@@ -26,10 +26,17 @@ export function Dialog({ isOpen, title, onClose, children }: DialogProps) {
 		>
 			<Portal>
 				<ChakraDialog.Backdrop bg="scrim" />
-				{/* The portal renders outside AppShell's zoom, so it takes the zoom itself.
-				    Every dialog opens after sign-in. */}
-				<ChakraDialog.Positioner px="4" css={{ zoom: COMPACT_ZOOM }}>
-					<ChakraDialog.Content bg="bg.panel" rounded="card" p="2" maxW="md">
+				{/* The portal renders outside AppShell's zoom, so the dialog takes it
+				    itself. On the dialog, not the positioner: zoom shrinks the full-window
+				    layer too, which would centre the dialog in its top-left corner. */}
+				<ChakraDialog.Positioner px="4">
+					<ChakraDialog.Content
+						bg="bg.panel"
+						rounded="card"
+						p="2"
+						maxW="md"
+						css={{ zoom: COMPACT_ZOOM }}
+					>
 						<ChakraDialog.Header>
 							<ChakraDialog.Title
 								fontFamily="heading"
