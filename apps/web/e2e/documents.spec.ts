@@ -101,3 +101,43 @@ test("a long review scrolls in one place, not two, on a laptop screen", async ({
 	);
 	expect(scrolling).toBe(1);
 });
+
+test("a long document stays in a frame shorter than the window, both sides scrolling together", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1366, height: 768 });
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill("Long document");
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	await page.goto(`${page.url()}/documents`);
+	await page.locator("input[type=file]").setInputFiles({
+		name: "long_report.txt",
+		mimeType: "text/plain",
+		buffer: Buffer.from(Array.from({ length: 12 }, () => REPORT).join("\n\n")),
+	});
+	await page
+		.getByRole("button", { name: "Review D1 long_report.txt" })
+		.click({ timeout: 60_000 });
+
+	const frame = page.getByRole("region", {
+		name: "The original and the masked text",
+	});
+	const original = frame.getByRole("region", { name: "Original text" });
+	const masked = frame.getByRole("region", { name: "What the model will see" });
+	await expect(original).toBeVisible();
+	const windowHeight = await page.evaluate(() => window.innerHeight);
+	const box = await frame.boundingBox();
+	expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(
+		windowHeight * 0.75,
+	);
+
+	await frame.evaluate((element) => {
+		element.scrollTop = 600;
+	});
+	expect(await tops(masked)).toEqual(await tops(original));
+	const heading = frame.getByRole("heading", { name: "Original text" });
+	const headingTop = (await heading.boundingBox())?.y ?? 0;
+	expect(headingTop).toBeGreaterThanOrEqual((box?.y ?? 0) - 1);
+	expect(await frame.evaluate((element) => element.scrollTop)).toBe(600);
+});
