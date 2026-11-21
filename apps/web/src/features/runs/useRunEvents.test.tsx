@@ -165,6 +165,61 @@ describe("following a run's events (architecture §4.4, UI_UX_SPEC §11.2)", () 
 		expect(result.current.state.stages[0]?.done).toBe(2);
 	});
 
+	describe("in low data mode (UI_UX_SPEC §13.2)", () => {
+		beforeEach(() => {
+			window.localStorage.setItem("humani-t:low-data", "true");
+		});
+
+		it("redraws progress at most every 10 seconds, and always ends on the latest", () => {
+			const { result } = follow();
+			act(() => FakeEventSource.latest().open());
+			emit(...started(1));
+			expect(result.current.state.currentStage).toBe("screen");
+
+			emit(...progress(2, 1));
+			emit(...step(3));
+			emit(...progress(4, 2));
+			act(() => {
+				vi.advanceTimersByTime(9_000);
+			});
+			expect(result.current.state.stages[0]?.done).toBeNull();
+			expect(result.current.state.agentSteps).toHaveLength(0);
+
+			act(() => {
+				vi.advanceTimersByTime(1_000);
+			});
+			expect(result.current.state.stages[0]?.done).toBe(2);
+			expect(result.current.state.agentSteps).toHaveLength(1);
+		});
+
+		it("still shows a gate and the end of the run at once", () => {
+			const { result } = follow();
+			act(() => FakeEventSource.latest().open());
+			emit(...started(1));
+
+			emit("gate.required", 2, {
+				gate_id: "g-1",
+				kind: "privacy_review",
+				payload: {},
+			});
+			expect(result.current.state.status).toBe("waiting");
+
+			emit("job.finished", 3, { outcome: "done", seconds: 60, error: null });
+			expect(result.current.state.status).toBe("done");
+		});
+
+		it("keeps the one event stream: only drawing slows down", () => {
+			follow();
+			act(() => FakeEventSource.latest().open());
+			for (let id = 1; id <= 5; id += 1) {
+				emit(...step(id));
+			}
+
+			expect(FakeEventSource.instances).toHaveLength(1);
+			expect(FakeEventSource.latest().isClosed).toBe(false);
+		});
+	});
+
 	it("stops listening when nothing shows the run any more", () => {
 		const { unmount } = follow();
 

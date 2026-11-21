@@ -12,18 +12,22 @@ import { createRoot } from "react-dom/client";
 import { createApiClient } from "./api/client";
 import { App } from "./app/App";
 import {
+	applyLowData,
 	applyReducedMotion,
 	applyTheme,
 	followSystemTheme,
+	readLowData,
 	readReducedMotion,
 	readTheme,
 } from "./app/preferences";
 import { createQueryClient } from "./app/queryClient";
 import { createAppRouter } from "./app/router";
 
-// Before the first render, so a dark-theme choice does not flash light.
+// Before the first render, so a dark-theme choice does not flash light, and
+// low data mode's system fonts are in place before any font file is asked for.
 applyTheme(readTheme());
 applyReducedMotion(readReducedMotion());
+applyLowData(readLowData());
 followSystemTheme();
 
 const root = document.getElementById("root");

@@ -43,6 +43,11 @@ class ExportName(StrEnum):
     def is_brief(self) -> bool:
         return self.value.startswith("brief.")
 
+    @property
+    def opens_in_browser(self) -> bool:
+        """Shown in a tab rather than saved: the brief to print or save as PDF."""
+        return self is ExportName.BRIEF_HTML
+
 
 _MEDIA_TYPES: dict[ExportName, str] = {
     ExportName.DATASET_CSV: "text/csv; charset=utf-8",
@@ -66,8 +71,9 @@ def download_filename(name: ExportName, run_id: UUID) -> str:
     return f"Humani-T-run-{run_id.hex[:8]}-{name.value}"
 
 
-def content_disposition(filename: str) -> str:
-    """An attachment header for `filename`; `ValueError` for a name it cannot carry safely."""
+def content_disposition(filename: str, *, is_inline: bool = False) -> str:
+    """The header for `filename`, inline or an attachment; `ValueError` for an unsafe name."""
     if not _SAFE_FILENAME.fullmatch(filename) or ".." in filename:
         raise ValueError("the download filename must be ASCII letters, digits, '.', '_' or '-'")
-    return f'attachment; filename="{filename}"'
+    kind = "inline" if is_inline else "attachment"
+    return f'{kind}; filename="{filename}"'

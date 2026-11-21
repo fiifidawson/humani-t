@@ -778,9 +778,9 @@ Downloads of a review's results (UI_UX_SPEC §6.8, §6.9, §15 P2). Each file is
 | `manifest.json` | `application/json` | `GET /runs/{run_id}/manifest`, as a file. |
 | `brief.json` | `application/json` | `GET …/brief`, as a file. |
 | `brief.md` | `text/markdown; charset=utf-8` | The brief in the canvas's order: header with the caveat, bottom line, options, trade-offs, disagreements, considerations, gaps, sources. Reasoning claims are marked "reasoning, not a source". |
-| `brief.html` | `text/html; charset=utf-8` | The same, print-ready: the browser's "Save as PDF" makes the PDF. The caveat sits in a fixed footer that repeats on every printed page. No script; every text is escaped. |
+| `brief.html` | `text/html; charset=utf-8` | The same, print-ready: the browser's "Save as PDF" makes the PDF ([ADR 0019](adr/0019-the-brief-pdf-is-made-by-the-browser.md)). The caveat is in a table footer, which browsers repeat on every printed page, and the sources come last. A line saying how to save it shows on screen only. No script; every text is escaped. |
 
-Without `run_id`, each export uses the run its screen shows by default: the newest run with papers for the dataset, RIS, PRISMA and manifest, the newest brief for the brief. **Response** `200` with the file, `Content-Disposition: attachment; filename="humani-t-run-<first 8 hex of the run id>-<name>"`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. `404` for an unknown name, a run of another review, a review with no papers yet, or no brief yet.
+Without `run_id`, each export uses the run its screen shows by default: the newest run with papers for the dataset, RIS, PRISMA and manifest, the newest brief for the brief. **Response** `200` with the file, `Content-Disposition: attachment; filename="humani-t-run-<first 8 hex of the run id>-<name>"`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. `brief.html` alone is `inline` instead of `attachment`, so it opens in a tab, and its `Content-Security-Policy` allows only its own stylesheet, by hash: `default-src 'none'; style-src 'sha256-…'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`. `404` for an unknown name, a run of another review, a review with no papers yet, or no brief yet.
 
 ### Audit
 

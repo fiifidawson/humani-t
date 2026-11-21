@@ -1,6 +1,6 @@
 # 18 — P4: coverage estimate
 
-> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 find](17-p3-find.md) · **Next:** `18 — P4 evaluations`
+> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [18 — P4 retention](18-p4-retention.md) · **Next:** [18 — P4 evaluations](18-p4-evaluations.md)
 
 A reviewer reading a run's papers can see roughly what share of the relevant papers the searches found, as a range that is always called an estimate, with what it means and does not, or a plain "no estimate" and why. It is worked out by the API from what the run already stores, with no model call, and the Screen stage records it in the run's manifest ([UI_UX_SPEC §6.8](../UI_UX_SPEC.md#68-screening-results), [ADR-0021](../adr/0021-coverage-is-a-capture-recapture-estimate.md), [`architecture.md` §4.2](../architecture.md#42-reviews)).
 

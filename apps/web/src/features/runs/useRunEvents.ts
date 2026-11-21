@@ -3,10 +3,12 @@
  *
  * EventSource reconnects by itself with `Last-Event-ID`, and the API replays what
  * was missed. This hook adds the rest: a new stream when the browser gives up,
- * each event applied once, and progress redrawn at most twice a second.
+ * each event applied once, and progress redrawn at most twice a second, or every
+ * 10 seconds in low data mode (UI_UX_SPEC §13.2).
  */
 
 import { useEffect, useRef, useState } from "react";
+import { readLowData } from "../../app/preferences";
 import {
 	applyRunEvent,
 	initialRunState,
@@ -35,6 +37,13 @@ export interface RunEventsOptions {
 
 const CLOSED = 2;
 const PROGRESS_INTERVAL_MS = 500;
+const LOW_DATA_INTERVAL_MS = 10_000;
+// What the person must see at once even in low data mode: a gate waits for them.
+const ALWAYS_AT_ONCE = new Set([
+	"gate.required",
+	"gate.resolved",
+	"job.finished",
+]);
 const FIRST_RETRY_MS = 1000;
 const LONGEST_RETRY_MS = 30_000;
 
@@ -69,7 +78,10 @@ export function useRunEvents(
 		};
 
 		const drawProgress = () => {
-			const wait = lastProgressDrawnAt + PROGRESS_INTERVAL_MS - Date.now();
+			const interval = readLowData()
+				? LOW_DATA_INTERVAL_MS
+				: PROGRESS_INTERVAL_MS;
+			const wait = lastProgressDrawnAt + interval - Date.now();
 			if (wait <= 0) {
 				lastProgressDrawnAt = Date.now();
 				draw();
@@ -98,7 +110,10 @@ export function useRunEvents(
 				return;
 			}
 			current = next;
-			if (event.type === "stage.progress") {
+			const isProgress = readLowData()
+				? !ALWAYS_AT_ONCE.has(event.type)
+				: event.type === "stage.progress";
+			if (isProgress) {
 				drawProgress();
 			} else {
 				draw();

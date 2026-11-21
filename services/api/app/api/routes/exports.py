@@ -13,7 +13,7 @@ from fastapi import APIRouter, Query, Request, Response
 
 from app.api.access import require_review
 from app.api.dependencies import ExportsDep
-from app.api.exports import render
+from app.api.exports import PRINT_PAGE_CSP, render
 from app.api.session import request_id
 from app.application.accounts import Current
 from app.domain.accounts import NotFoundError
@@ -55,12 +55,11 @@ async def download_export(
         raise NotFoundError("No such export.")
     content = await exports.export(current, review_id, export, run_id, request_id(request))
     filename = download_filename(export, content.run_id)
-    return Response(
-        render(content),
-        media_type=export.media_type,
-        headers={
-            "Content-Disposition": content_disposition(filename),
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    headers = {
+        "Content-Disposition": content_disposition(filename, is_inline=export.opens_in_browser),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if export.opens_in_browser:
+        headers["Content-Security-Policy"] = PRINT_PAGE_CSP
+    return Response(render(content), media_type=export.media_type, headers=headers)

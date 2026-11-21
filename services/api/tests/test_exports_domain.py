@@ -54,6 +54,14 @@ class TestFilenames:
 
         assert header == 'attachment; filename="Humani-T-run-0f1e2d3c-brief.md"'
 
+    def test_the_print_brief_opens_in_the_browser_and_keeps_its_name(self):
+        header = content_disposition("Humani-T-run-0f1e2d3c-brief.html", is_inline=True)
+
+        assert header == 'inline; filename="Humani-T-run-0f1e2d3c-brief.html"'
+
+    def test_only_the_print_brief_opens_in_the_browser(self):
+        assert [e for e in ExportName if e.opens_in_browser] == [ExportName.BRIEF_HTML]
+
     @pytest.mark.parametrize(
         "name", ['a".csv', "a\r\nSet-Cookie: x", "../../etc/passwd", "é.csv"]
     )

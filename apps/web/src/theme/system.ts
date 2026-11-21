@@ -52,7 +52,11 @@ const BRAND = {
 /** Decelerates and never overshoots: nothing bounces (UI_UX_SPEC §9.5). */
 const SETTLE = "cubic-bezier(0.2, 0, 0, 1)";
 
-// Both ways of asking for less motion: the computer's setting, and Account's switch.
+const SYSTEM_SANS =
+	'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+const SYSTEM_SERIF = 'Georgia, "Times New Roman", serif';
+
+// Every way of asking for less motion: the computer's setting, Account's switch, low data mode.
 const NO_MOTION = {
 	animationDuration: "0.01ms !important",
 	animationIterationCount: "1 !important",
@@ -83,6 +87,7 @@ function palette(parts: {
 }
 
 const config = defineConfig({
+	conditions: { lowData: "html[data-low-data] &" },
 	cssVarsPrefix: "ht",
 	// The reset Chakra's full theme carries (box-sizing, form controls inheriting the font).
 	preflight: true,
@@ -111,7 +116,7 @@ const config = defineConfig({
 		},
 		"[tabindex='-1']:focus:not(:focus-visible)": { outline: "none" },
 		"*, *::before, *::after": { _motionReduce: NO_MOTION },
-		"html[data-motion=reduced] *, html[data-motion=reduced] *::before, html[data-motion=reduced] *::after":
+		"html[data-motion=reduced] *, html[data-motion=reduced] *::before, html[data-motion=reduced] *::after, html[data-low-data] *, html[data-low-data] *::before, html[data-low-data] *::after":
 			NO_MOTION,
 		"::view-transition-old(root), ::view-transition-new(root)": {
 			animationDuration: "0.2s",
@@ -119,7 +124,7 @@ const config = defineConfig({
 		},
 		"::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*)":
 			{ _motionReduce: { animation: "none !important" } },
-		"html[data-motion=reduced]::view-transition-group(*), html[data-motion=reduced]::view-transition-old(*), html[data-motion=reduced]::view-transition-new(*)":
+		"html[data-motion=reduced]::view-transition-group(*), html[data-motion=reduced]::view-transition-old(*), html[data-motion=reduced]::view-transition-new(*), html[data-low-data]::view-transition-group(*), html[data-low-data]::view-transition-old(*), html[data-low-data]::view-transition-new(*)":
 			{ animation: "none !important" },
 	},
 	theme: {
@@ -177,13 +182,6 @@ const config = defineConfig({
 				),
 			},
 			fonts: {
-				heading: {
-					value: '"Brand Headline", Georgia, "Times New Roman", serif',
-				},
-				body: {
-					value:
-						'"Manrope Variable", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
-				},
 				mono: {
 					value:
 						'ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace',
@@ -197,6 +195,22 @@ const config = defineConfig({
 		},
 		semanticTokens: {
 			...semanticTokens,
+			// A font file is fetched only when text uses its family, so low data
+			// mode's system fonts mean none is downloaded (UI_UX_SPEC §13).
+			fonts: {
+				heading: {
+					value: {
+						base: `"Brand Headline", ${SYSTEM_SERIF}`,
+						_lowData: SYSTEM_SERIF,
+					},
+				},
+				body: {
+					value: {
+						base: `"Manrope Variable", ${SYSTEM_SANS}`,
+						_lowData: SYSTEM_SANS,
+					},
+				},
+			},
 			colors: {
 				...semanticTokens.colors,
 				bg: {

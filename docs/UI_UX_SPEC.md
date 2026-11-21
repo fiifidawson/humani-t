@@ -1082,7 +1082,7 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
 - Signed-in devices: list with browser, place (approximate, from IP if the deployment allows), last active; "Sign out" per device and "Sign out all others".
 - Password change; passkeys and TOTP (add, rename, remove; the last one can't be removed); recovery codes (regenerate, with re-auth).
-- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)). Built: theme, and the **Reduce motion** switch under Appearance ("Turns animations off in this browser. Your computer's own setting turns them off too.").
+- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)). Built: theme, and the **Reduce motion** switch under Appearance ("Turns animations off in this browser. Your computer's own setting turns them off too."). Built in P4: the **Low data mode** switch under Appearance, after Reduce motion ("Loads less in this browser, for slow or costly connections: your device's own fonts, no animations, and run progress every 10 seconds.").
 
 ---
 
@@ -1747,9 +1747,9 @@ Budgets are checked in CI with Lighthouse on a throttled profile.
 - **Text first.** The brief endpoint returns the whole brief as JSON; the screen renders the header and bottom line first, then the rest. Passages load when a chip is opened, not before.
 - **Split code by route.** The masking review, evaluation, compare and PRISMA code load only when used.
 - **SSE, not polling.** One small event at a time.
-- **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event.
+- **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event. Built in P4: kept per browser; the offer appears once, at the top of the signed-in app, when `navigator.connection` reports `saveData` or an `effectiveType` of `slow-2g`, `2g` or `3g`, and either answer ends it. Avatars and abstracts in paper rows do not exist in the app yet, so there is nothing to hide. Gates and the end of a run still show at once.
 - **Resume after a drop.** Unsent composer text is kept in memory (and in `sessionStorage` if the user allows it, never question text in `localStorage` for privacy). The event stream resumes from the last id.
-- **Offline reading.** The brief can be downloaded as a single-file PDF or Markdown, with the caveat and sources. A full offline mode (service worker cache of opened briefs) is a later phase and must respect `Cache-Control: no-store` rules; it needs a security review first.
+- **Offline reading.** The brief can be downloaded as a single-file PDF or Markdown, with the caveat and sources. The PDF is made by the browser from the print page ([ADR 0019](adr/0019-the-brief-pdf-is-made-by-the-browser.md)). A full offline mode (service worker cache of opened briefs) is a later phase and must respect `Cache-Control: no-store` rules; it needs a security review first.
 
 ---
 
