@@ -163,6 +163,7 @@ def make_evaluation_team(
     questions: int = len(QUESTIONS),
     masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
     admin_role: str | None = "reviewer",
+    is_on: bool = True,
 ) -> EvaluationTeam:
     script = AnswerScript(
         writer=[good_answer()] * questions, critic=[critic_answer()] * questions
@@ -187,7 +188,9 @@ def make_evaluation_team(
         judge_models=(WRITER_MODEL, JUDGE_MODEL),
         clock=rt.clock,
     )
-    rt.harness.providers = dataclasses.replace(providers, evaluations=service)
+    rt.harness.providers = dataclasses.replace(
+        providers, evaluations=service, is_evaluations_on=is_on
+    )
     rt.harness.app.state.providers = rt.harness.providers
     provider = FakeInferenceProvider(judge or JudgeScript(), model_id=JUDGE_MODEL)
     orders: list[bool] = []

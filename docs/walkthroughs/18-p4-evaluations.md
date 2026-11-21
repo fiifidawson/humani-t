@@ -67,11 +67,13 @@ From the rule to the screen:
 
 ## Set up
 
-Nothing beyond [00 — Setup](00-setup.md), plus the migration and, to offer a second judge, the setting:
+Nothing beyond [00 — Setup](00-setup.md), plus the migration, the switch (evaluations are off by default) and, to offer a second judge, the setting:
 
 ```powershell
 cd services\api
 uv run --env-file .env alembic upgrade head
+# in services\api\.env, to turn evaluations on (then restart the API and the worker):
+# HUMANI_T_EVALUATIONS_ENABLED=true
 # in services\api\.env, a model pulled on your Ollama, from another family than the writer:
 # HUMANI_T_JUDGE_MODELS=mistral-small:24b
 ```

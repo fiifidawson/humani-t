@@ -138,7 +138,7 @@ export function Rail({
 						</Link>
 					</RailLink>
 				</li>
-				{session.data?.user.is_admin ? (
+				{session.data?.can_evaluate ? (
 					<li>
 						<RailLink>
 							<Link to="/admin/evaluations" onClick={onNavigate}>

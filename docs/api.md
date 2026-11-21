@@ -987,6 +987,8 @@ It searches only text every member already reads: project names and review quest
 
 humani-t's answers against other systems', judged blind by a model the operator configured (UI_UX_SPEC §6.15, [ADR 0022](adr/0022-evaluations-are-judged-blind-inside-their-project.md)). An evaluation belongs to one project: everything in it is sealed under the project's key and goes with the project.
 
+**Off until the operator turns it on.** While `HUMANI_T_EVALUATIONS_ENABLED` is false (the default), every route below answers `404` to everyone, administrators included, the worker judges nothing, and `GET /auth/session` answers `"can_evaluate": false`. The web app shows the Evaluations link only when `can_evaluate` is true: an instance administrator on a deployment with evaluations on.
+
 **Who:** instance administrators only; anyone else gets `403` before the body is read. Admin status alone opens nothing: starting one also needs membership of the project with a role that may ask questions (owner or reviewer), reading one any membership. A non-member gets the same `404` as for a missing project or evaluation.
 
 ### `GET /api/v1/admin/evaluations/judges`

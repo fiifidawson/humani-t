@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response, status
 
-from app.api.dependencies import AccountsDep
+from app.api.dependencies import AccountsDep, IsEvaluationsOnDep
 from app.api.schemas.accounts import (
     AcceptedOut,
     CurrentSessionOut,
@@ -69,12 +69,13 @@ async def logout(request: Request, current: AnySessionDep, accounts: AccountsDep
 
 @router.get("/session", summary="Who is signed in")
 async def current_session(
-    current: AccountBasicsDep, accounts: AccountsDep
+    current: AccountBasicsDep, accounts: AccountsDep, is_evaluations_on: IsEvaluationsOnDep
 ) -> CurrentSessionOut:
     return CurrentSessionOut(
         mfa_enrolment_required=not accounts.is_fully_signed_in(current),
         user=UserOut.from_domain(current.user),
         session=SessionOut.from_domain(current.session, current.session.id),
+        can_evaluate=current.user.is_admin and is_evaluations_on,
     )
 
 
