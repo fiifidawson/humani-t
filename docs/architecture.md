@@ -276,10 +276,16 @@ Project         the unit of ownership, sharing, encryption and deletion;
                 a deleted project stays as a tombstone row. is_masking_on is
                 the owner's masking switch (ADR-0014);
                 is_view_first_on asks each member for a Leaning
-                before showing a brief, off by default
+                before showing a brief, off by default; kept_at is an
+                owner's latest Keep and read_at a member's latest read,
+                both of which restart the retention clock
 MaskingPolicy   the operator's side of the masking choice, built from
                 settings: whether the model is hosted, and whether owners may
                 send it unmasked text. Not stored
+RetentionPolicy the operator's retention period in days, or none (the
+                default: nothing is deleted for age). A project's deletion
+                date is derived from it, the project's last activity, its
+                read_at and its kept_at (ADR-0020). Not stored
 Membership      (User, Project, Role) where Role is owner | reviewer | viewer;
                 removed when the project is deleted
 AuditEvent      who did what to which object, when; hash-chained
@@ -526,9 +532,10 @@ What happened in a project, and what waits for a person, are derived each time f
 ```text
 NeedsYouItem    one thing in one review waiting for a person: an open gate, a
                 draft waiting for accept, a failed latest run, or a newest
-                brief they have not opened. Derived, never stored; its key
-                names the gate, run, plan version or brief, so a new one is
-                a new item
+                brief they have not opened; or, for owners, a project within
+                14 days of its retention date (no review). Derived, never
+                stored; its key names the gate, run, plan version, brief or
+                deletion date, so a new one is a new item
 Dismissal       (User, item key, when): a person hid one NeedsYouItem
 ActivityEvent   one L0 line: review started, plan drafted or accepted, labels
                 changed, a run at its latest state (with its stages and

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -24,6 +24,8 @@ class NeedsYouKind(StrEnum):
     DRAFT = "draft"
     FAILED_RUN = "failed_run"
     UNREAD_BRIEF = "unread_brief"
+    # A project near its retention date (ADR 0020): about the project, not one review.
+    RETENTION = "retention"
 
 
 # The field that names what each kind of item is about; its key is built from it.
@@ -32,16 +34,20 @@ _TARGET_FIELD: Mapping[NeedsYouKind, str] = {
     NeedsYouKind.FAILED_RUN: "run_id",
     NeedsYouKind.DRAFT: "version",
     NeedsYouKind.UNREAD_BRIEF: "brief_id",
+    NeedsYouKind.RETENTION: "deletes_at",
 }
 
 
 @dataclass(frozen=True, slots=True)
 class NeedsYouItem:
-    """One thing in one review waiting for a person, with what its row shows."""
+    """One thing in one review waiting for a person, with what its row shows.
+
+    `review_id` is `None` only for a retention notice, which is about the whole project.
+    """
 
     kind: NeedsYouKind
     project_id: UUID
-    review_id: UUID
+    review_id: UUID | None
     at: datetime
     gate_id: UUID | None = None
     gate_kind: GateKind | None = None
@@ -51,18 +57,26 @@ class NeedsYouItem:
     # The plan version of a draft, or the brief's version.
     version: int | None = None
     brief_id: UUID | None = None
+    deletes_at: datetime | None = None
+    days_left: int | None = None
 
     def __post_init__(self) -> None:
-        require_aware("NeedsYouItem", at=self.at)
+        require_aware("NeedsYouItem", at=self.at, deletes_at=self.deletes_at)
         field = _TARGET_FIELD[self.kind]
         if getattr(self, field) is None:
             raise ValueError(f"NeedsYouItem.{field} is required for a {self.kind.value} item")
+        if self.review_id is None and self.kind is not NeedsYouKind.RETENTION:
+            raise ValueError(f"NeedsYouItem.review_id is required for a {self.kind.value} item")
 
     @property
     def key(self) -> str:
         """What a dismissal names. A new run, draft or brief is a new key, so it comes back."""
         if self.kind is NeedsYouKind.DRAFT:
             return f"{self.kind.value}:{self.review_id}:{self.version}"
+        if self.kind is NeedsYouKind.RETENTION and self.deletes_at is not None:
+            return (
+                f"{self.kind.value}:{self.project_id}:{self.deletes_at.astimezone(UTC).date()}"
+            )
         return f"{self.kind.value}:{getattr(self, _TARGET_FIELD[self.kind])}"
 
 

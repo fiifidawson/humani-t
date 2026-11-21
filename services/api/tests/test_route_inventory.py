@@ -109,6 +109,15 @@ HISTORY_ROUTES = frozenset(
     }
 )
 
+# The retention period, and each project's date and Keep (walkthrough 18, retention).
+RETENTION_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/retention"),
+        ("GET", f"{PROJECTS}/{{project_id}}/retention"),
+        ("POST", f"{PROJECTS}/{{project_id}}/retention/keep"),
+    }
+)
+
 # Routes over every project the caller belongs to. No project in the path, so the
 # membership walks below cannot reach them: each filters by membership itself.
 CROSS_PROJECT_ROUTES = frozenset({("GET", "/api/v1/search")})
@@ -195,6 +204,11 @@ class TestInventory:
         app = make_project_harness().app
 
         assert sorted(HISTORY_ROUTES - registered_routes(app)) == []
+
+    def test_every_retention_route_in_the_contract_is_registered(self):
+        app = make_project_harness().app
+
+        assert sorted(RETENTION_ROUTES - registered_routes(app)) == []
 
     def test_every_cross_project_route_in_the_contract_is_registered(self):
         app = make_project_harness().app

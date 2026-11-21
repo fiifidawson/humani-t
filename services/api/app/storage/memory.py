@@ -475,7 +475,9 @@ class MemoryProjectRepository:
             raise ValueError(f"project {project.id} does not exist")
         if stored.version != project.version:
             raise ConcurrentUpdateError(f"project {project.id} changed concurrently")
-        self._state.projects[project.id] = replace(project, version=project.version + 1)
+        self._state.projects[project.id] = replace(
+            project, version=project.version + 1, read_at=stored.read_at
+        )
 
     async def list_for_member(self, user_id: UUID) -> list[Project]:
         member_of = {p for p, u in self._state.memberships if u == user_id}
@@ -483,6 +485,19 @@ class MemoryProjectRepository:
             p for p in self._state.projects.values() if p.id in member_of and not p.is_deleted
         ]
         return sorted(live, key=lambda p: (p.created_at, p.id), reverse=True)
+
+    async def list_live(self) -> list[Project]:
+        live = [p for p in self._state.projects.values() if not p.is_deleted]
+        return sorted(live, key=lambda p: (p.created_at, p.id))
+
+    async def touch_read(
+        self, project_id: UUID, at: datetime, *, unless_since: datetime
+    ) -> bool:
+        stored = self._state.projects.get(project_id)
+        if stored is None or (stored.read_at is not None and stored.read_at >= unless_since):
+            return False
+        self._state.projects[project_id] = replace(stored, read_at=at)
+        return True
 
 
 class MemoryMembershipRepository:

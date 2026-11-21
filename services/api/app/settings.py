@@ -378,6 +378,15 @@ class Settings(BaseSettings):
         le=50_000_000,
         description="Characters of text kept per document; the rest are dropped.",
     )
+    retention_days: int | None = Field(
+        default=None,
+        ge=30,
+        le=3650,
+        description=(
+            "Delete a project this many days after its last activity, unless an owner keeps "
+            "it. Unset: nothing is ever deleted for age. Backups keep it until they expire."
+        ),
+    )
     run_worker_in_process: bool | None = Field(
         default=None,
         description=(

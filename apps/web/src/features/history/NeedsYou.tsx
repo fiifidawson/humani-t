@@ -10,6 +10,7 @@ import { useApi } from "../../app/api-context";
 import { historyKeys, needsYouQuery } from "../../app/historyQueries";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { SectionHeading } from "../../ui/SectionHeading";
+import { useKeepProject } from "../retention/queries";
 import { relativeTime } from "../reviews/format";
 import { NeedsYouTarget } from "./ActivityLink";
 import { NeedsYouIcon } from "./EventIcon";
@@ -19,14 +20,20 @@ function Row({
 	item,
 	onDismiss,
 	isDismissing,
+	onKeep,
+	isKeeping,
 }: {
 	item: NeedsYouItem;
 	onDismiss: () => void;
 	isDismissing: boolean;
+	onKeep: () => void;
+	isKeeping: boolean;
 }) {
 	const text = needsYouText(item);
 	const action = needsYouAction(item);
 	const about = `${item.project.name}: ${text}`;
+	// A retention notice has no page to open: its one action is Keep, done here.
+	const isRetention = item.kind === "retention";
 	return (
 		<Flex
 			as="li"
@@ -45,16 +52,33 @@ function Row({
 						{item.project.name}
 					</Text>{" "}
 					<Text as="span" color="fg.muted">
-						{text} · <time dateTime={item.at}>{relativeTime(item.at)}</time>
+						{text}
+						{isRetention ? null : (
+							<>
+								{" · "}
+								<time dateTime={item.at}>{relativeTime(item.at)}</time>
+							</>
+						)}
 					</Text>
 				</Text>
 			</Flex>
 			<Flex gap="2" flex="none">
-				<Button asChild size="xs">
-					<NeedsYouTarget item={item} label={`${action}: ${about}`}>
+				{isRetention ? (
+					<Button
+						size="xs"
+						aria-label={`${action}: ${about}`}
+						disabled={isKeeping}
+						onClick={onKeep}
+					>
 						{action}
-					</NeedsYouTarget>
-				</Button>
+					</Button>
+				) : (
+					<Button asChild size="xs">
+						<NeedsYouTarget item={item} label={`${action}: ${about}`}>
+							{action}
+						</NeedsYouTarget>
+					</Button>
+				)}
 				<Button
 					size="xs"
 					variant="ghost"
@@ -79,6 +103,7 @@ export function NeedsYou() {
 		onSettled: () =>
 			queryClient.invalidateQueries({ queryKey: historyKeys.needsYou }),
 	});
+	const keep = useKeepProject();
 
 	if (needs.isError) {
 		return (
@@ -97,6 +122,7 @@ export function NeedsYou() {
 				Needs you ({needs.data.count})
 			</SectionHeading>
 			{dismiss.isError ? <ErrorNotice error={dismiss.error} /> : null}
+			{keep.isError ? <ErrorNotice error={keep.error} /> : null}
 			<Stack as="ul" listStyle="none" m="0" p="0" gap="0">
 				{needs.data.items.map((item) => (
 					<Row
@@ -104,6 +130,8 @@ export function NeedsYou() {
 						item={item}
 						isDismissing={dismiss.isPending && dismiss.variables === item.key}
 						onDismiss={() => dismiss.mutate(item.key)}
+						isKeeping={keep.isPending && keep.variables === item.project.id}
+						onKeep={() => keep.mutate(item.project.id)}
 					/>
 				))}
 			</Stack>

@@ -42,6 +42,7 @@ import { RecoveryCodes } from "../auth/RecoveryCodes";
 import { TotpSetup } from "../auth/TotpSetup";
 import { isCancelled, isPasskeySupported } from "../auth/webauthn";
 import { fullDate, shortDate } from "../projects/format";
+import { RetentionPolicyNote } from "../retention/RetentionPolicyNote";
 import { describeDevice } from "./describeDevice";
 
 type TotpEnrolment = components["schemas"]["TotpEnrolmentOut"];
@@ -525,6 +526,7 @@ export function AccountPage() {
 					<ShortcutsSwitch />
 				</Stack>
 			</Section>
+			<RetentionPolicyNote />
 		</Page>
 	);
 }

@@ -259,6 +259,19 @@ class ProjectRepository(Protocol):
         """Live projects the user belongs to, newest first."""
         ...
 
+    async def list_live(self) -> list[Project]:
+        """Every project not deleted, oldest first: what the retention sweep looks at."""
+        ...
+
+    async def touch_read(
+        self, project_id: UUID, at: datetime, *, unless_since: datetime
+    ) -> bool:
+        """Set `read_at` to `at` unless it is already `unless_since` or later; True if set.
+
+        Not versioned: a read changes nothing an owner edits, and `save` never writes it.
+        """
+        ...
+
 
 class MembershipRepository(Protocol):
     async def get(self, project_id: UUID, user_id: UUID) -> Membership | None: ...

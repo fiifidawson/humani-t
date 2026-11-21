@@ -125,6 +125,9 @@ class TestOpenAPI:
             "/api/v1/projects/{project_id}/tags",
             "/api/v1/projects/{project_id}/pin",
             "/api/v1/project-actions",
+            "/api/v1/retention",
+            "/api/v1/projects/{project_id}/retention",
+            "/api/v1/projects/{project_id}/retention/keep",
         }
 
     def test_request_bodies_carry_a_worked_example(self, client):

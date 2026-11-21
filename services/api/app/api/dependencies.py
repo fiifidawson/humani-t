@@ -56,6 +56,7 @@ from app.application.project_search import ProjectSearchService
 from app.application.projects import ProjectService
 from app.application.queries_stage import QueriesStage, QueryCompiler
 from app.application.questions import QuestionService, QuestionWorker
+from app.application.retention import RetentionService
 from app.application.reviews import ReviewService
 from app.application.runs import RunService
 from app.application.screening import ScreenStage
@@ -74,6 +75,7 @@ from app.domain.masking import (
 )
 from app.domain.mfa import MfaPolicy
 from app.domain.plans import PlanSource
+from app.domain.retention import RetentionPolicy
 from app.domain.screening import MaskedTextSource
 from app.email.base import EmailProvider
 from app.email.recording import RecordingEmailProvider
@@ -156,6 +158,8 @@ class Providers:
     project_list: ProjectListService
     history: HistoryService
     marks: MarkService
+    # Swept by the worker process (`app/worker.py`); read and kept through the API.
+    retention: RetentionService
 
     async def close(self) -> None:
         """Release every pool and client: once, at shutdown or at the end of a CLI run."""
@@ -476,6 +480,7 @@ def build_providers(
     signals = _signals(settings)
     ner = ner_detectors(settings)
     policy = masking_policy or operator_masking_policy(settings)
+    retention = RetentionPolicy(settings.retention_days)
     masking = MaskingChoice(policy)
     masking_rules = MaskingRuleService(
         storage=storage, encryption=encryption, audit=audit, choice=masking, clock=clock
@@ -665,9 +670,14 @@ def build_providers(
             storage=storage, encryption=encryption, audit=audit, projects=projects, clock=clock
         ),
         project_list=ProjectListService(storage=storage, projects=projects, papers=papers),
-        history=HistoryService(storage=storage, encryption=encryption, clock=clock),
+        history=HistoryService(
+            storage=storage, encryption=encryption, retention=retention, clock=clock
+        ),
         marks=MarkService(
             storage=storage, encryption=encryption, store=pipeline.store, clock=clock
+        ),
+        retention=RetentionService(
+            storage=storage, encryption=encryption, audit=audit, policy=retention, clock=clock
         ),
     )
 
@@ -834,6 +844,13 @@ def get_marks(providers: ProvidersDep) -> MarkService:
 
 
 MarksDep = Annotated[MarkService, Depends(get_marks)]
+
+
+def get_retention(providers: ProvidersDep) -> RetentionService:
+    return providers.retention
+
+
+RetentionDep = Annotated[RetentionService, Depends(get_retention)]
 
 
 def get_search(providers: ProvidersDep) -> ProjectSearchService:

@@ -86,11 +86,13 @@ async def _serve(providers: Providers, heartbeat: Heartbeat) -> None:
     _stop_on_signals(stop)
     _log.info("worker_started", worker=worker.worker_id, stages=sorted(providers.stages))
     try:
-        # Follow-up questions are answered, and uploaded documents read, beside runs.
+        # Follow-up questions are answered, uploaded documents read and projects past
+        # their retention date deleted, beside runs.
         await asyncio.gather(
             worker.serve(stop, on_alive=heartbeat.beat),
             providers.answers.serve(stop),
             providers.document_processor.serve(stop),
+            providers.retention.serve(stop),
         )
     finally:
         await providers.close()
@@ -111,6 +113,7 @@ async def running_in_process(providers: Providers) -> AsyncIterator[None]:
     stop = asyncio.Event()
     serving = asyncio.create_task(worker.serve(stop))
     reading = asyncio.create_task(providers.document_processor.serve(stop))
+    sweeping = asyncio.create_task(providers.retention.serve(stop))
     _log.info("worker_started_in_process", worker=worker.worker_id)
     try:
         yield
@@ -118,6 +121,7 @@ async def running_in_process(providers: Providers) -> AsyncIterator[None]:
         stop.set()
         await serving
         await reading
+        await sweeping
         _log.info("worker_stopped", worker=worker.worker_id)
 
 

@@ -21,6 +21,7 @@ import {
 } from "./fakeHttp";
 import { FakeInstructions } from "./fakeInstructions";
 import { FakeLeanings } from "./fakeLeanings";
+import { FakeRetention } from "./fakeRetention";
 import { FakeReviews } from "./fakeReviews";
 import { FakeSearch } from "./fakeSearch";
 
@@ -232,6 +233,13 @@ export class FakeApi {
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		projectName: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.name ?? null,
+	});
+	/** The retention period, each project's date and Keep (fakeRetention.ts). */
+	readonly retention = new FakeRetention({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		forgetNotices: (projectId) => this.history.forgetRetention(projectId),
 	});
 	/** `GET /search` over the person's projects (fakeSearch.ts). */
 	readonly search = new FakeSearch({
@@ -1248,6 +1256,7 @@ export class FakeApi {
 			...this.collections.handlers(),
 			...this.history.handlers(),
 			...this.search.handlers(),
+			...this.retention.handlers(),
 		];
 	}
 }

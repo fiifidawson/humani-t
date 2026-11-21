@@ -228,7 +228,7 @@ The caller's projects, each a `ProjectOut` with what the All projects page group
 }
 ```
 
-`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, and its latest brief. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
+`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, its latest brief, and its latest follow-up question. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
 
 Query parameters, all optional, all of which must hold:
 
@@ -878,11 +878,11 @@ The worker (`python -m app.worker`, or the in-process worker in development) cla
 
 ## History and marks
 
-Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity.
+Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity, except for a `retention` notice.
 
 ### `GET /api/v1/needs-you`
 
-**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id"}`; fields a kind does not use are `null`. Kinds, and who sees them:
+**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id", "deletes_at", "days_left"}`; fields a kind does not use are `null`. Kinds, and who sees them:
 
 | `kind` | Listed while | For | `key` |
 | --- | --- | --- | --- |
@@ -890,6 +890,7 @@ Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) ar
 | `draft` | the review is drafting and its latest plan version is not accepted | owners and reviewers | `draft:<review_id>:<version>` |
 | `failed_run` | the review's latest run failed; `stopped_at` is the stage it did not finish | owners and reviewers | `failed_run:<run_id>` |
 | `unread_brief` | the review's newest brief has not been opened by the caller | every member | `unread_brief:<brief_id>` |
+| `retention` | the project is within 14 days of its retention date, archived or not; `review_id` is `null`, `deletes_at` and `days_left` (rounded up, `0` when due) say when, `at` is when the warning began | owners | `retention:<project_id>:<date>` |
 
 ### `POST /api/v1/needs-you/dismissals`
 
@@ -916,6 +917,30 @@ A mark is per person (UI_UX_SPEC §7.5). A paper is matched across projects by t
 ### Audit
 
 None. Marks and dismissals record what one person read or chose to hide, not a decision about the evidence; they hold ids only.
+
+## Retention
+
+The operator may set a retention period (`HUMANI_T_RETENTION_DAYS`, 30 to 3650; unset by default, and then nothing is deleted for age). A project is deleted that many days after its last activity, or after an owner's latest Keep if that is later ([ADR 0020](adr/0020-retention-counts-from-last-activity.md)). Last activity is the project list's `last_activity_at`: created, archived, its newest review, and that review's latest run, brief and follow-up question. Opening a paper or a brief (`PUT …/seen`, `…/saved`) also restarts the clock, recorded at most once a day. Nothing stores the date; it is worked out on each read.
+
+### `GET /api/v1/retention`
+
+**Response** `200` `{"period_days": 365, "warning_days": 14}`; `period_days` is `null` when nothing is deleted for age. **Who:** any signed-in person; it is the deployment's setting, not a project's.
+
+### `GET /api/v1/projects/{project_id}/retention`
+
+**Response** `200` `{"period_days", "deletes_at", "days_left", "kept_at"}`. `deletes_at` and `days_left` are `null` when the deployment sets no period; `days_left` is whole days, rounded up, `0` once due. `kept_at` is the latest Keep. **Who:** any member; a non-member gets `404`.
+
+### `POST /api/v1/projects/{project_id}/retention/keep`
+
+Restart the project's clock from now. No body. **Response** `200`, the same shape as above. **Who:** owners (`403` for reviewers and viewers, `404` for non-members). `409` when the deployment sets no period. No recent sign-in needed: keeping only preserves.
+
+### Deletion when due
+
+The worker sweeps hourly. For each project whose date has passed it takes the project's row lock, works the date out again, and only then deletes it through the same path as `DELETE /projects/{id}`: the key is destroyed, memberships, pins, placements and tags go, and the row stays as a tombstone. A Keep takes the same lock, so whichever comes second sees the first. Running the sweep twice, or in two workers, deletes once.
+
+### Audit
+
+`project.kept` (actor: the owner) when kept. A deletion for age records `project.retention_expired` and then `project.deleted`, in one transaction, both with no actor (the system). Ids only: the reason is its own event because audit details are sealed under the key the deletion destroys.
 
 ## Search across projects
 

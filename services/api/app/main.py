@@ -43,6 +43,7 @@ from app.api.routes import (
     plans,
     projects,
     questions,
+    retention,
     reviews,
     runs,
     search,
@@ -279,6 +280,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(history.router)
     v1.include_router(marks.router)
     v1.include_router(search.router)
+    v1.include_router(retention.router)
     app.include_router(v1)
 
 

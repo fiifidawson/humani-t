@@ -1778,6 +1778,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How long this deployment keeps a project after its activity */
+        get: operations["read_policy_api_v1_retention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** When the project will be deleted */
+        get: operations["read_project_retention_api_v1_projects__project_id__retention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/retention/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keep the project: restart its retention clock */
+        post: operations["keep_project_api_v1_projects__project_id__retention_keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3526,9 +3577,9 @@ export interface components {
             project: components["schemas"]["ProjectRefOut"];
             /**
              * Review Id
-             * Format: uuid
+             * @description Null only for a retention notice.
              */
-            review_id: string;
+            review_id: string | null;
             /**
              * At
              * Format: date-time
@@ -3557,12 +3608,22 @@ export interface components {
             version: number | null;
             /** Brief Id */
             brief_id: string | null;
+            /**
+             * Deletes At
+             * @description A retention notice's deletion date.
+             */
+            deletes_at: string | null;
+            /**
+             * Days Left
+             * @description Whole days until then, rounded up.
+             */
+            days_left: number | null;
         };
         /**
          * NeedsYouKind
          * @enum {string}
          */
-        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief";
+        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief" | "retention";
         /** NeedsYouOut */
         NeedsYouOut: {
             /**
@@ -4002,6 +4063,29 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ProjectRetentionOut */
+        ProjectRetentionOut: {
+            /**
+             * Period Days
+             * @description The deployment's period; null: never.
+             */
+            period_days: number | null;
+            /**
+             * Deletes At
+             * @description When the project will be deleted.
+             */
+            deletes_at: string | null;
+            /**
+             * Days Left
+             * @description Whole days until then, rounded up; 0 when due.
+             */
+            days_left: number | null;
+            /**
+             * Kept At
+             * @description An owner's latest Keep, if any.
+             */
+            kept_at: string | null;
+        };
         /**
          * ProjectSort
          * @enum {string}
@@ -4223,6 +4307,19 @@ export interface components {
             password: string;
             /** Display Name */
             display_name: string;
+        };
+        /** RetentionPolicyOut */
+        RetentionPolicyOut: {
+            /**
+             * Period Days
+             * @description Days after a project's last activity until it is deleted; null: never.
+             */
+            period_days: number | null;
+            /**
+             * Warning Days
+             * @description Owners are told this many days before.
+             */
+            warning_days: number;
         };
         /** ReviewDecisionOut */
         ReviewDecisionOut: {
@@ -9135,6 +9232,95 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    read_policy_api_v1_retention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyOut"];
+                };
+            };
+        };
+    };
+    read_project_retention_api_v1_projects__project_id__retention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRetentionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_project_api_v1_projects__project_id__retention_keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRetentionOut"];
+                };
+            };
+            /** @description The deployment sets no retention period */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

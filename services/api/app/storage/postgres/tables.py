@@ -193,6 +193,8 @@ projects = Table(
     Column("version", Integer, nullable=False, server_default="0"),
     Column("is_masking_on", Boolean, nullable=False, server_default="true"),
     Column("is_view_first_on", Boolean, nullable=False, server_default="false"),
+    Column("kept_at", DateTime(timezone=True), nullable=True),
+    Column("read_at", DateTime(timezone=True), nullable=True),
 )
 
 memberships = Table(

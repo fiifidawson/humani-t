@@ -1243,7 +1243,9 @@ Borrowed from CiteSee (CHI 2023): people lose track of which papers they have al
 
 - **Archive** hides a project from Home and the default project list. It keeps everything and can be undone. Archived projects show with "☐ Archived" ticked.
 - **Delete** destroys the project's key (crypto-shredding). It can't be undone. Section [6.14](#614-project-settings).
-- If the deployment sets a retention period **(new, needs API)**, projects near it show "Deleted in 14 days unless kept" in Needs you.
+- If the deployment sets a retention period, projects near it show "Deleted in 14 days unless kept" in Needs you.
+
+**Built so far (P4):** the operator's `HUMANI_T_RETENTION_DAYS` (unset by default: nothing is deleted for age; ADR 0020). A project's date is its last activity, or an owner's latest Keep, plus the period. For the last 14 days its owners see "Deleted in N days unless kept" in Needs you ("Deleted in 1 day…", "Deleted today…"), archived projects included, with **Keep** as the row's one action, done in place; the row then leaves. Project settings shows a **Retention** section, only when a period is set: the deployment's sentence ("This deployment deletes a project 365 days after its last activity, unless an owner keeps it."), "This project will be deleted on 24 Oct 2027, in 337 days.", "Kept on …" after a Keep, and **Keep project** for owners; others read "Only owners can keep the project." Administrators see the same sentence under **Data retention** on their Account page, or "This deployment never deletes projects for age." The worker deletes a project once its date passes, exactly as an owner's delete would.
 
 ---
 

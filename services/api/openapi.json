@@ -5258,6 +5258,116 @@
           }
         }
       }
+    },
+    "/api/v1/retention": {
+      "get": {
+        "tags": [
+          "retention"
+        ],
+        "summary": "How long this deployment keeps a project after its activity",
+        "operationId": "read_policy_api_v1_retention_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/retention": {
+      "get": {
+        "tags": [
+          "retention"
+        ],
+        "summary": "When the project will be deleted",
+        "operationId": "read_project_retention_api_v1_projects__project_id__retention_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRetentionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/retention/keep": {
+      "post": {
+        "tags": [
+          "retention"
+        ],
+        "summary": "Keep the project: restart its retention clock",
+        "operationId": "keep_project_api_v1_projects__project_id__retention_keep_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRetentionOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The deployment sets no retention period"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9148,9 +9258,17 @@
             "$ref": "#/components/schemas/ProjectRefOut"
           },
           "review_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Review Id"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id",
+            "description": "Null only for a retention notice."
           },
           "at": {
             "type": "string",
@@ -9239,6 +9357,31 @@
               }
             ],
             "title": "Brief Id"
+          },
+          "deletes_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletes At",
+            "description": "A retention notice's deletion date."
+          },
+          "days_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Left",
+            "description": "Whole days until then, rounded up."
           }
         },
         "type": "object",
@@ -9254,7 +9397,9 @@
           "run_number",
           "stopped_at",
           "version",
-          "brief_id"
+          "brief_id",
+          "deletes_at",
+          "days_left"
         ],
         "title": "NeedsYouItemOut"
       },
@@ -9264,7 +9409,8 @@
           "gate",
           "draft",
           "failed_run",
-          "unread_brief"
+          "unread_brief",
+          "retention"
         ],
         "title": "NeedsYouKind"
       },
@@ -10257,6 +10403,68 @@
         ],
         "title": "ProjectRenameIn"
       },
+      "ProjectRetentionOut": {
+        "properties": {
+          "period_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Days",
+            "description": "The deployment's period; null: never."
+          },
+          "deletes_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletes At",
+            "description": "When the project will be deleted."
+          },
+          "days_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Left",
+            "description": "Whole days until then, rounded up; 0 when due."
+          },
+          "kept_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kept At",
+            "description": "An owner's latest Keep, if any."
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_days",
+          "deletes_at",
+          "days_left",
+          "kept_at"
+        ],
+        "title": "ProjectRetentionOut"
+      },
       "ProjectSort": {
         "type": "string",
         "enum": [
@@ -10769,6 +10977,33 @@
           "display_name"
         ],
         "title": "RegisterIn"
+      },
+      "RetentionPolicyOut": {
+        "properties": {
+          "period_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Days",
+            "description": "Days after a project's last activity until it is deleted; null: never."
+          },
+          "warning_days": {
+            "type": "integer",
+            "title": "Warning Days",
+            "description": "Owners are told this many days before."
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_days",
+          "warning_days"
+        ],
+        "title": "RetentionPolicyOut"
       },
       "ReviewDecisionOut": {
         "properties": {

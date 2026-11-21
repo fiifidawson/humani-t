@@ -21,6 +21,7 @@ import { Field } from "../../ui/Field";
 import { Loading } from "../../ui/Loading";
 import { ReauthCancelledError, useReauth } from "../auth/ReauthDialog";
 import { OrganiseSection } from "../collections/OrganiseSection";
+import { RetentionSection } from "../retention/ProjectRetention";
 import { LeaveControl } from "./LeaveProject";
 import { MaskingRulesSection } from "./MaskingRules";
 import { MaskingSwitch } from "./MaskingSwitch";
@@ -88,6 +89,7 @@ export function ProjectSettingsPage() {
 				<SettingsSection title="Briefs">
 					<ViewFirstSwitch project={project.data} />
 				</SettingsSection>
+				<RetentionSection project={project.data} />
 				<SettingsSection title="Danger zone" isDanger>
 					<Stack gap="4">
 						<LeaveControl project={project.data} />
