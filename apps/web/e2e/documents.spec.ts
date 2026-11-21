@@ -140,4 +140,14 @@ test("a long document stays in a frame shorter than the window, both sides scrol
 	const headingTop = (await heading.boundingBox())?.y ?? 0;
 	expect(headingTop).toBeGreaterThanOrEqual((box?.y ?? 0) - 1);
 	expect(await frame.evaluate((element) => element.scrollTop)).toBe(600);
+
+	// Scrolled to its end, the page stops at the review: nothing in the frame stretches it.
+	await page.evaluate(() => {
+		for (const element of document.querySelectorAll<HTMLElement>("main *")) {
+			if (/(auto|scroll)/.test(getComputedStyle(element).overflowY)) {
+				element.scrollTop = element.scrollHeight;
+			}
+		}
+	});
+	await expect(page.getByRole("button", { name: "Approve" })).toBeInViewport();
 });

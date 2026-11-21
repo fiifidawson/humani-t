@@ -12,6 +12,7 @@ import { keys } from "./queries";
 export type DocumentListing = components["schemas"]["DocumentListOut"];
 export type ProjectDocument = components["schemas"]["DocumentOut"];
 export type DocumentStatus = components["schemas"]["DocumentStatus"];
+export type DocumentType = components["schemas"]["DocumentType"];
 export type DocumentReview = components["schemas"]["DocumentReviewOut"];
 export type MaskingRule = components["schemas"]["MaskingRuleOut"];
 

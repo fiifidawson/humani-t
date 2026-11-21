@@ -108,6 +108,23 @@ describe("the documents page (UI_UX_SPEC §6.13)", () => {
 		).toBeInTheDocument();
 	});
 
+	it("spins the icon of a document still being checked or read, and only those", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "reading.pdf", { status: "extracting" });
+		api.documents.add(project.id, "ready.md", { status: "approved" });
+		await openDocuments(project.id);
+
+		const iconIn = async (name: string) =>
+			within((await rowFor(name)) ?? document.body)
+				.getByTestId("status")
+				.parentElement?.querySelector("svg") ?? null;
+		const spins = (icon: Element | null) =>
+			// jsdom keeps the shorthand whole, so read `animation`, not its name.
+			icon === null ? false : /^spin /.test(getComputedStyle(icon).animation);
+		expect(spins(await iconIn("reading.pdf"))).toBe(true);
+		expect(spins(await iconIn("ready.md"))).toBe(false);
+	});
+
 	it("shows each document's tag, name, size and who uploaded it", async () => {
 		const { api, project } = signedInWith("owner");
 		const kofi = api.addUser({
@@ -487,6 +504,65 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 				`/projects/${project.id}/documents/${waiting.id}/review`,
 			),
 		).toHaveLength(1);
+	});
+
+	it("flows a PDF's printed lines back into paragraphs, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.pdf", {
+			status: "awaiting_review",
+			fileType: "pdf",
+			original: {
+				text: "Interview notes. The team met\nKofi Mensah at the clinic in the\nmorning.\nThe committee met twice.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.pdf" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		const left = original.querySelectorAll("[data-paragraph]");
+		expect(left).toHaveLength(2);
+		expect(left[0]).toHaveTextContent(
+			"Interview notes. The team met Kofi Mensah at the clinic in the morning.",
+		);
+		expect(getComputedStyle(left[0] as Element).whiteSpace).not.toBe(
+			"pre-wrap",
+		);
+		expect(
+			screen
+				.getByRole("region", { name: "What the model will see" })
+				.querySelectorAll("[data-paragraph]"),
+		).toHaveLength(2);
+	});
+
+	it("keeps each line of a Word document as its own paragraph, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: {
+				text: "Field visit\nThe team met Kofi Mensah.\nThe committee met twice.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		expect(original.querySelectorAll("[data-paragraph]")).toHaveLength(3);
+		expect(
+			screen
+				.getByRole("region", { name: "What the model will see" })
+				.querySelectorAll("[data-paragraph]"),
+		).toHaveLength(3);
 	});
 
 	it("shows both texts in one frame that scrolls them together, and can be scrolled from the keyboard", async () => {
