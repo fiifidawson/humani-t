@@ -10,6 +10,7 @@ import { HttpResponse, http } from "msw";
 import type { components } from "../api/schema.gen";
 import { FakeCollections } from "./fakeCollections";
 import { FakeDocuments } from "./fakeDocuments";
+import { FakeEvaluations } from "./fakeEvaluations";
 import { FakeHistory } from "./fakeHistory";
 import {
 	jsonBody,
@@ -21,6 +22,7 @@ import {
 } from "./fakeHttp";
 import { FakeInstructions } from "./fakeInstructions";
 import { FakeLeanings } from "./fakeLeanings";
+import { FakeRetention } from "./fakeRetention";
 import { FakeReviews } from "./fakeReviews";
 import { FakeSearch } from "./fakeSearch";
 
@@ -233,10 +235,24 @@ export class FakeApi {
 		projectName: (projectId) =>
 			this.projects.find((p) => p.id === projectId)?.name ?? null,
 	});
+	/** The retention period, each project's date and Keep (fakeRetention.ts). */
+	readonly retention = new FakeRetention({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
+		forgetNotices: (projectId) => this.history.forgetRetention(projectId),
+	});
 	/** `GET /search` over the person's projects (fakeSearch.ts). */
 	readonly search = new FakeSearch({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		projects: () => this.projects,
+	});
+	/** The admin area's evaluations (fakeEvaluations.ts). */
+	readonly evaluations = new FakeEvaluations({
+		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
+		isAdmin: () => this.currentUser()?.is_admin ?? false,
+		roleIn: (projectId) =>
+			this.projects.find((p) => p.id === projectId)?.role ?? null,
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -1248,6 +1264,8 @@ export class FakeApi {
 			...this.collections.handlers(),
 			...this.history.handlers(),
 			...this.search.handlers(),
+			...this.retention.handlers(),
+			...this.evaluations.handlers(),
 		];
 	}
 }

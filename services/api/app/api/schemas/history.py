@@ -43,7 +43,7 @@ class NeedsYouItemOut(BaseModel):
     key: str = Field(description="What `POST /needs-you/dismissals` names. Ids only.")
     kind: NeedsYouKind
     project: ProjectRefOut
-    review_id: UUID
+    review_id: UUID | None = Field(description="Null only for a retention notice.")
     at: datetime = Field(description="When it started waiting.")
     gate_id: UUID | None
     gate_kind: GateKind | None
@@ -52,6 +52,8 @@ class NeedsYouItemOut(BaseModel):
     stopped_at: str | None = Field(description="The stage a failed run did not finish.")
     version: int | None = Field(description="The draft's plan version, or the brief's.")
     brief_id: UUID | None
+    deletes_at: datetime | None = Field(description="A retention notice's deletion date.")
+    days_left: int | None = Field(description="Whole days until then, rounded up.")
 
     @classmethod
     def from_view(cls, line: NeedsYouLine) -> NeedsYouItemOut:
@@ -69,6 +71,8 @@ class NeedsYouItemOut(BaseModel):
             stopped_at=item.stopped_at,
             version=item.version,
             brief_id=item.brief_id,
+            deletes_at=item.deletes_at,
+            days_left=item.days_left,
         )
 
 

@@ -276,10 +276,16 @@ Project         the unit of ownership, sharing, encryption and deletion;
                 a deleted project stays as a tombstone row. is_masking_on is
                 the owner's masking switch (ADR-0014);
                 is_view_first_on asks each member for a Leaning
-                before showing a brief, off by default
+                before showing a brief, off by default; kept_at is an
+                owner's latest Keep and read_at a member's latest read,
+                both of which restart the retention clock
 MaskingPolicy   the operator's side of the masking choice, built from
                 settings: whether the model is hosted, and whether owners may
                 send it unmasked text. Not stored
+RetentionPolicy the operator's retention period in days, or none (the
+                default: nothing is deleted for age). A project's deletion
+                date is derived from it, the project's last activity, its
+                read_at and its kept_at (ADR-0020). Not stored
 Membership      (User, Project, Role) where Role is owner | reviewer | viewer;
                 removed when the project is deleted
 AuditEvent      who did what to which object, when; hash-chained
@@ -369,6 +375,15 @@ Review          a question, a Vocabulary, and a set of Criteria
   Leaning       which option one member leaned towards before reading one
                 run's brief ("Your view first"), or none for "Not sure";
                 written once, sealed, seen by that member alone
+  Evaluation    an administrator's comparison of humani-t's answers with up
+                to 2 other systems' over up to 50 questions, in one project;
+                sealed under its key; its row is also its job (ADR 0022)
+    Judgement   a judge model's blind comparison of two answers to one
+                question: the order shown (A, B), six scores each, a, b
+                or tie, and a reason
+    PairResult  humani-t against one other system over every Judgement so
+                far: each check's means and difference, wins, ties and
+                losses; computed on read, never stored
   RunManifest   everything needed to reproduce or diff a run
     RunComparison  two runs of one review, older first, part by part:
                 setup (from the manifests), discovery, screening and
@@ -425,6 +440,11 @@ ScreeningDecision  per run and paper: label (include | exclude | uncertain),
 LabelRules      how answers become a label: inclusion criteria Possibly
                 relevant needs, and what unclear counts as (met | not_met
                 | uncertain); one LabelRulesVersion per apply, never rewritten
+CoverageEstimate  a range for the share of a run's relevant papers its searches
+                found, from how many each pair of sources found and both
+                found (capture-recapture), or the reason there is none;
+                recorded by the Screen stage, worked out again on read
+                under the labels shown (ADR-0021)
 Passage         a masked excerpt the brief may cite, tagged by the paper's place
 ```
 
@@ -526,9 +546,10 @@ What happened in a project, and what waits for a person, are derived each time f
 ```text
 NeedsYouItem    one thing in one review waiting for a person: an open gate, a
                 draft waiting for accept, a failed latest run, or a newest
-                brief they have not opened. Derived, never stored; its key
-                names the gate, run, plan version or brief, so a new one is
-                a new item
+                brief they have not opened; or, for owners, a project within
+                14 days of its retention date (no review). Derived, never
+                stored; its key names the gate, run, plan version, brief or
+                deletion date, so a new one is a new item
 Dismissal       (User, item key, when): a person hid one NeedsYouItem
 ActivityEvent   one L0 line: review started, plan drafted or accepted, labels
                 changed, a run at its latest state (with its stages and

@@ -22,6 +22,7 @@ from app.domain.collections import Pin, ProjectPlacement, StoredTags
 from app.domain.discovery import PaperSet, PaperText, RunPaper, RunSource, StoredPaper
 from app.domain.documents import Document, DocumentMask, DocumentReview, DocumentText
 from app.domain.encryption import WrappedDataKey
+from app.domain.evaluations import EvaluationRecord
 from app.domain.history import Dismissal
 from app.domain.label_rules import LabelRulesVersion
 from app.domain.leanings import StoredLeaning
@@ -257,6 +258,19 @@ class ProjectRepository(Protocol):
 
     async def list_for_member(self, user_id: UUID) -> list[Project]:
         """Live projects the user belongs to, newest first."""
+        ...
+
+    async def list_live(self) -> list[Project]:
+        """Every project not deleted, oldest first: what the retention sweep looks at."""
+        ...
+
+    async def touch_read(
+        self, project_id: UUID, at: datetime, *, unless_since: datetime
+    ) -> bool:
+        """Set `read_at` to `at` unless it is already `unless_since` or later; True if set.
+
+        Not versioned: a read changes nothing an owner edits, and `save` never writes it.
+        """
         ...
 
 
@@ -646,6 +660,43 @@ class QuestionRepository(Protocol):
         ...
 
 
+class EvaluationRepository(Protocol):
+    """Evaluations, each also the job a worker claims under a lease, as questions are."""
+
+    async def add(self, evaluation: EvaluationRecord, /) -> None: ...
+
+    async def get(self, evaluation_id: UUID) -> EvaluationRecord | None: ...
+
+    async def list_for_projects(self, project_ids: Collection[UUID]) -> list[EvaluationRecord]:
+        """Newest first."""
+        ...
+
+    async def save(self, evaluation: EvaluationRecord, /) -> EvaluationRecord:
+        """Store it if its `version` is current and return the stored copy.
+
+        Raise `ConcurrentUpdateError` if it is not.
+        """
+        ...
+
+    async def claim_next(
+        self, worker_id: str, now: datetime, lease: timedelta
+    ) -> EvaluationRecord | None:
+        """Hand the longest-waiting claimable evaluation to `worker_id` under a lease.
+
+        Claimable: queued, or running under a lease that lapsed with attempts left.
+        One another transaction is claiming is skipped, not waited for.
+        """
+        ...
+
+    async def renew_lease(self, evaluation_id: UUID, worker_id: str, until: datetime) -> bool:
+        """Extend the lease; False if the evaluation is no longer `worker_id`'s."""
+        ...
+
+    async def lock_exhausted(self, now: datetime, limit: int) -> list[EvaluationRecord]:
+        """Lock up to `limit` evaluations whose lease lapsed with no attempt left."""
+        ...
+
+
 class DecisionBriefRepository(Protocol):
     """Decision briefs: one per run, numbered by version within their review."""
 
@@ -881,6 +932,9 @@ class UnitOfWork(Protocol):
 
     @property
     def questions(self) -> QuestionRepository: ...
+
+    @property
+    def evaluations(self) -> EvaluationRepository: ...
 
     @property
     def masking_rules(self) -> MaskingRuleRepository: ...

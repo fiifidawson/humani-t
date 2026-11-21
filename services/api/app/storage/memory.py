@@ -42,6 +42,7 @@ from app.storage.memory_collections import (
     MemoryProjectTagsRepository,
 )
 from app.storage.memory_documents import DocumentState, MemoryDocumentRepository
+from app.storage.memory_evaluations import EvaluationState, MemoryEvaluationRepository
 from app.storage.memory_label_rules import LabelRulesState, MemoryLabelRulesRepository
 from app.storage.memory_leanings import LeaningState, MemoryLeaningRepository
 from app.storage.memory_marks import MarkState, MemoryDismissalRepository, MemoryMarkRepository
@@ -88,6 +89,7 @@ class _MemoryState:
         self.plan_state = PlanState()
         self.brief_state = BriefState()
         self.question_state = QuestionState()
+        self.evaluation_state = EvaluationState()
         self.masking_state = MaskingState()
         self.document_state = DocumentState()
         self.label_rules_state = LabelRulesState()
@@ -124,6 +126,7 @@ class _MemoryState:
         clone.plan_state = self.plan_state.copy()
         clone.brief_state = self.brief_state.copy()
         clone.question_state = self.question_state.copy()
+        clone.evaluation_state = self.evaluation_state.copy()
         clone.masking_state = self.masking_state.copy()
         clone.document_state = self.document_state.copy()
         clone.label_rules_state = self.label_rules_state.copy()
@@ -475,7 +478,9 @@ class MemoryProjectRepository:
             raise ValueError(f"project {project.id} does not exist")
         if stored.version != project.version:
             raise ConcurrentUpdateError(f"project {project.id} changed concurrently")
-        self._state.projects[project.id] = replace(project, version=project.version + 1)
+        self._state.projects[project.id] = replace(
+            project, version=project.version + 1, read_at=stored.read_at
+        )
 
     async def list_for_member(self, user_id: UUID) -> list[Project]:
         member_of = {p for p, u in self._state.memberships if u == user_id}
@@ -483,6 +488,19 @@ class MemoryProjectRepository:
             p for p in self._state.projects.values() if p.id in member_of and not p.is_deleted
         ]
         return sorted(live, key=lambda p: (p.created_at, p.id), reverse=True)
+
+    async def list_live(self) -> list[Project]:
+        live = [p for p in self._state.projects.values() if not p.is_deleted]
+        return sorted(live, key=lambda p: (p.created_at, p.id))
+
+    async def touch_read(
+        self, project_id: UUID, at: datetime, *, unless_since: datetime
+    ) -> bool:
+        stored = self._state.projects.get(project_id)
+        if stored is None or (stored.read_at is not None and stored.read_at >= unless_since):
+            return False
+        self._state.projects[project_id] = replace(stored, read_at=at)
+        return True
 
 
 class MemoryMembershipRepository:
@@ -759,6 +777,7 @@ class MemoryUnitOfWork:
         self.plans = MemoryPlanRepository(state.plan_state)
         self.briefs = MemoryDecisionBriefRepository(state.brief_state)
         self.questions = MemoryQuestionRepository(state.question_state)
+        self.evaluations = MemoryEvaluationRepository(state.evaluation_state)
         self.masking_rules = MemoryMaskingRuleRepository(state.masking_state)
         self.paper_masks = MemoryPaperMaskRepository(state.masking_state)
         self.documents = MemoryDocumentRepository(state.document_state)

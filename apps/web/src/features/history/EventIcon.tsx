@@ -9,6 +9,7 @@ import {
 	CircleHelp,
 	Diamond,
 	FileText,
+	Hourglass,
 	type LucideIcon,
 	Pause,
 	PencilLine,
@@ -45,6 +46,7 @@ const NEEDS_ICONS: Readonly<Record<NeedsYouItem["kind"], LucideIcon>> = {
 	draft: PencilLine,
 	failed_run: X,
 	unread_brief: Diamond,
+	retention: Hourglass,
 };
 
 function Icon({ icon: Shown }: { icon: LucideIcon }) {

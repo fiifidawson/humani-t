@@ -5,6 +5,7 @@
  */
 
 import type { components } from "../../api/schema.gen";
+import { deletedInText } from "../retention/words";
 import { duration, plural } from "../reviews/format";
 import { isStageId } from "../runs/runEvents";
 import { GATES, stageName } from "../runs/stages";
@@ -87,6 +88,8 @@ export function needsYouText(item: NeedsYouItem): string {
 			return `Run ${item.run_number ?? ""} stopped at ${stageWord(item.stopped_at)}`;
 		case "unread_brief":
 			return `Brief v${item.version ?? ""} ready to read`;
+		case "retention":
+			return deletedInText(item.days_left ?? 0);
 	}
 }
 
@@ -97,6 +100,8 @@ export function needsYouAction(item: NeedsYouItem): string {
 			return "Review";
 		case "unread_brief":
 			return "Read";
+		case "retention":
+			return "Keep";
 		default:
 			return "Open";
 	}

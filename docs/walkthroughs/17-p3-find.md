@@ -1,6 +1,6 @@
 # 17 — P3: find (search, the command palette and the keyboard)
 
-> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 brief](17-p3-brief.md) · **Next:** none yet
+> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 brief](17-p3-brief.md) · **Next:** [18 — P4 retention](18-p4-retention.md)
 
 Before this phase a person found a project by scrolling the project list. Now Ctrl K (⌘K on a Mac) opens one search box from anywhere: it finds projects, review questions, brief claims, papers, the brief's passages and follow-up questions across every project the person is a member of, grouped by project, and it runs three commands. The rest of the keyboard table in [UI_UX_SPEC §11.5](../UI_UX_SPEC.md#115-keyboard) works too, and single-key shortcuts can be turned off (WCAG 2.1.4). It serves [UI_UX_SPEC §7.6](../UI_UX_SPEC.md#76-search-across-projects) and [ADR 0018](../adr/0018-search-decrypts-and-matches-per-request.md).
 

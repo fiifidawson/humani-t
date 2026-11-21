@@ -61,6 +61,10 @@ Conventions used throughout:
 | 17 | [P3: compare](17-p3-compare.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Brief versions with a version menu and "Compare with", the run manifest, and the Compare runs screen, all computed by the API. |
 | 17 | [P3: brief](17-p3-brief.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Trade-off priorities kept in the URL, humanitarian criteria first, one card per criterion on narrow screens, and the optional "Your view first" question. |
 | 17 | [P3: find](17-p3-find.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Search across a person's projects without an index (ADR-0018), the Ctrl K search and command palette, and the rest of the §11.5 keyboard, with single-key shortcuts that can be turned off. |
+| 18 | [P4: retention](18-p4-retention.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | An operator's retention period, off by default; "Deleted in N days unless kept" in Needs you, the date in Project settings, Keep, and deletion when due through the normal delete (ADR-0020). |
+| 18 | [P4: coverage](18-p4-coverage.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | The coverage estimate on the screening results: a capture-recapture range across paper sources, always called an estimate, or no estimate and why (ADR-0021); recorded in the run's manifest. |
+| 18 | [P4: evaluations](18-p4-evaluations.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | The admin area's evaluations: humani-t's answers against other systems', judged blind by a model the operator configured, inside a project the administrator belongs to (ADR-0022). |
+| 18 | [P4: field](18-p4-field.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | Low data mode (system fonts, no motion, run progress every 10 s, offered once on a slow connection) and the brief as a PDF from the browser's print page (ADR-0019). |
 
 Planned phases get their file, from [`TEMPLATE.md`](TEMPLATE.md), when their work starts. M12 (optional OIDC single sign-on) is in the plan but has no phase assigned yet.
 

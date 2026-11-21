@@ -31,6 +31,7 @@ from app.api.routes import (
     collections,
     comparisons,
     documents,
+    evaluations,
     exports,
     history,
     label_rules,
@@ -43,6 +44,7 @@ from app.api.routes import (
     plans,
     projects,
     questions,
+    retention,
     reviews,
     runs,
     search,
@@ -70,7 +72,13 @@ TAGS_METADATA = [
         "name": "account",
         "description": "The signed-in user's own sessions, password and second factors.",
     },
-    {"name": "admin", "description": "Invitations and account administration."},
+    {
+        "name": "admin",
+        "description": (
+            "Invitations, account administration and evaluations. Administrators only; "
+            "an evaluation also needs membership of its project."
+        ),
+    },
     {
         "name": "projects",
         "description": (
@@ -261,6 +269,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(account.router)
     v1.include_router(mfa.account_router)
     v1.include_router(admin.router)
+    v1.include_router(evaluations.router)
     v1.include_router(projects.router)
     v1.include_router(reviews.router)
     v1.include_router(runs.router)
@@ -279,6 +288,7 @@ def _install(app: FastAPI, settings: Settings) -> None:
     v1.include_router(history.router)
     v1.include_router(marks.router)
     v1.include_router(search.router)
+    v1.include_router(retention.router)
     app.include_router(v1)
 
 

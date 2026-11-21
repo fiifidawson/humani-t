@@ -62,6 +62,7 @@ from app.domain.projects import (
     NoSuchAccountError,
     ProjectError,
 )
+from app.domain.retention import RetentionOffError
 from app.domain.reviews import InvalidTransitionError
 from app.domain.runs import RunConflictError
 from app.domain.sources import PaperSourceUnavailableError
@@ -174,6 +175,7 @@ _PROJECT_STATUS: dict[type[ProjectError], int] = {
     NoSuchAccountError: 422,
     # 409, as for the last owner: the request is valid, the deployment's state refuses it.
     MaskingRequiredError: 409,
+    RetentionOffError: 409,
 }
 
 

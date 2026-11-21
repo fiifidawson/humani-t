@@ -267,6 +267,25 @@ describe("appearance", () => {
 		expect(document.documentElement).not.toHaveAttribute("data-motion");
 		expect(window.localStorage.getItem("humani-t:reduce-motion")).toBeNull();
 	});
+
+	it("turns low data mode on in this browser at once, and remembers it (UI_UX_SPEC §13.2)", async () => {
+		signedIn();
+		const { user } = renderApp("/settings");
+		const appearance = await section("Appearance");
+		const lowData = within(appearance).getByRole("checkbox", {
+			name: "Low data mode",
+		});
+
+		expect(lowData).not.toBeChecked();
+		await user.click(lowData);
+
+		expect(lowData).toBeChecked();
+		expect(document.documentElement).toHaveAttribute("data-low-data");
+		expect(window.localStorage.getItem("humani-t:low-data")).toBe("true");
+		await user.click(lowData);
+		expect(document.documentElement).not.toHaveAttribute("data-low-data");
+		expect(window.localStorage.getItem("humani-t:low-data")).toBeNull();
+	});
 });
 
 describe("keyboard", () => {

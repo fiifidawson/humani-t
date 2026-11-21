@@ -23,13 +23,14 @@ from app.application.audit import SYSTEM, AuditLog
 from app.application.inference import GuardedInference
 from app.application.masking import MaskingRuleService
 from app.application.model_instructions import ModelInstructionsService
-from app.application.papers import PaperStore
+from app.application.papers import PaperStore, coverage_of
 from app.application.pipeline import (
     accepted_plan_or_fail,
     adopted_or_fail,
     adoption_facts,
     held_run,
 )
+from app.domain.coverage import coverage_facts
 from app.domain.discovery import RunPaper, TextKind
 from app.domain.inference import (
     ChatMessage,
@@ -284,6 +285,9 @@ class ScreenStage:
         await self._screen_all(context, run, screening, work, tally, inference)
         async with self._storage.unit_of_work() as uow:
             decisions = await uow.screening.list_for_run(run.id)
+            sources = await self._store.run_sources(uow, run)
+        # The model's labels as they stand now; the table recounts under later rules.
+        coverage = coverage_of(sources, papers, decisions, is_screening_finished=True)
         tiers: dict[str, JsonValue] = {
             tier.value: sum(d.tier is tier for d in decisions) for tier in ScreeningTier
         }
@@ -302,6 +306,7 @@ class ScreenStage:
                 "plan_version": plan.version,
                 **({} if sent is None else {"instructions_version": sent.version}),
                 **adoption_facts(paper_set),
+                "coverage": coverage_facts(coverage),
             },
         }
 

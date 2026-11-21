@@ -46,6 +46,7 @@ import { Loading } from "../../ui/Loading";
 import { Reveal } from "../../ui/Reveal";
 import { SaveButton, SeenMark, useMarkSeen } from "../history/PaperMarks";
 import { Canvas, CanvasHeading } from "./Canvas";
+import { CoverageEstimate } from "./Coverage";
 import { CriteriaList, type CriterionMark } from "./CriteriaList";
 import { paperDownloads } from "./exports";
 import { plural, shownLabel, sourceName, TIER_ORDER, TIERS } from "./format";
@@ -656,6 +657,7 @@ export function PapersCanvas() {
 					go({ label: shown, tier: undefined, page: undefined })
 				}
 			/>
+			<CoverageEstimate coverage={papers.data.coverage} />
 			<Flex role="group" aria-label="Show" gap="2" wrap="wrap">
 				{FILTERS.map((filter) => {
 					const isPressed =

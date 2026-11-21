@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.application.accounts import Current
@@ -19,6 +19,7 @@ from app.application.encryption import ScopeEncryption
 from app.application.membership import require_member
 from app.application.projects import name_context
 from app.application.questions import asked_text
+from app.application.retention import deletion_date
 from app.application.reviews import question_context
 from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
@@ -36,6 +37,7 @@ from app.domain.history import (
 )
 from app.domain.manifest import StageSummary, assemble_manifest
 from app.domain.projects import Action, Project, Role, can
+from app.domain.retention import WARNING_DAYS, RetentionPolicy, days_left, is_near
 from app.domain.reviews import Review, ReviewStatus
 from app.domain.runs import EventName, Gate, GateKind, Run, RunState, action_to_resolve
 from app.storage.base import StorageProvider, UnitOfWork
@@ -94,16 +96,21 @@ class HistoryService:
         *,
         storage: StorageProvider,
         encryption: ScopeEncryption,
+        retention: RetentionPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._storage = storage
         self._encryption = encryption
         self._documents = DocumentSeal(encryption)
         self._log = RunLog(encryption)
+        self._retention = retention or RetentionPolicy()
         self._clock = clock
 
     async def needs_you(self, current: Current) -> tuple[NeedsYouLine, ...]:
-        """What waits for the caller across their live, unarchived projects, newest first."""
+        """What waits for the caller across their live, unarchived projects, newest first.
+
+        A retention notice is the exception: an archived project is still deleted on its date.
+        """
         async with self._storage.unit_of_work() as uow:
             lines = await self._needs_you(uow, current.user.id)
             dismissed = {
@@ -172,16 +179,42 @@ class HistoryService:
     async def _needs_you(self, uow: UnitOfWork, user_id: UUID) -> list[NeedsYouLine]:
         read = {r.brief_id for r in await uow.marks.list_brief_reads(user_id)}
         lines: list[NeedsYouLine] = []
-        for project, role in await _projects_of(uow, user_id):
-            items = [
-                item
-                for review in await uow.reviews.list_for_project(project.id)
-                for item in await _waiting_in(uow, review, role, read)
-            ]
+        for project, role in await _projects_of(uow, user_id, include_archived=True):
+            items = (
+                []
+                if project.is_archived
+                else [
+                    item
+                    for review in await uow.reviews.list_for_project(project.id)
+                    for item in await _waiting_in(uow, review, role, read)
+                ]
+            )
+            notice = await self._retention_notice(uow, project, role)
+            if notice is not None:
+                items.append(notice)
             if items:
                 ref = await self._ref(uow, project)
                 lines += [NeedsYouLine(item, ref) for item in items]
         return lines
+
+    async def _retention_notice(
+        self, uow: UnitOfWork, project: Project, role: Role
+    ) -> NeedsYouItem | None:
+        """The "Deleted in N days unless kept" notice, for owners who can keep the project."""
+        if not can(role, Action.UPDATE_PROJECT):
+            return None
+        deletes_at = await deletion_date(uow, project, self._retention)
+        now = self._clock()
+        if deletes_at is None or not is_near(deletes_at, now):
+            return None
+        return NeedsYouItem(
+            kind=NeedsYouKind.RETENTION,
+            project_id=project.id,
+            review_id=None,
+            at=deletes_at - timedelta(days=WARNING_DAYS),
+            deletes_at=deletes_at,
+            days_left=days_left(deletes_at, now),
+        )
 
     async def _events(
         self, uow: UnitOfWork, project_id: UUID, *, is_detailed: bool
@@ -319,12 +352,14 @@ class HistoryService:
         return ProjectRef(project.id, name.decode())
 
 
-async def _projects_of(uow: UnitOfWork, user_id: UUID) -> list[tuple[Project, Role]]:
-    """The caller's live projects that are not archived, with their role in each."""
+async def _projects_of(
+    uow: UnitOfWork, user_id: UUID, *, include_archived: bool = False
+) -> list[tuple[Project, Role]]:
+    """The caller's live projects with their role in each; archived ones only if asked."""
     found: list[tuple[Project, Role]] = []
     for project in await uow.projects.list_for_member(user_id):
         membership = await uow.memberships.get(project.id, user_id)
-        if membership is not None and not project.is_archived:
+        if membership is not None and (include_archived or not project.is_archived):
             found.append((project, membership.role))
     return found
 

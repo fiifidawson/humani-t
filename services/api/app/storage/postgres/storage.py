@@ -37,6 +37,7 @@ from app.storage.postgres.collections import (
     PostgresProjectTagsRepository,
 )
 from app.storage.postgres.documents import PostgresDocumentRepository
+from app.storage.postgres.evaluations import PostgresEvaluationRepository
 from app.storage.postgres.label_rules import PostgresLabelRulesRepository
 from app.storage.postgres.leanings import PostgresLeaningRepository
 from app.storage.postgres.marks import PostgresDismissalRepository, PostgresMarkRepository
@@ -398,6 +399,8 @@ class PostgresProjectRepository(_RecordTable[Project]):
     async def save(self, project: Project, /) -> None:
         values = dataclasses.asdict(project)
         values["version"] = project.version + 1
+        # Reads are written only by touch_read; a stale copy must not set one back.
+        del values["read_at"]
         changed = await self._update_where(
             projects.c.id == project.id, projects.c.version == project.version, **values
         )
@@ -414,6 +417,24 @@ class PostgresProjectRepository(_RecordTable[Project]):
             .order_by(projects.c.created_at.desc(), projects.c.id.desc())
         )
         return [self._from_row(row) for row in result]
+
+    async def list_live(self) -> list[Project]:
+        result = await self._connection.execute(
+            select(projects)
+            .where(projects.c.deleted_at.is_(None))
+            .order_by(projects.c.created_at, projects.c.id)
+        )
+        return [self._from_row(row) for row in result]
+
+    async def touch_read(
+        self, project_id: UUID, at: datetime, *, unless_since: datetime
+    ) -> bool:
+        changed = await self._update_where(
+            projects.c.id == project_id,
+            or_(projects.c.read_at.is_(None), projects.c.read_at < unless_since),
+            read_at=at,
+        )
+        return changed == 1
 
 
 class PostgresMembershipRepository(_RecordTable[Membership]):
@@ -645,6 +666,7 @@ class PostgresUnitOfWork:
         self.plans = PostgresPlanRepository(connection)
         self.briefs = PostgresDecisionBriefRepository(connection)
         self.questions = PostgresQuestionRepository(connection)
+        self.evaluations = PostgresEvaluationRepository(connection)
         self.masking_rules = PostgresMaskingRuleRepository(connection)
         self.paper_masks = PostgresPaperMaskRepository(connection)
         self.documents = PostgresDocumentRepository(connection)

@@ -777,7 +777,7 @@ The run strip (L0 and L1) is in [5.3.5](#535-run-strip). The canvas (L2) shows:
 - **Edit rules:** opens a side form with the label rules. "Preview" shows how many papers would move ("4 would move from Relevant to Highly relevant") before "Apply". Applying makes no LLM calls and posts a system note in the chat.
 - **PRISMA diagram:** drawn as an accessible SVG with the counts as text, and a table version below for screen readers and small screens.
 - **Downloads:** `dataset.csv`, `dataset.jsonl`, `prisma.md`.
-- **Coverage** (later): an estimate of how much of the relevant literature was found, always labelled "estimate" (Undermind shows that such numbers are uncertain) **(new, needs API)**.
+- **Coverage** (P4): an estimate of how much of the relevant literature was found, always labelled "estimate" (Undermind shows that such numbers are uncertain). Shown below the PRISMA flow as a range in whole fives ("Estimate: this run found between 70% and 100% of the relevant papers its searches could reach"), with "What this estimate means" opening the counts it used, what it leaves out, that the top of the range is likely too high, whose labels it counted and the method. When the data cannot support one it says "No coverage estimate for this run." and why. Capture-recapture across sources, worked out by the API ([ADR-0021](adr/0021-coverage-is-a-capture-recapture-estimate.md)); `coverage` in `GET …/papers`.
 
 Source: `GET /projects/{id}/papers`, `PUT /projects/{id}/rules`, `GET …/exports/{name}`.
 
@@ -1076,12 +1076,13 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
   - Results: a table per system pair with the six metrics (mean, difference), and wins, ties and losses.
   - Each judgement: the question, the two answers side by side as A and B in the order the judge saw them, the scores and the reason, then a "Reveal systems" toggle.
   - A note on fairness: "The judge should be from a different model family than the writer."
+  - **Built (P4, ADR 0022):** `/admin/evaluations` lists the evaluations of projects the administrator belongs to; **New evaluation** takes a project, a question file (plain text, one question per line), up to 2 other systems' answers (one JSON Lines file per system, `{"answer": "…"}` per question, in order) and a judge from the models the operator configured. Each evaluation page has a table per pair, the judgements as A and B with **Reveal systems**, and the line "Made by … Judged by …". The rail shows **Evaluations** to administrators only; the API refuses everyone else.
 
 ### 6.16 Account
 
 - Signed-in devices: list with browser, place (approximate, from IP if the deployment allows), last active; "Sign out" per device and "Sign out all others".
 - Password change; passkeys and TOTP (add, rename, remove; the last one can't be removed); recovery codes (regenerate, with re-auth).
-- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)). Built: theme, and the **Reduce motion** switch under Appearance ("Turns animations off in this browser. Your computer's own setting turns them off too.").
+- Preferences: theme (system, light, dark), text size, reduced motion, "low data mode" (section [13](#13-low-bandwidth-and-field-use)). Built: theme, and the **Reduce motion** switch under Appearance ("Turns animations off in this browser. Your computer's own setting turns them off too."). Built in P4: the **Low data mode** switch under Appearance, after Reduce motion ("Loads less in this browser, for slow or costly connections: your device's own fonts, no animations, and run progress every 10 seconds.").
 
 ---
 
@@ -1243,7 +1244,9 @@ Borrowed from CiteSee (CHI 2023): people lose track of which papers they have al
 
 - **Archive** hides a project from Home and the default project list. It keeps everything and can be undone. Archived projects show with "☐ Archived" ticked.
 - **Delete** destroys the project's key (crypto-shredding). It can't be undone. Section [6.14](#614-project-settings).
-- If the deployment sets a retention period **(new, needs API)**, projects near it show "Deleted in 14 days unless kept" in Needs you.
+- If the deployment sets a retention period, projects near it show "Deleted in 14 days unless kept" in Needs you.
+
+**Built so far (P4):** the operator's `HUMANI_T_RETENTION_DAYS` (unset by default: nothing is deleted for age; ADR 0020). A project's date is its last activity, or an owner's latest Keep, plus the period. For the last 14 days its owners see "Deleted in N days unless kept" in Needs you ("Deleted in 1 day…", "Deleted today…"), archived projects included, with **Keep** as the row's one action, done in place; the row then leaves. Project settings shows a **Retention** section, only when a period is set: the deployment's sentence ("This deployment deletes a project 365 days after its last activity, unless an owner keeps it."), "This project will be deleted on 24 Oct 2027, in 337 days.", "Kept on …" after a Keep, and **Keep project** for owners; others read "Only owners can keep the project." Administrators see the same sentence under **Data retention** on their Account page, or "This deployment never deletes projects for age." The worker deletes a project once its date passes, exactly as an owner's delete would.
 
 ---
 
@@ -1744,9 +1747,9 @@ Budgets are checked in CI with Lighthouse on a throttled profile.
 - **Text first.** The brief endpoint returns the whole brief as JSON; the screen renders the header and bottom line first, then the rest. Passages load when a chip is opened, not before.
 - **Split code by route.** The masking review, evaluation, compare and PRISMA code load only when used.
 - **SSE, not polling.** One small event at a time.
-- **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event.
+- **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event. Built in P4: kept per browser; the offer appears once, at the top of the signed-in app, when `navigator.connection` reports `saveData` or an `effectiveType` of `slow-2g`, `2g` or `3g`, and either answer ends it. Avatars and abstracts in paper rows do not exist in the app yet, so there is nothing to hide. Gates and the end of a run still show at once.
 - **Resume after a drop.** Unsent composer text is kept in memory (and in `sessionStorage` if the user allows it, never question text in `localStorage` for privacy). The event stream resumes from the last id.
-- **Offline reading.** The brief can be downloaded as a single-file PDF or Markdown, with the caveat and sources. A full offline mode (service worker cache of opened briefs) is a later phase and must respect `Cache-Control: no-store` rules; it needs a security review first.
+- **Offline reading.** The brief can be downloaded as a single-file PDF or Markdown, with the caveat and sources. The PDF is made by the browser from the print page ([ADR 0019](adr/0019-the-brief-pdf-is-made-by-the-browser.md)). A full offline mode (service worker cache of opened briefs) is a later phase and must respect `Cache-Control: no-store` rules; it needs a security review first.
 
 ---
 

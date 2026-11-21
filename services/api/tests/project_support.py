@@ -76,21 +76,27 @@ class Team:
         return {"owner": self.owner, "reviewer": self.reviewer, "viewer": self.viewer}[role]
 
 
-def make_project_harness(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> AuthHarness:
+def make_project_harness(
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT, *, retention_days: int | None = None
+) -> AuthHarness:
     """Return a harness in which a password sign-in is a full sign-in.
 
     Project specs cover authorisation, so they opt out of MFA; the MFA specs cover it.
     """
     if "mfa_policy" not in inspect.signature(make_harness).parameters:
-        return make_harness(masking_policy=masking_policy)
+        return make_harness(masking_policy=masking_policy, retention_days=retention_days)
     mfa = importlib.import_module("app.domain.mfa")
     return make_harness(
-        mfa_policy=mfa.MfaPolicy(is_required=False), masking_policy=masking_policy
+        mfa_policy=mfa.MfaPolicy(is_required=False),
+        masking_policy=masking_policy,
+        retention_days=retention_days,
     )
 
 
-def make_team(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> Team:
-    harness = make_project_harness(masking_policy)
+def make_team(
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT, *, retention_days: int | None = None
+) -> Team:
+    harness = make_project_harness(masking_policy, retention_days=retention_days)
     harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
     for email in (OWNER_EMAIL, REVIEWER_EMAIL, VIEWER_EMAIL, OUTSIDER_EMAIL):
         harness.create_user(email, PASSWORD)
