@@ -55,10 +55,36 @@ export class FakeHistory {
 			stopped_at: null,
 			version: 1,
 			brief_id: null,
+			deletes_at: null,
+			days_left: null,
 			...extra,
 		};
 		this.needsYou.push(item);
 		return item;
+	}
+
+	/** A project's "Deleted in N days unless kept", as the API lists it for owners. */
+	addRetentionNotice(projectId: string, daysLeft: number): NeedsYouItem {
+		return this.addNeedsYou(projectId, {
+			kind: "retention",
+			key: `retention:${projectId}:2026-12-05`,
+			review_id: null,
+			run_id: null,
+			run_number: null,
+			version: null,
+			deletes_at: "2026-12-05T09:00:00Z",
+			days_left: daysLeft,
+		});
+	}
+
+	/** What a Keep does to Needs you: the project's notice is no longer waiting. */
+	forgetRetention(projectId: string): void {
+		const index = this.needsYou.findIndex(
+			(item) => item.kind === "retention" && item.project.id === projectId,
+		);
+		if (index >= 0) {
+			this.needsYou.splice(index, 1);
+		}
 	}
 
 	/** A line as the API sends it; only the facts the line uses need be given. */

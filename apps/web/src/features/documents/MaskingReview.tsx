@@ -1,7 +1,8 @@
 /**
  * The owner's masking review of one document (UI_UX_SPEC §6.6): the original
- * text with what is masked marked, the masked text beside it, every mask with
- * "Not personal" where the API allows it, and masking what was missed.
+ * and the masked text side by side in one scrolling frame, every mask (with
+ * "Not personal" where the API allows it) one click away, and masking what was
+ * missed.
  *
  * Offsets come from the API's `raw_text` and go back to it as they are; the API
  * decides what may be masked or unmasked, and this only shows its answer.
@@ -20,14 +21,28 @@ import {
 } from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, EyeOff, Shield } from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useRef, useState } from "react";
+import {
+	type FormEvent,
+	type ReactNode,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
 import { useApi } from "../../app/api-context";
-import { addMaskingRule, type DocumentReview } from "../../app/documentQueries";
+import {
+	addMaskingRule,
+	type DocumentReview,
+	type DocumentType,
+} from "../../app/documentQueries";
 import { keys } from "../../app/queries";
+import { COMPACT_ZOOM } from "../../shell/railStyles";
+import { DisclosureButton } from "../../ui/DisclosureButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
+import { Reveal } from "../../ui/Reveal";
 import { EntityTypeSelect } from "../reviews/EntityTypeSelect";
 import { MaskedText } from "../reviews/MaskedText";
 import { type EntityType, entityTypeName } from "../reviews/masking";
@@ -51,8 +66,16 @@ type Correction =
 	| { kind: "unmask"; range: Range; reason: string };
 
 const Mark = chakra("mark", {
-	base: { bg: "masked.bg", color: "masked.fg", rounded: "sm", px: "0.5" },
+	base: {
+		bg: "masked.bg",
+		color: "masked.fg",
+		rounded: "sm",
+		px: "0.5",
+		cursor: "pointer",
+	},
 });
+
+const maskKey = ({ start, end }: Range) => `${start}-${end}`;
 
 function masksOf(spans: readonly Span[]): Mask[] {
 	const masks = new Map<string, Mask>();
@@ -84,25 +107,53 @@ function madeBy(sources: readonly string[]): string {
 		: "Found automatically";
 }
 
-/** `text` in paragraphs: the ranges between blank lines, which are left out. */
-function paragraphs(text: string): Range[] {
+// A PDF line that ends a sentence ends its paragraph; any other line break in a
+// PDF is only where the printed page wrapped.
+const ENDS_SENTENCE = /[.!?:;]["”’')\]]?$/;
+
+/**
+ * `text` in paragraphs, as the document showed them: a Word, text or Markdown
+ * file has one per line; a PDF's lines flow together until a blank line or the
+ * end of a sentence. Blank lines are left out.
+ */
+function paragraphs(text: string, fileType: DocumentType): Range[] {
 	const found: Range[] = [];
-	let start = 0;
-	for (const blank of text.matchAll(/\n[^\S\n]*\n\s*/g)) {
-		found.push({ start, end: blank.index });
-		start = blank.index + blank[0].length;
+	let start: number | null = null;
+	let end = 0;
+	let offset = 0;
+	for (const line of text.split("\n")) {
+		if (line.trim() === "") {
+			if (start !== null) {
+				found.push({ start, end });
+			}
+			start = null;
+		} else {
+			start ??= offset;
+			end = offset + line.length;
+			if (fileType !== "pdf" || ENDS_SENTENCE.test(line.trimEnd())) {
+				found.push({ start, end });
+				start = null;
+			}
+		}
+		offset += line.length + 1;
 	}
-	found.push({ start, end: text.length });
-	return found;
+	if (start !== null) {
+		found.push({ start, end });
+	}
+	return found.length > 0 ? found : [{ start: 0, end: text.length }];
 }
 
 /**
  * The original's and the masked text's paragraphs, side by side. Masking keeps
- * paragraph breaks, so they pair up; if they ever do not, each side is one block.
+ * line breaks, so they pair up; if they ever do not, each side is one block.
  */
-function pairedParagraphs(raw: string, masked: string): [Range[], Range[]] {
-	const left = paragraphs(raw);
-	const right = paragraphs(masked);
+function pairedParagraphs(
+	raw: string,
+	masked: string,
+	fileType: DocumentType,
+): [Range[], Range[]] {
+	const left = paragraphs(raw, fileType);
+	const right = paragraphs(masked, fileType);
 	return left.length === right.length
 		? [left, right]
 		: [[{ start: 0, end: raw.length }], [{ start: 0, end: masked.length }]];
@@ -175,7 +226,11 @@ function Pane({
 				as="h4"
 				fontSize="md"
 				fontWeight="semibold"
-				mb="2"
+				pb="2"
+				position="sticky"
+				top="0"
+				zIndex="1"
+				bg="bg"
 			>
 				{title}
 			</Heading>
@@ -199,9 +254,11 @@ function Pane({
 export function MaskingCorrections({
 	projectId,
 	review,
+	fileType,
 }: {
 	projectId: string;
 	review: DocumentReview;
+	fileType: DocumentType;
 }) {
 	const api = useApi();
 	const queryClient = useQueryClient();
@@ -212,6 +269,9 @@ export function MaskingCorrections({
 	const [removing, setRemoving] = useState<Range | null>(null);
 	const [reason, setReason] = useState("");
 	const [outcome, setOutcome] = useState<string | null>(null);
+	const [isListOpen, setListOpen] = useState(false);
+	const [focusing, setFocusing] = useState<string | null>(null);
+	const listId = useId();
 	const raw = review.raw_text;
 	const quoted = ({ start, end }: Range) => raw.slice(start, end);
 	const reviewKey = keys.documentReview(projectId, review.document_id);
@@ -296,6 +356,33 @@ export function MaskingCorrections({
 		);
 	};
 
+	// A click (not a drag) on a masked word opens its row, where its actions are.
+	const openClickedMask = (target: EventTarget) => {
+		const mark = target instanceof Element ? target.closest("mark") : null;
+		const offset = Number(
+			mark?.querySelector("[data-offset]")?.getAttribute("data-offset") ??
+				Number.NaN,
+		);
+		const mask = masksOf(review.spans).find(
+			(m) => m.start <= offset && offset < m.end,
+		);
+		if (mask !== undefined && window.getSelection()?.isCollapsed !== false) {
+			setListOpen(true);
+			setFocusing(maskKey(mask));
+		}
+	};
+
+	useEffect(() => {
+		if (focusing === null) {
+			return;
+		}
+		const row = document.getElementById(`${listId}-${focusing}`);
+		const target = row?.querySelector("button") ?? row;
+		target?.focus();
+		target?.scrollIntoView?.({ block: "nearest" });
+		setFocusing(null);
+	}, [focusing, listId]);
+
 	const unmask = (event: FormEvent) => {
 		event.preventDefault();
 		if (removing !== null && reason.trim() !== "" && !correct.isPending) {
@@ -308,6 +395,7 @@ export function MaskingCorrections({
 	const [rawParagraphs, maskedParagraphs] = pairedParagraphs(
 		raw,
 		review.masked_text,
+		fileType,
 	);
 	// A run that crosses a paragraph break is cut in two, one piece per paragraph.
 	const runsIn = (paragraph: Range) =>
@@ -321,50 +409,75 @@ export function MaskingCorrections({
 
 	return (
 		<Stack gap="5">
-			<Grid
-				templateColumns={{ base: "1fr", lg: "1fr 1fr" }}
-				columnGap="4"
-				rowGap={{ base: "4", lg: "0" }}
+			{/* One scrollbar for both panes: they share the grid's rows, so they move
+			    together. Zoom scales viewport units, hence the division. */}
+			<Box
+				as="section"
+				aria-label="The original and the masked text"
+				tabIndex={0}
+				maxH={`calc(70vh / ${COMPACT_ZOOM})`}
+				overflowY="auto"
+				// Holds the placeholders' screen-reader text, which is positioned
+				// absolutely; without it that text stretches the page below the frame.
+				position="relative"
+				pe="2"
 			>
-				<Pane title="Original text" rows={rawParagraphs.length}>
-					<Box
-						ref={original}
-						display="contents"
-						onMouseUp={readSelection}
-						onKeyUp={readSelection}
-					>
-						{rawParagraphs.map((paragraph) => (
-							<Text
+				<Grid
+					templateColumns={{ base: "1fr", lg: "1fr 1fr" }}
+					columnGap="4"
+					rowGap={{ base: "4", lg: "0" }}
+				>
+					<Pane title="Original text" rows={rawParagraphs.length}>
+						<Box
+							ref={original}
+							display="contents"
+							onMouseUp={(event) => {
+								openClickedMask(event.target);
+								readSelection();
+							}}
+							onKeyUp={readSelection}
+						>
+							{rawParagraphs.map((paragraph) => (
+								<Text
+									key={paragraph.start}
+									data-paragraph=""
+									whiteSpace="normal"
+									overflowWrap="anywhere"
+								>
+									{runsIn(paragraph).map((run) =>
+										run.isMasked ? (
+											<Mark key={run.start}>
+												<span data-offset={run.start}>{quoted(run)}</span>
+											</Mark>
+										) : (
+											<span key={run.start} data-offset={run.start}>
+												{quoted(run)}
+											</span>
+										),
+									)}
+								</Text>
+							))}
+						</Box>
+					</Pane>
+					<Pane title="What the model will see" rows={maskedParagraphs.length}>
+						{maskedParagraphs.map((paragraph) => (
+							<Box
 								key={paragraph.start}
 								data-paragraph=""
-								whiteSpace="pre-wrap"
-								overflowWrap="anywhere"
+								// Flow like the original beside it: a PDF's line breaks are page wraps.
+								css={{ "& > p": { whiteSpace: "normal" } }}
 							>
-								{runsIn(paragraph).map((run) =>
-									run.isMasked ? (
-										<Mark key={run.start}>
-											<span data-offset={run.start}>{quoted(run)}</span>
-										</Mark>
-									) : (
-										<span key={run.start} data-offset={run.start}>
-											{quoted(run)}
-										</span>
-									),
-								)}
-							</Text>
+								<MaskedText
+									text={review.masked_text.slice(
+										paragraph.start,
+										paragraph.end,
+									)}
+								/>
+							</Box>
 						))}
-					</Box>
-				</Pane>
-				<Pane title="What the model will see" rows={maskedParagraphs.length}>
-					{maskedParagraphs.map((paragraph) => (
-						<Box key={paragraph.start} data-paragraph="">
-							<MaskedText
-								text={review.masked_text.slice(paragraph.start, paragraph.end)}
-							/>
-						</Box>
-					))}
-				</Pane>
-			</Grid>
+					</Pane>
+				</Grid>
+			</Box>
 
 			<Stack
 				gap="3"
@@ -440,103 +553,124 @@ export function MaskingCorrections({
 
 			<Stack gap="2">
 				<Heading as="h4" fontSize="md" fontWeight="semibold">
-					{`Masks (${masks.length})`}
+					Masks
 				</Heading>
 				{masks.length === 0 ? (
 					<Text>Nothing is masked.</Text>
 				) : (
-					<Stack as="ul" aria-label="Masks" gap="2" listStyle="none">
-						{masks.map((mask) => {
-							const words = quoted(mask);
-							const isRule = mask.sources.some((s) => s.startsWith("rule:"));
-							const isRemoving =
-								removing?.start === mask.start && removing.end === mask.end;
-							return (
-								<Stack
-									as="li"
-									key={`${mask.start}-${mask.end}`}
-									gap="2"
-									py="2"
-									borderBottomWidth="1px"
-									borderColor="border"
-								>
-									<Flex
-										gap="3"
-										align="center"
-										justify="space-between"
-										wrap="wrap"
+					<Flex gap="3" align="center" wrap="wrap">
+						<DisclosureButton
+							isOpen={isListOpen}
+							controls={listId}
+							onToggle={() => setListOpen((open) => !open)}
+						>
+							{isListOpen ? "Hide all masks" : "Show all masks"}
+						</DisclosureButton>
+					</Flex>
+				)}
+				{masks.length === 0 || !isListOpen ? null : (
+					<Reveal>
+						<Stack
+							as="ul"
+							id={listId}
+							aria-label="Masks"
+							gap="2"
+							listStyle="none"
+						>
+							{masks.map((mask) => {
+								const words = quoted(mask);
+								const isRule = mask.sources.some((s) => s.startsWith("rule:"));
+								const isRemoving =
+									removing?.start === mask.start && removing.end === mask.end;
+								return (
+									<Stack
+										as="li"
+										key={maskKey(mask)}
+										id={`${listId}-${maskKey(mask)}`}
+										tabIndex={-1}
+										gap="2"
+										py="2"
+										borderBottomWidth="1px"
+										borderColor="border"
 									>
-										<Text overflowWrap="anywhere">
-											{`“${words}” · ${entityTypeName(mask.type)} · ${madeBy(mask.sources)}`}
-										</Text>
-										<HStack gap="2" wrap="wrap">
-											{mask.canRemove && !isRemoving ? (
-												<Button
-													size="xs"
-													variant="outline"
-													aria-label={`Not personal: ${words}`}
-													onClick={() => {
-														setRemoving(mask);
-														setReason("");
-													}}
-												>
-													<EyeOff />
-													Not personal
-												</Button>
-											) : null}
-											{isRule ? null : (
-												<Button
-													size="xs"
-													variant="outline"
-													aria-label={`Always mask in this project: ${words}`}
-													disabled={correct.isPending}
-													onClick={() =>
-														correct.mutate({
-															kind: "mask",
-															range: mask,
-															type: mask.type,
-															isRule: true,
-														})
-													}
-												>
-													Always mask in this project
-												</Button>
-											)}
-										</HStack>
-									</Flex>
-									{isRemoving ? (
-										<Stack as="form" gap="2" onSubmit={unmask}>
-											<Field
-												label="Why it isn't personal"
-												hint="One line. It is kept with the review."
-												maxLength={200}
-												required
-												value={reason}
-												onChange={(event) => setReason(event.target.value)}
-											/>
-											<HStack gap="2">
-												<Button
-													type="submit"
-													size="sm"
-													disabled={reason.trim() === "" || correct.isPending}
-												>
-													<Check />
-													Remove mask
-												</Button>
-												<Button
-													size="sm"
-													variant="ghost"
-													onClick={() => setRemoving(null)}
-												>
-													Cancel
-												</Button>
+										<Flex
+											gap="3"
+											align="center"
+											justify="space-between"
+											wrap="wrap"
+										>
+											<Text overflowWrap="anywhere">
+												{`“${words}” · ${entityTypeName(mask.type)} · ${madeBy(mask.sources)}`}
+											</Text>
+											<HStack gap="2" wrap="wrap">
+												{mask.canRemove && !isRemoving ? (
+													<Button
+														size="xs"
+														variant="outline"
+														aria-label={`Not personal: ${words}`}
+														onClick={() => {
+															setRemoving(mask);
+															setReason("");
+														}}
+													>
+														<EyeOff />
+														Not personal
+													</Button>
+												) : null}
+												{isRule ? null : (
+													<Button
+														size="xs"
+														variant="outline"
+														aria-label={`Always mask in this project: ${words}`}
+														disabled={correct.isPending}
+														onClick={() =>
+															correct.mutate({
+																kind: "mask",
+																range: mask,
+																type: mask.type,
+																isRule: true,
+															})
+														}
+													>
+														Always mask in this project
+													</Button>
+												)}
 											</HStack>
-										</Stack>
-									) : null}
-								</Stack>
-							);
-						})}
-					</Stack>
+										</Flex>
+										{isRemoving ? (
+											<Stack as="form" gap="2" onSubmit={unmask}>
+												<Field
+													label="Why it isn't personal"
+													hint="One line. It is kept with the review."
+													maxLength={200}
+													required
+													value={reason}
+													onChange={(event) => setReason(event.target.value)}
+												/>
+												<HStack gap="2">
+													<Button
+														type="submit"
+														size="sm"
+														disabled={reason.trim() === "" || correct.isPending}
+													>
+														<Check />
+														Remove mask
+													</Button>
+													<Button
+														size="sm"
+														variant="ghost"
+														onClick={() => setRemoving(null)}
+													>
+														Cancel
+													</Button>
+												</HStack>
+											</Stack>
+										) : null}
+									</Stack>
+								);
+							})}
+						</Stack>
+					</Reveal>
 				)}
 			</Stack>
 		</Stack>

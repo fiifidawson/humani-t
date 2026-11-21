@@ -26,6 +26,13 @@ function signedInWith(role: Role = "owner") {
 const textFile = (name: string, content = "Interview notes from Gao.") =>
 	new File([content], name, { type: "text/plain" });
 
+async function showAllMasks(user: ReturnType<typeof renderApp>["user"]) {
+	await user.click(
+		await screen.findByRole("button", { name: "Show all masks" }),
+	);
+	return screen.findByRole("list", { name: "Masks" });
+}
+
 async function openDocuments(projectId: string) {
 	const view = renderApp(`/p/${projectId}/documents`);
 	await screen.findByRole("heading", { level: 2, name: "Documents" });
@@ -99,6 +106,23 @@ describe("the documents page (UI_UX_SPEC §6.13)", () => {
 				"No text was found. A scanned document needs text recognition (OCR) first.",
 			),
 		).toBeInTheDocument();
+	});
+
+	it("spins the icon of a document still being checked or read, and only those", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "reading.pdf", { status: "extracting" });
+		api.documents.add(project.id, "ready.md", { status: "approved" });
+		await openDocuments(project.id);
+
+		const iconIn = async (name: string) =>
+			within((await rowFor(name)) ?? document.body)
+				.getByTestId("status")
+				.parentElement?.querySelector("svg") ?? null;
+		const spins = (icon: Element | null) =>
+			// jsdom keeps the shorthand whole, so read `animation`, not its name.
+			icon === null ? false : /^spin /.test(getComputedStyle(icon).animation);
+		expect(spins(await iconIn("reading.pdf"))).toBe(true);
+		expect(spins(await iconIn("ready.md"))).toBe(false);
 	});
 
 	it("shows each document's tag, name, size and who uploaded it", async () => {
@@ -482,6 +506,128 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		).toHaveLength(1);
 	});
 
+	it("flows a PDF's printed lines back into paragraphs, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.pdf", {
+			status: "awaiting_review",
+			fileType: "pdf",
+			original: {
+				text: "Interview notes. The team met\nKofi Mensah at the clinic in the\nmorning.\nThe committee met twice.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.pdf" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		const left = original.querySelectorAll("[data-paragraph]");
+		expect(left).toHaveLength(2);
+		expect(left[0]).toHaveTextContent(
+			"Interview notes. The team met Kofi Mensah at the clinic in the morning.",
+		);
+		expect(getComputedStyle(left[0] as Element).whiteSpace).not.toBe(
+			"pre-wrap",
+		);
+		expect(
+			screen
+				.getByRole("region", { name: "What the model will see" })
+				.querySelectorAll("[data-paragraph]"),
+		).toHaveLength(2);
+	});
+
+	it("keeps each line of a Word document as its own paragraph, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: {
+				text: "Field visit\nThe team met Kofi Mensah.\nThe committee met twice.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		expect(original.querySelectorAll("[data-paragraph]")).toHaveLength(3);
+		expect(
+			screen
+				.getByRole("region", { name: "What the model will see" })
+				.querySelectorAll("[data-paragraph]"),
+		).toHaveLength(3);
+	});
+
+	it("shows both texts in one frame that scrolls them together, and can be scrolled from the keyboard", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		const frame = await screen.findByRole("region", {
+			name: "The original and the masked text",
+		});
+		expect(
+			within(frame).getByRole("region", { name: "Original text" }),
+		).toBeInTheDocument();
+		expect(
+			within(frame).getByRole("region", { name: "What the model will see" }),
+		).toBeInTheDocument();
+		expect(frame).toHaveAttribute("tabindex", "0");
+	});
+
+	it("keeps the full list of masks one click away, below the counts the review starts with", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		expect(
+			await screen.findByRole("button", { name: "Show all masks" }),
+		).toHaveAttribute("aria-expanded", "false");
+		expect(
+			screen.queryByRole("list", { name: "Masks" }),
+		).not.toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Show all masks" }));
+		expect(
+			within(screen.getByRole("list", { name: "Masks" })).getAllByRole(
+				"listitem",
+			),
+		).toHaveLength(4);
+	});
+
+	it("opens a masked word's row in the list when it is clicked in the original", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			within(
+				await screen.findByRole("region", { name: "Original text" }),
+			).getByText("Kofi Mensah"),
+		);
+
+		const masks = await screen.findByRole("list", { name: "Masks" });
+		await waitFor(() =>
+			expect(
+				within(masks).getByRole("button", {
+					name: "Not personal: Kofi Mensah",
+				}),
+			).toHaveFocus(),
+		);
+	});
+
 	it("lists every mask with what it hides, and offers Not personal only where the API allows it", async () => {
 		const { project } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
@@ -489,7 +635,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
 
-		const masks = await screen.findByRole("list", { name: "Masks" });
+		const masks = await showAllMasks(user);
 		const items = within(masks).getAllByRole("listitem");
 		expect(items.map((item) => item.textContent)).toEqual([
 			expect.stringContaining("“12 March” · Date · Found automatically"),
@@ -514,6 +660,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
 
+		await showAllMasks(user);
 		await user.click(
 			await screen.findByRole("button", { name: "Not personal: 12 March" }),
 		);
@@ -601,6 +748,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
 
+		await showAllMasks(user);
 		await user.click(
 			await screen.findByRole("button", {
 				name: "Always mask in this project: Kofi Mensah",
@@ -632,6 +780,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		await user.click(
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
+		await showAllMasks(user);
 		await user.click(
 			await screen.findByRole("button", { name: "Not personal: 12 March" }),
 		);
@@ -661,6 +810,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		await user.click(
 			await screen.findByRole("button", { name: "Review D1 report.txt" }),
 		);
+		await showAllMasks(user);
 		await user.click(
 			await screen.findByRole("button", { name: "Not personal: 12 March" }),
 		);

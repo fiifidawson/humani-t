@@ -163,6 +163,33 @@ class TestProjects:
         assert stored is not None
         assert stored.is_masking_on is False
 
+    async def test_a_keep_is_kept(self, storage):
+        (creator,) = await _users(storage, 1)
+        project = await _stored_project(storage, (creator, Role.OWNER))
+
+        async with storage.unit_of_work() as uow:
+            await uow.projects.save(project.kept(NOW))
+            await uow.commit()
+        async with storage.unit_of_work() as uow:
+            stored = await uow.projects.get(project.id)
+
+        assert stored is not None
+        assert stored.kept_at == NOW
+
+    async def test_every_live_project_is_listed_whoever_its_members_are(self, storage):
+        (creator,) = await _users(storage, 1)
+        live = await _stored_project(storage, (creator, Role.OWNER))
+        gone = await _stored_project(storage, (creator, Role.OWNER))
+        async with storage.unit_of_work() as uow:
+            await uow.projects.save(gone.deleted(NOW))
+            await uow.memberships.remove_all_for_project(live.id)
+            await uow.commit()
+
+        async with storage.unit_of_work() as uow:
+            listed = [p.id for p in await uow.projects.list_live()]
+
+        assert listed == [live.id]
+
     async def test_a_stale_copy_cannot_overwrite_a_newer_one(self, storage):
         """One owner renames while another, holding an older copy, archives."""
         (creator,) = await _users(storage, 1)

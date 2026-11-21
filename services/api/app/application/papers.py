@@ -21,6 +21,7 @@ from app.application.run_log import RunLog
 from app.domain.accounts import NotFoundError
 from app.domain.briefs import BriefCitations
 from app.domain.comparisons import RunPapers, ScreenedPaper
+from app.domain.coverage import CoverageEstimate, estimate_coverage
 from app.domain.discovery import (
     IngestedText,
     PaperSet,
@@ -379,12 +380,16 @@ class PaperRow:
 
 @dataclass(frozen=True, slots=True)
 class PaperPage:
+    """One page of the screening table; `coverage` is the whole run's, under `rules_version`."""
+
     run_id: UUID
     page: int
     page_size: int
     total: int
     counts: dict[str, int]
     rows: tuple[PaperRow, ...]
+    coverage: CoverageEstimate
+    rules_version: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,6 +452,22 @@ def prisma_for(
         ),
         after_deduplication=papers,
         decisions=decisions,
+    )
+
+
+def coverage_of(
+    sources: Sequence[RunSource],
+    papers: Sequence[RunPaper],
+    decisions: Sequence[StoredDecision],
+    *,
+    is_screening_finished: bool,
+) -> CoverageEstimate:
+    """The run's coverage estimate, counting its included papers as the relevant ones."""
+    relevant = {d.paper_id for d in decisions if d.label is ScreeningLabel.INCLUDE}
+    return estimate_coverage(
+        searched_sources=[s.source_id for s in sources if s.outcome is SourceOutcome.SEARCHED],
+        relevant_found_by=[p.found_by for p in papers if p.paper_id in relevant],
+        is_screening_finished=is_screening_finished,
     )
 
 
@@ -593,6 +614,13 @@ class PaperService:
                 rows=tuple(
                     [await self._row(uow, run, p, d, why, cited, labelled) for p, d in chosen]
                 ),
+                coverage=coverage_of(
+                    await self._store.run_sources(uow, run),
+                    papers,
+                    labelled.decisions,
+                    is_screening_finished=all(s != NOT_SCREENED for s, _ in why.values()),
+                ),
+                rules_version=labelled.rules_version,
             )
 
     async def paper(

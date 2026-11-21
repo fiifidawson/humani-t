@@ -1,6 +1,6 @@
 /**
- * Per-browser display preferences: theme, reduced motion, single-key shortcuts, the
- * folded rail, the rail's open collections and panel widths.
+ * Per-browser display preferences: theme, reduced motion, low data mode, single-key
+ * shortcuts, the folded rail, the rail's open collections and panel widths.
  * Only these live in localStorage. They say nothing about a project or a
  * person's work; question text never goes there (UI_UX_SPEC §13.2).
  */
@@ -118,6 +118,37 @@ export function useReducedMotion(): [boolean, (isReduced: boolean) => void] {
 		write(MOTION_KEY, value ? "true" : null);
 	}, []);
 	return [isReduced, setReduced];
+}
+
+const LOW_DATA_KEY = "humani-t:low-data";
+const LOW_DATA_OFFER_KEY = "humani-t:low-data-offered";
+
+export function readLowData(): boolean {
+	return read(LOW_DATA_KEY) === "true";
+}
+
+/** System fonts and no motion (theme/system.ts); run progress reads readLowData(). */
+export function applyLowData(isOn: boolean): void {
+	document.documentElement.toggleAttribute("data-low-data", isOn);
+}
+
+export function useLowData(): [boolean, (isOn: boolean) => void] {
+	const isOn = useSyncExternalStore(subscribe, readLowData);
+	const setOn = useCallback((value: boolean) => {
+		applyLowData(value);
+		write(LOW_DATA_KEY, value ? "true" : null);
+	}, []);
+	return [isOn, setOn];
+}
+
+/** Whether the person has answered the one-time offer of low data mode, either way. */
+export function useLowDataOfferAnswered(): [boolean, () => void] {
+	const isAnswered = useSyncExternalStore(
+		subscribe,
+		() => read(LOW_DATA_OFFER_KEY) === "answered",
+	);
+	const answer = useCallback(() => write(LOW_DATA_OFFER_KEY, "answered"), []);
+	return [isAnswered, answer];
 }
 
 /** On unless the person turned them off (WCAG 2.1.4); read at each key press. */

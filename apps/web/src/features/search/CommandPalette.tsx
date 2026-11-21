@@ -565,13 +565,14 @@ export function CommandPalette({
 			<Portal>
 				<ChakraDialog.Backdrop bg="scrim" />
 				{/* Outside AppShell's zoom, as ui/Dialog.tsx explains. */}
-				<ChakraDialog.Positioner px="4" css={{ zoom: COMPACT_ZOOM }}>
+				<ChakraDialog.Positioner px="4">
 					<ChakraDialog.Content
 						bg="bg.panel"
 						rounded="card"
 						maxW="2xl"
 						w="full"
 						overflow="hidden"
+						css={{ zoom: COMPACT_ZOOM }}
 					>
 						<ChakraDialog.Title srOnly>Search and commands</ChakraDialog.Title>
 						<Palette onClose={onClose} />

@@ -193,6 +193,8 @@ projects = Table(
     Column("version", Integer, nullable=False, server_default="0"),
     Column("is_masking_on", Boolean, nullable=False, server_default="true"),
     Column("is_view_first_on", Boolean, nullable=False, server_default="false"),
+    Column("kept_at", DateTime(timezone=True), nullable=True),
+    Column("read_at", DateTime(timezone=True), nullable=True),
 )
 
 memberships = Table(
@@ -640,4 +642,44 @@ needs_you_dismissals = Table(
     Column("user_id", Uuid, ForeignKey("users.id"), primary_key=True),
     Column("item_key", String(120), primary_key=True),
     Column("dismissed_at", DateTime(timezone=True), nullable=False),
+)
+
+# Evaluations (ADR 0022): the row is also the job. Counts and state in the clear; the
+# questions, every answer and every judgement sealed under the project's key.
+evaluations = Table(
+    "evaluations",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("project_id", Uuid, ForeignKey("projects.id"), nullable=False, index=True),
+    Column("review_id", Uuid, ForeignKey("reviews.id"), nullable=False),
+    Column("created_by", Uuid, ForeignKey("users.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("judge_model", String(256), nullable=False),
+    Column("question_count", SmallInteger, nullable=False),
+    Column("system_count", SmallInteger, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("setup_sealed", LargeBinary, nullable=False),
+    Column("results_sealed", LargeBinary, nullable=True),
+    Column("answered_count", SmallInteger, nullable=False),
+    Column("writer_model", String(256), nullable=True),
+    Column("attempts", SmallInteger, nullable=False),
+    Column("lease_owner", String(128), nullable=True),
+    Column("lease_expires_at", DateTime(timezone=True), nullable=True),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+    Column("error", String(300), nullable=True),
+    Column("version", Integer, nullable=False, server_default="0"),
+    CheckConstraint(
+        "status IN ('queued', 'running', 'finished', 'failed')", name="status_is_known"
+    ),
+    CheckConstraint(
+        "(lease_owner IS NULL) = (lease_expires_at IS NULL)", name="lease_is_whole"
+    ),
+    CheckConstraint(
+        "answered_count BETWEEN 0 AND question_count", name="answered_within_questions"
+    ),
+    Index(
+        "ix_evaluations_queue",
+        "created_at",
+        postgresql_where=text("status IN ('queued', 'running')"),
+    ),
 )

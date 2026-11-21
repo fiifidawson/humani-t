@@ -512,6 +512,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/evaluations/judges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The models an evaluation may be judged by
+         * @description Only models the operator configured. The judge should be from another model family.
+         */
+        get: operations["judge_models_api_v1_admin_evaluations_judges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evaluations of the projects you are a member of, newest first */
+        get: operations["list_evaluations_api_v1_admin_evaluations_get"];
+        put?: never;
+        /**
+         * Start an evaluation; it is answered and judged in the background
+         * @description The files are masked as the project chooses before they are stored or sent.
+         */
+        post: operations["start_evaluation_api_v1_admin_evaluations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/evaluations/{evaluation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One evaluation: poll it until it has finished */
+        get: operations["read_evaluation_api_v1_admin_evaluations__evaluation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -1778,6 +1836,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How long this deployment keeps a project after its activity */
+        get: operations["read_policy_api_v1_retention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** When the project will be deleted */
+        get: operations["read_project_retention_api_v1_projects__project_id__retention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/retention/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keep the project: restart its retention clock */
+        post: operations["keep_project_api_v1_projects__project_id__retention_keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1970,47 +2079,6 @@ export interface components {
              * @description null skips the question.
              */
             answer?: string | null;
-        };
-        /** AnswerOut */
-        AnswerOut: {
-            /**
-             * Claims
-             * @description Up to 6; empty when nothing answers it.
-             */
-            claims: components["schemas"]["ClaimOut"][];
-            /** Nothing Found */
-            nothing_found: boolean;
-            /**
-             * Message
-             * @description "Nothing in this project answers that." when nothing answers it.
-             */
-            message: string | null;
-            /**
-             * Run Id
-             * @description The run whose evidence was searched.
-             */
-            run_id: string | null;
-            /**
-             * Sources
-             * @description Every cited tag, by first appearance.
-             */
-            sources: components["schemas"]["AnswerSourceOut"][];
-            /**
-             * Steps
-             * @description How the answer was made, in order.
-             */
-            steps: components["schemas"]["AgentStepOut"][];
-            /** Rounds */
-            rounds: number;
-            /** Kept Round */
-            kept_round: number;
-            /**
-             * Stopped Because
-             * @description Null when no model was asked.
-             */
-            stopped_because: string | null;
-            /** Warnings */
-            warnings: components["schemas"]["ProblemOut"][];
         };
         /** AnswerSourceOut */
         AnswerSourceOut: {
@@ -2463,6 +2531,66 @@ export interface components {
             option: string;
             because: components["schemas"]["ClaimOut"];
         };
+        /** CoverageIntervalOut */
+        CoverageIntervalOut: {
+            /**
+             * Sources
+             * @description The pair of sources the range comes from.
+             */
+            sources: string[];
+            /**
+             * Estimated Total
+             * @description Chapman's estimate of all relevant papers.
+             */
+            estimated_total: number;
+            /**
+             * Low Percent
+             * @description Lower end of the 95% range, rounded down to 5.
+             */
+            low_percent: number;
+            /**
+             * High Percent
+             * @description Upper end of the 95% range, rounded up to 5.
+             */
+            high_percent: number;
+        };
+        /**
+         * CoverageOut
+         * @description An estimate of the share of relevant papers found (ADR 0021), or why there is none.
+         */
+        CoverageOut: {
+            /**
+             * Method
+             * @description How it was worked out: chapman-pairs.
+             */
+            method: string;
+            /** Method Version */
+            method_version: number;
+            /**
+             * Rules Version
+             * @description The label rules version whose labels were counted; null: the model's.
+             */
+            rules_version: number | null;
+            /**
+             * Relevant Found
+             * @description Papers labelled included in this run.
+             */
+            relevant_found: number;
+            /**
+             * Searched Sources
+             * @description Sources that answered, in name order.
+             */
+            searched_sources: string[];
+            /**
+             * Overlaps
+             * @description The counts, for each pair.
+             */
+            overlaps: components["schemas"]["SourceOverlapOut"][];
+            /** @description Null when there is no estimate. */
+            interval: components["schemas"]["CoverageIntervalOut"] | null;
+            /** @description Set exactly when `interval` is null. */
+            no_estimate_because: components["schemas"]["NoEstimateReason"] | null;
+        };
         /** CriterionAnswerOut */
         CriterionAnswerOut: {
             /**
@@ -2517,6 +2645,11 @@ export interface components {
             session: components["schemas"]["SessionOut"];
             /** Mfa Enrolment Required */
             mfa_enrolment_required: boolean;
+            /**
+             * Can Evaluate
+             * @description An instance admin on a deployment with evaluations turned on (ADR 0022).
+             */
+            can_evaluate: boolean;
         };
         /**
          * DecisionIn
@@ -2828,6 +2961,141 @@ export interface components {
          * @enum {string}
          */
         EntityType: "PERSON" | "LOCATION" | "DATE" | "EMAIL" | "PHONE" | "MEDICAL_RECORD" | "ID_NUMBER" | "PASSPORT" | "IBAN" | "CARD_NUMBER" | "IP_ADDRESS" | "COORDINATES";
+        /** EvaluationIn */
+        EvaluationIn: {
+            /**
+             * Project Id
+             * Format: uuid
+             * @description A project the administrator is a member of.
+             */
+            project_id: string;
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Question File
+             * @description Plain text: one question per line.
+             */
+            question_file: string;
+            /**
+             * Other Systems
+             * @default []
+             */
+            other_systems: components["schemas"]["OtherSystemIn"][];
+        };
+        /** EvaluationOut */
+        EvaluationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            status: components["schemas"]["EvaluationStatus"];
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Writer Model
+             * @description Known once the first question is answered.
+             */
+            writer_model: string | null;
+            /** Question Count */
+            question_count: number;
+            /**
+             * Answered Count
+             * @description Questions answered and judged so far.
+             */
+            answered_count: number;
+            /**
+             * System Count
+             * @description Other systems compared with humani-t.
+             */
+            system_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Systems
+             * @description humani-t first, then the other systems.
+             */
+            systems: string[];
+            /**
+             * Is Masked
+             * @description Whether the upload was masked before it was stored.
+             */
+            is_masked: boolean;
+            /**
+             * Masked
+             * @description Masked values by type, over the whole upload.
+             */
+            masked: {
+                [key: string]: number;
+            };
+            /** Judge Prompt Version */
+            judge_prompt_version: string;
+            /** Results */
+            results: components["schemas"]["PairResultOut"][];
+            /** Answers */
+            answers: components["schemas"]["app__api__schemas__evaluations__AnswerOut"][];
+            /** Judgements */
+            judgements: components["schemas"]["JudgementOut"][];
+        };
+        /**
+         * EvaluationStatus
+         * @enum {string}
+         */
+        EvaluationStatus: "queued" | "running" | "finished" | "failed";
+        /** EvaluationSummaryOut */
+        EvaluationSummaryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            status: components["schemas"]["EvaluationStatus"];
+            /** Judge Model */
+            judge_model: string;
+            /**
+             * Writer Model
+             * @description Known once the first question is answered.
+             */
+            writer_model: string | null;
+            /** Question Count */
+            question_count: number;
+            /**
+             * Answered Count
+             * @description Questions answered and judged so far.
+             */
+            answered_count: number;
+            /**
+             * System Count
+             * @description Other systems compared with humani-t.
+             */
+            system_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Error */
+            error: string | null;
+        };
         /** EvidenceOut */
         EvidenceOut: {
             /** Tag */
@@ -3089,6 +3357,43 @@ export interface components {
              */
             event: "job.finished";
             data: components["schemas"]["JobFinishedData"];
+        };
+        /** JudgeModelsOut */
+        JudgeModelsOut: {
+            /**
+             * Writer Model
+             * @description The model that writes humani-t's answers.
+             */
+            writer_model: string;
+            /**
+             * Judge Models
+             * @description Only models the operator configured; the writer's own is first.
+             */
+            judge_models: string[];
+        };
+        /** JudgementOut */
+        JudgementOut: {
+            /** Position */
+            position: number;
+            /** Question */
+            question: string;
+            /**
+             * System A
+             * @description Which system wrote answer A. The judge never saw it.
+             */
+            system_a: string;
+            /** System B */
+            system_b: string;
+            /** Answer A */
+            answer_a: string;
+            /** Answer B */
+            answer_b: string;
+            scores_a: components["schemas"]["QualityOut"];
+            scores_b: components["schemas"]["QualityOut"];
+            /** @description a, b or tie, as the judge said it. */
+            winner: components["schemas"]["Verdict"];
+            /** Reason */
+            reason: string;
         };
         /** LabelChangeOut */
         LabelChangeOut: {
@@ -3418,6 +3723,20 @@ export interface components {
         MemberRoleIn: {
             role: components["schemas"]["Role"];
         };
+        /** MetricOut */
+        MetricOut: {
+            /** Metric */
+            metric: string;
+            /** First Mean */
+            first_mean: number;
+            /** Second Mean */
+            second_mean: number;
+            /**
+             * Difference
+             * @description first_mean minus second_mean.
+             */
+            difference: number;
+        };
         /** MfaStatusOut */
         MfaStatusOut: {
             /** Is Enrolled */
@@ -3526,9 +3845,9 @@ export interface components {
             project: components["schemas"]["ProjectRefOut"];
             /**
              * Review Id
-             * Format: uuid
+             * @description Null only for a retention notice.
              */
-            review_id: string;
+            review_id: string | null;
             /**
              * At
              * Format: date-time
@@ -3557,12 +3876,22 @@ export interface components {
             version: number | null;
             /** Brief Id */
             brief_id: string | null;
+            /**
+             * Deletes At
+             * @description A retention notice's deletion date.
+             */
+            deletes_at: string | null;
+            /**
+             * Days Left
+             * @description Whole days until then, rounded up.
+             */
+            days_left: number | null;
         };
         /**
          * NeedsYouKind
          * @enum {string}
          */
-        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief";
+        NeedsYouKind: "gate" | "draft" | "failed_run" | "unread_brief" | "retention";
         /** NeedsYouOut */
         NeedsYouOut: {
             /**
@@ -3576,6 +3905,11 @@ export interface components {
              */
             items: components["schemas"]["NeedsYouItemOut"][];
         };
+        /**
+         * NoEstimateReason
+         * @enum {string}
+         */
+        NoEstimateReason: "screening_unfinished" | "one_source" | "too_few_overlaps" | "sources_nested";
         /** OptionOut */
         OptionOut: {
             /** Name */
@@ -3587,6 +3921,36 @@ export interface components {
             benefits: components["schemas"]["ClaimOut"][];
             /** Risks */
             risks: components["schemas"]["ClaimOut"][];
+        };
+        /** OtherSystemIn */
+        OtherSystemIn: {
+            /** Name */
+            name: string;
+            /**
+             * Answers File
+             * @description JSON Lines: one {"answer": "…"} per line, in the questions' order.
+             */
+            answers_file: string;
+        };
+        /**
+         * PairResultOut
+         * @description Two systems over every question judged so far, from the first system's side.
+         */
+        PairResultOut: {
+            /** First */
+            first: string;
+            /** Second */
+            second: string;
+            /** Judged */
+            judged: number;
+            /** Metrics */
+            metrics: components["schemas"]["MetricOut"][];
+            /** Wins */
+            wins: number;
+            /** Ties */
+            ties: number;
+            /** Losses */
+            losses: number;
         };
         /** PaperDetailOut */
         PaperDetailOut: {
@@ -3707,6 +4071,8 @@ export interface components {
             };
             /** Papers */
             papers: components["schemas"]["PaperOut"][];
+            /** @description For the whole run under the labels shown; the same on every page. */
+            coverage: components["schemas"]["CoverageOut"];
         };
         /** PassageOut */
         PassageOut: {
@@ -4002,6 +4368,29 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ProjectRetentionOut */
+        ProjectRetentionOut: {
+            /**
+             * Period Days
+             * @description The deployment's period; null: never.
+             */
+            period_days: number | null;
+            /**
+             * Deletes At
+             * @description When the project will be deleted.
+             */
+            deletes_at: string | null;
+            /**
+             * Days Left
+             * @description Whole days until then, rounded up; 0 when due.
+             */
+            days_left: number | null;
+            /**
+             * Kept At
+             * @description An owner's latest Keep, if any.
+             */
+            kept_at: string | null;
+        };
         /**
          * ProjectSort
          * @enum {string}
@@ -4223,6 +4612,19 @@ export interface components {
             password: string;
             /** Display Name */
             display_name: string;
+        };
+        /** RetentionPolicyOut */
+        RetentionPolicyOut: {
+            /**
+             * Period Days
+             * @description Days after a project's last activity until it is deleted; null: never.
+             */
+            period_days: number | null;
+            /**
+             * Warning Days
+             * @description Owners are told this many days before.
+             */
+            warning_days: number;
         };
         /** ReviewDecisionOut */
         ReviewDecisionOut: {
@@ -4732,6 +5134,29 @@ export interface components {
              */
             citations: number;
         };
+        /** SourceOverlapOut */
+        SourceOverlapOut: {
+            /**
+             * Sources
+             * @description Two sources searched, in name order.
+             */
+            sources: string[];
+            /**
+             * First Found
+             * @description Relevant papers the first source found.
+             */
+            first_found: number;
+            /**
+             * Second Found
+             * @description Relevant papers the second source found.
+             */
+            second_found: number;
+            /**
+             * Both Found
+             * @description Relevant papers both found.
+             */
+            both_found: number;
+        };
         /** SourceQueryOut */
         SourceQueryOut: {
             /** Source */
@@ -5171,6 +5596,12 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Verdict
+         * @description Which answer the judge preferred, by the letter it saw.
+         * @enum {string}
+         */
+        Verdict: "a" | "b" | "tie";
         /** VersionOut */
         VersionOut: {
             /** Version */
@@ -5290,6 +5721,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** AnswerOut */
+        app__api__schemas__evaluations__AnswerOut: {
+            /** Position */
+            position: number;
+            /**
+             * Question
+             * @description As stored and sent: masked when masking is on.
+             */
+            question: string;
+            /**
+             * Answer
+             * @description humani-t's answer, as the judge read it.
+             */
+            answer: string;
+        };
         /** QuestionOut */
         app__api__schemas__plans__QuestionOut: {
             /** Id */
@@ -5302,6 +5748,47 @@ export interface components {
             answer: string | null;
             /** Skipped */
             skipped: boolean;
+        };
+        /** AnswerOut */
+        app__api__schemas__questions__AnswerOut: {
+            /**
+             * Claims
+             * @description Up to 6; empty when nothing answers it.
+             */
+            claims: components["schemas"]["ClaimOut"][];
+            /** Nothing Found */
+            nothing_found: boolean;
+            /**
+             * Message
+             * @description "Nothing in this project answers that." when nothing answers it.
+             */
+            message: string | null;
+            /**
+             * Run Id
+             * @description The run whose evidence was searched.
+             */
+            run_id: string | null;
+            /**
+             * Sources
+             * @description Every cited tag, by first appearance.
+             */
+            sources: components["schemas"]["AnswerSourceOut"][];
+            /**
+             * Steps
+             * @description How the answer was made, in order.
+             */
+            steps: components["schemas"]["AgentStepOut"][];
+            /** Rounds */
+            rounds: number;
+            /** Kept Round */
+            kept_round: number;
+            /**
+             * Stopped Because
+             * @description Null when no model was asked.
+             */
+            stopped_because: string | null;
+            /** Warnings */
+            warnings: components["schemas"]["ProblemOut"][];
         };
         /** QuestionOut */
         app__api__schemas__questions__QuestionOut: {
@@ -5363,7 +5850,7 @@ export interface components {
              * @description Why it failed, in plain words.
              */
             error: string | null;
-            answer: components["schemas"]["AnswerOut"] | null;
+            answer: components["schemas"]["app__api__schemas__questions__AnswerOut"] | null;
         };
     };
     responses: never;
@@ -6186,6 +6673,117 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    judge_models_api_v1_admin_evaluations_judges_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeModelsOut"];
+                };
+            };
+        };
+    };
+    list_evaluations_api_v1_admin_evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationSummaryOut"][];
+                };
+            };
+        };
+    };
+    start_evaluation_api_v1_admin_evaluations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
+                };
+            };
+            /** @description No such project, or you are not a member of it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_evaluation_api_v1_admin_evaluations__evaluation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -9135,6 +9733,95 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    read_policy_api_v1_retention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyOut"];
+                };
+            };
+        };
+    };
+    read_project_retention_api_v1_projects__project_id__retention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRetentionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_project_api_v1_projects__project_id__retention_keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRetentionOut"];
+                };
+            };
+            /** @description The deployment sets no retention period */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

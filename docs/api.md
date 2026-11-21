@@ -48,6 +48,10 @@ Then <http://127.0.0.1:8731/docs>.
 | `POST` | `/api/v1/admin/invitations` | admin | Invite someone by email |
 | `POST` | `/api/v1/admin/users/{id}/disable` | admin | Disable an account |
 | `POST` | `/api/v1/admin/users/{id}/enable` | admin | Let a disabled account sign in again |
+| `GET` | `/api/v1/admin/evaluations/judges` | admin | The models an evaluation may be judged by |
+| `GET` | `/api/v1/admin/evaluations` | admin | Evaluations of the projects you are a member of, newest first |
+| `POST` | `/api/v1/admin/evaluations` | admin | Start an evaluation (member who may ask questions); judged in the background |
+| `GET` | `/api/v1/admin/evaluations/{evaluation_id}` | admin | One evaluation, its results and judgements (any member) |
 | `POST` | `/api/v1/projects` | projects | Create a project; the caller becomes its owner |
 | `GET` | `/api/v1/projects` | projects | The caller's projects, filtered and sorted, with what grouping needs |
 | `GET` | `/api/v1/projects/{project_id}` | projects | One project (any member) |
@@ -228,7 +232,7 @@ The caller's projects, each a `ProjectOut` with what the All projects page group
 }
 ```
 
-`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, and its latest brief. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
+`last_activity_at` is the latest of: created, archived, the newest review's creation, its newest run's creation, start or finish, its latest brief, and its latest follow-up question. `relevant_papers` counts included papers of the newest review's newest run with papers, under the review's latest label rules ([ADR-0013](adr/0013-label-rules-applied-on-read.md)); `papers_found` is that run's papers after duplicates. Both are `null` before there are papers; `brief_version` is `null` before a brief.
 
 Query parameters, all optional, all of which must hold:
 
@@ -463,7 +467,9 @@ Read-only routes for every member, viewers included (`project.read`). Each resol
 
 ### `GET /api/v1/reviews/{review_id}/papers?run_id=&label=&tier=&page=`
 
-**Response** `200` `{"run_id", "page", "page_size": 50, "total", "counts", "papers": [PaperOut]}`, most relevant first (by tier, then place). `tier` filters by chip: `highly_relevant`, `relevant`, `possibly_relevant`, `excluded`, `uncertain`, `skipped`, `failed` or `not_screened`. `label` (`include`, `exclude`, `uncertain` or `unscreened`) still works and combines with `tier`. Anything else is `422`. `total` counts the papers matching the filter; `counts` the run's papers per tier, `unscreened` (every paper without a decision) and, of those, `skipped`, `failed` and `not_screened`, for the filter chips. A page past the end is empty. `404` when the review has no papers yet, or `run_id` is not one of its runs.
+**Response** `200` `{"run_id", "page", "page_size": 50, "total", "counts", "papers": [PaperOut], "coverage": CoverageOut}`, most relevant first (by tier, then place). `tier` filters by chip: `highly_relevant`, `relevant`, `possibly_relevant`, `excluded`, `uncertain`, `skipped`, `failed` or `not_screened`. `label` (`include`, `exclude`, `uncertain` or `unscreened`) still works and combines with `tier`. Anything else is `422`. `total` counts the papers matching the filter; `counts` the run's papers per tier, `unscreened` (every paper without a decision) and, of those, `skipped`, `failed` and `not_screened`, for the filter chips. A page past the end is empty. `404` when the review has no papers yet, or `run_id` is not one of its runs.
+
+`coverage` is the run's coverage estimate (UI_UX_SPEC §6.8, [ADR-0021](adr/0021-coverage-is-a-capture-recapture-estimate.md)), the same on every page and filter: `{"method": "chapman-pairs", "method_version": 1, "rules_version", "relevant_found", "searched_sources", "overlaps": [{"sources": [a, b], "first_found", "second_found", "both_found"}], "interval": {"sources": [a, b], "estimated_total", "low_percent", "high_percent"}|null, "no_estimate_because"}`. Relevant papers are those the table labels included, under the label rules version `rules_version` (`null`: the model's labels). `searched_sources` are the sources that answered, in name order, and `overlaps` gives the counts for each pair of them. `interval` is a 95% range for the share of relevant papers found, rounded outward to whole fives, from the pair of sources that suggests the most papers missed. Exactly one of `interval` and `no_estimate_because` is set; the reason is `screening_unfinished` (some papers are not screened yet), `one_source`, `too_few_overlaps` (no pair of sources shares at least 7 relevant papers) or `sources_nested` (every pair that shares enough has one source that found nothing relevant the other did not). The Screen stage records the estimate it worked out from the model's labels under `coverage` in its manifest facts (`GET /api/v1/runs/{run_id}/manifest`, `stage_facts`).
 
 ### `GET /api/v1/reviews/{review_id}/papers/{paper_id}?run_id=`
 
@@ -772,9 +778,9 @@ Downloads of a review's results (UI_UX_SPEC §6.8, §6.9, §15 P2). Each file is
 | `manifest.json` | `application/json` | `GET /runs/{run_id}/manifest`, as a file. |
 | `brief.json` | `application/json` | `GET …/brief`, as a file. |
 | `brief.md` | `text/markdown; charset=utf-8` | The brief in the canvas's order: header with the caveat, bottom line, options, trade-offs, disagreements, considerations, gaps, sources. Reasoning claims are marked "reasoning, not a source". |
-| `brief.html` | `text/html; charset=utf-8` | The same, print-ready: the browser's "Save as PDF" makes the PDF. The caveat sits in a fixed footer that repeats on every printed page. No script; every text is escaped. |
+| `brief.html` | `text/html; charset=utf-8` | The same, print-ready: the browser's "Save as PDF" makes the PDF ([ADR 0019](adr/0019-the-brief-pdf-is-made-by-the-browser.md)). The caveat is in a table footer, which browsers repeat on every printed page, and the sources come last. A line saying how to save it shows on screen only. No script; every text is escaped. |
 
-Without `run_id`, each export uses the run its screen shows by default: the newest run with papers for the dataset, RIS, PRISMA and manifest, the newest brief for the brief. **Response** `200` with the file, `Content-Disposition: attachment; filename="humani-t-run-<first 8 hex of the run id>-<name>"`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. `404` for an unknown name, a run of another review, a review with no papers yet, or no brief yet.
+Without `run_id`, each export uses the run its screen shows by default: the newest run with papers for the dataset, RIS, PRISMA and manifest, the newest brief for the brief. **Response** `200` with the file, `Content-Disposition: attachment; filename="humani-t-run-<first 8 hex of the run id>-<name>"`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. `brief.html` alone is `inline` instead of `attachment`, so it opens in a tab, and its `Content-Security-Policy` allows only its own stylesheet, by hash: `default-src 'none'; style-src 'sha256-…'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`. `404` for an unknown name, a run of another review, a review with no papers yet, or no brief yet.
 
 ### Audit
 
@@ -878,11 +884,11 @@ The worker (`python -m app.worker`, or the in-process worker in development) cla
 
 ## History and marks
 
-Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity.
+Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) are derived each time from records already kept: reviews, plan versions, runs and their event logs, gates, briefs, follow-up questions, documents and label rule versions. There is no separate event store; the only things written here are a person's dismissals and marks. Only projects the caller is a member of are read, so no line, count or order can say anything about another project. Archived projects are left out of Needs you and Recent activity, except for a `retention` notice.
 
 ### `GET /api/v1/needs-you`
 
-**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id"}`; fields a kind does not use are `null`. Kinds, and who sees them:
+**Response** `200` `{"count": 3, "items": [NeedsYouItemOut]}`, newest first. Each item is `{"key", "kind", "project": {"id", "name"}, "review_id", "at", "gate_id", "gate_kind", "run_id", "run_number", "stopped_at", "version", "brief_id", "deletes_at", "days_left"}`; fields a kind does not use are `null`. Kinds, and who sees them:
 
 | `kind` | Listed while | For | `key` |
 | --- | --- | --- | --- |
@@ -890,6 +896,7 @@ Needs you, Recent activity and the project timeline (UI_UX_SPEC §7.1, §7.4) ar
 | `draft` | the review is drafting and its latest plan version is not accepted | owners and reviewers | `draft:<review_id>:<version>` |
 | `failed_run` | the review's latest run failed; `stopped_at` is the stage it did not finish | owners and reviewers | `failed_run:<run_id>` |
 | `unread_brief` | the review's newest brief has not been opened by the caller | every member | `unread_brief:<brief_id>` |
+| `retention` | the project is within 14 days of its retention date, archived or not; `review_id` is `null`, `deletes_at` and `days_left` (rounded up, `0` when due) say when, `at` is when the warning began | owners | `retention:<project_id>:<date>` |
 
 ### `POST /api/v1/needs-you/dismissals`
 
@@ -916,6 +923,30 @@ A mark is per person (UI_UX_SPEC §7.5). A paper is matched across projects by t
 ### Audit
 
 None. Marks and dismissals record what one person read or chose to hide, not a decision about the evidence; they hold ids only.
+
+## Retention
+
+The operator may set a retention period (`HUMANI_T_RETENTION_DAYS`, 30 to 3650; unset by default, and then nothing is deleted for age). A project is deleted that many days after its last activity, or after an owner's latest Keep if that is later ([ADR 0020](adr/0020-retention-counts-from-last-activity.md)). Last activity is the project list's `last_activity_at`: created, archived, its newest review, and that review's latest run, brief and follow-up question. Opening a paper or a brief (`PUT …/seen`, `…/saved`) also restarts the clock, recorded at most once a day. Nothing stores the date; it is worked out on each read.
+
+### `GET /api/v1/retention`
+
+**Response** `200` `{"period_days": 365, "warning_days": 14}`; `period_days` is `null` when nothing is deleted for age. **Who:** any signed-in person; it is the deployment's setting, not a project's.
+
+### `GET /api/v1/projects/{project_id}/retention`
+
+**Response** `200` `{"period_days", "deletes_at", "days_left", "kept_at"}`. `deletes_at` and `days_left` are `null` when the deployment sets no period; `days_left` is whole days, rounded up, `0` once due. `kept_at` is the latest Keep. **Who:** any member; a non-member gets `404`.
+
+### `POST /api/v1/projects/{project_id}/retention/keep`
+
+Restart the project's clock from now. No body. **Response** `200`, the same shape as above. **Who:** owners (`403` for reviewers and viewers, `404` for non-members). `409` when the deployment sets no period. No recent sign-in needed: keeping only preserves.
+
+### Deletion when due
+
+The worker sweeps hourly. For each project whose date has passed it takes the project's row lock, works the date out again, and only then deletes it through the same path as `DELETE /projects/{id}`: the key is destroyed, memberships, pins, placements and tags go, and the row stays as a tombstone. A Keep takes the same lock, so whichever comes second sees the first. Running the sweep twice, or in two workers, deletes once.
+
+### Audit
+
+`project.kept` (actor: the owner) when kept. A deletion for age records `project.retention_expired` and then `project.deleted`, in one transaction, both with no actor (the system). Ids only: the reason is its own event because audit details are sealed under the key the deletion destroys.
 
 ## Search across projects
 
@@ -951,6 +982,49 @@ It searches only text every member already reads: project names and review quest
 **Limits:** at most 5 hits per scope in a project and 50 in all; at most 100 projects are searched, and the search stops once 50 hits are found. `is_truncated` is `true` when any limit was reached. `422` for a query out of bounds or an unknown scope. `429` with `Retry-After` after 60 searches in a minute by one person.
 
 ---
+
+## Evaluations
+
+humani-t's answers against other systems', judged blind by a model the operator configured (UI_UX_SPEC §6.15, [ADR 0022](adr/0022-evaluations-are-judged-blind-inside-their-project.md)). An evaluation belongs to one project: everything in it is sealed under the project's key and goes with the project.
+
+**Off until the operator turns it on.** While `HUMANI_T_EVALUATIONS_ENABLED` is false (the default), every route below answers `404` to everyone, administrators included, the worker judges nothing, and `GET /auth/session` answers `"can_evaluate": false`. The web app shows the Evaluations link only when `can_evaluate` is true: an instance administrator on a deployment with evaluations on.
+
+**Who:** instance administrators only; anyone else gets `403` before the body is read. Admin status alone opens nothing: starting one also needs membership of the project with a role that may ask questions (owner or reviewer), reading one any membership. A non-member gets the same `404` as for a missing project or evaluation.
+
+### `GET /api/v1/admin/evaluations/judges`
+
+`200` `{"writer_model": "qwen3.5:9b", "judge_models": ["qwen3.5:9b", "mistral-small:24b"]}`: the deployment's own model first, then `HUMANI_T_JUDGE_MODELS`. The judge should be from a different model family than the writer.
+
+### `POST /api/v1/admin/evaluations`
+
+```json
+{
+  "project_id": "…",
+  "judge_model": "mistral-small:24b",
+  "question_file": "Do cash transfers raise prices?\nWhich markets recover first?",
+  "other_systems": [{"name": "System B", "answers_file": "{\"answer\": \"…\"}\n{\"answer\": \"…\"}"}]
+}
+```
+
+The files travel as their text. `question_file` is plain text, one question per line (blank lines skipped, 1 to 50 questions of at most 2,000 characters, at most 200,000 characters in all). Each `answers_file` is JSON Lines, one `{"answer": "…"}` per question in the same order (at most 8,000 characters an answer, 500,000 in all). At most 2 other systems, each named 1 to 60 characters, distinct, and not `humani-t`; with none, humani-t answers and nothing is judged. The questions and answers are masked as the project's masking choice says before they are stored. humani-t answers from the project's latest review.
+
+`202` with `Location: /api/v1/admin/evaluations/{id}` and an `EvaluationOut`, `status` `queued`. `422` for a file the rules refuse (the message names the line), a judge the deployment does not offer, or a project with no review yet.
+
+### `GET /api/v1/admin/evaluations`
+
+`200` a list of summaries, newest first: `id`, `project_id`, `status` (`queued`, `running`, `finished`, `failed`), `judge_model`, `writer_model` (once the first question is answered), `question_count`, `answered_count`, `system_count`, `created_at`, `finished_at`, `error` (a plain sentence when failed).
+
+### `GET /api/v1/admin/evaluations/{evaluation_id}`
+
+`200` `EvaluationOut`: the summary, plus `systems` (`humani-t` first), `is_masked`, `masked` (counts by type over the upload), `judge_prompt_version`, `answers` (`position`, `question`, humani-t's `answer`), `judgements` (`position`, `question`, `system_a`, `system_b`, `answer_a`, `answer_b`, `scores_a`, `scores_b` with the six quality checks 0 to 2, `winner` `a`, `b` or `tie`, `reason`) and `results`, one per other system judged so far: `first` (humani-t), `second`, `judged`, `wins`, `ties`, `losses` (from humani-t's side) and `metrics`, each `{metric, first_mean, second_mean, difference}` rounded to 2 places. Poll while `queued` or `running`.
+
+### The judging worker
+
+Runs in the worker process. For each question it answers with the follow-up pipeline, then for each other system asks the judge to compare the two answers, shown as A and B in an order drawn at random and recorded. The judge never sees system names or humani-t's citation tags. Progress is saved after each question, so a failure keeps what was judged. A lapsed lease is retried once. If the project's masking was turned on after an upload made with it off, the evaluation stops before anything is sent.
+
+### Audit
+
+`evaluation.started` (target `evaluation`), with the question and system counts. No question, answer or system name.
 
 ## Semantics
 

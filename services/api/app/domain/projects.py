@@ -159,6 +159,10 @@ class Project:
     is_masking_on: bool = True
     # "Your view first" (UI_UX_SPEC §6.9): off unless an owner turns it on (§16 Q3).
     is_view_first_on: bool = False
+    # An owner's latest Keep: the retention clock restarts from it (ADR 0020).
+    kept_at: datetime | None = None
+    # When a member last opened a paper or a brief; only `touch_read` writes it.
+    read_at: datetime | None = None
 
     def __post_init__(self) -> None:
         require_aware(
@@ -166,6 +170,8 @@ class Project:
             created_at=self.created_at,
             archived_at=self.archived_at,
             deleted_at=self.deleted_at,
+            kept_at=self.kept_at,
+            read_at=self.read_at,
         )
         if not self.name_sealed:
             raise ValueError("Project.name_sealed must not be empty")
@@ -196,6 +202,9 @@ class Project:
 
     def deleted(self, at: datetime) -> Project:
         return replace(self, deleted_at=at)
+
+    def kept(self, at: datetime) -> Project:
+        return replace(self, kept_at=at)
 
 
 @dataclass(frozen=True, slots=True)

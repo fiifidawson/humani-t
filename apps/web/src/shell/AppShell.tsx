@@ -1,8 +1,8 @@
 /**
  * The signed-in frame: header with the two logo slots and search, rail, main
- * area, footer, the banner when the session ends, and the search and shortcuts
- * dialogs that open from anywhere. Breakpoints are CSS (railStyles.ts); the
- * rail's drawer below 1024 px is the only layout state kept here.
+ * area, footer, the banners for an ended session and for low data mode, and the
+ * search and shortcuts dialogs that open from anywhere. Breakpoints are CSS
+ * (railStyles.ts); the rail's drawer below 1024 px is the only layout state kept here.
  */
 
 import {
@@ -24,6 +24,7 @@ import { ShortcutsDialog } from "../features/search/ShortcutsDialog";
 import { LabMark, ProjectMark } from "../ui/Brand";
 import { SiteFooter } from "../ui/SiteFooter";
 import { SkipLink } from "../ui/SkipLink";
+import { LowDataOffer } from "./LowDataOffer";
 import { Rail } from "./Rail";
 import { COMPACT_ZOOM, HEADER_HEIGHT } from "./railStyles";
 import { useShortcuts } from "./useShortcuts";
@@ -208,6 +209,7 @@ export function AppShell() {
 					overflowY="auto"
 				>
 					<SignedOutBanner />
+					<LowDataOffer />
 					{/* A workspace is exactly as tall as the window. Without minH 0 a long table
 					    grows it and the composer scrolls away; other pages grow, and this
 					    column scrolls them. */}

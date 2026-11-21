@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.application.papers import PaperDetail, PaperPage, PaperRow, PrismaView
+from app.domain.coverage import CoverageEstimate, NoEstimateReason
 from app.domain.discovery import TextKind
 from app.domain.manifest import RunManifest
 from app.domain.screening import (
@@ -143,6 +144,66 @@ class PaperOut(BaseModel):
         )
 
 
+class SourceOverlapOut(BaseModel):
+    sources: list[str] = Field(description="Two sources searched, in name order.")
+    first_found: int = Field(description="Relevant papers the first source found.")
+    second_found: int = Field(description="Relevant papers the second source found.")
+    both_found: int = Field(description="Relevant papers both found.")
+
+
+class CoverageIntervalOut(BaseModel):
+    sources: list[str] = Field(description="The pair of sources the range comes from.")
+    estimated_total: int = Field(description="Chapman's estimate of all relevant papers.")
+    low_percent: int = Field(description="Lower end of the 95% range, rounded down to 5.")
+    high_percent: int = Field(description="Upper end of the 95% range, rounded up to 5.")
+
+
+class CoverageOut(BaseModel):
+    """An estimate of the share of relevant papers found (ADR 0021), or why there is none."""
+
+    method: str = Field(description="How it was worked out: chapman-pairs.")
+    method_version: int
+    rules_version: int | None = Field(
+        description="The label rules version whose labels were counted; null: the model's."
+    )
+    relevant_found: int = Field(description="Papers labelled included in this run.")
+    searched_sources: list[str] = Field(description="Sources that answered, in name order.")
+    overlaps: list[SourceOverlapOut] = Field(description="The counts, for each pair.")
+    interval: CoverageIntervalOut | None = Field(description="Null when there is no estimate.")
+    no_estimate_because: NoEstimateReason | None = Field(
+        description="Set exactly when `interval` is null."
+    )
+
+    @classmethod
+    def from_domain(cls, estimate: CoverageEstimate, rules_version: int | None) -> CoverageOut:
+        interval = estimate.interval
+        return cls(
+            method=estimate.method,
+            method_version=estimate.method_version,
+            rules_version=rules_version,
+            relevant_found=estimate.relevant_found,
+            searched_sources=list(estimate.searched_sources),
+            overlaps=[
+                SourceOverlapOut(
+                    sources=list(o.sources),
+                    first_found=o.first_found,
+                    second_found=o.second_found,
+                    both_found=o.both_found,
+                )
+                for o in estimate.overlaps
+            ],
+            interval=None
+            if interval is None
+            else CoverageIntervalOut(
+                sources=list(interval.sources),
+                estimated_total=interval.estimated_total,
+                low_percent=interval.low_percent,
+                high_percent=interval.high_percent,
+            ),
+            no_estimate_because=estimate.no_estimate_because,
+        )
+
+
 class PaperPageOut(BaseModel):
     run_id: UUID
     page: int
@@ -155,6 +216,9 @@ class PaperPageOut(BaseModel):
         )
     )
     papers: list[PaperOut]
+    coverage: CoverageOut = Field(
+        description="For the whole run under the labels shown; the same on every page."
+    )
 
     @classmethod
     def from_view(cls, view: PaperPage) -> PaperPageOut:
@@ -165,6 +229,7 @@ class PaperPageOut(BaseModel):
             total=view.total,
             counts=dict(view.counts),
             papers=[PaperOut.from_row(row) for row in view.rows],
+            coverage=CoverageOut.from_domain(view.coverage, view.rules_version),
         )
 
 

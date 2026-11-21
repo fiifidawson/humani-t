@@ -24,6 +24,7 @@ from app.domain.discovery import StoredPaper, identity_digest
 from app.domain.encryption import EncryptionContext
 from app.domain.marks import BriefRead, PaperMark, PaperMarkKind, PaperMarks, marks_on_papers
 from app.domain.projects import Action, Project
+from app.domain.retention import READ_COUNTS_EVERY
 from app.storage.base import StorageProvider, UnitOfWork
 
 # Table, column; the row is the person, the paper and the kind of mark.
@@ -93,8 +94,10 @@ class MarkService:
                 _identity_context(project_id, current.user.id, paper_id, kind.value),
                 record.identity.encode(),
             )
-            mark = PaperMark(current.user.id, paper_id, kind, project_id, sealed, self._clock())
-            if await uow.marks.add_paper_mark(mark):
+            now = self._clock()
+            mark = PaperMark(current.user.id, paper_id, kind, project_id, sealed, now)
+            is_new = await uow.marks.add_paper_mark(mark)
+            if await _read(uow, project_id, now) or is_new:
                 await uow.commit()
 
     async def unsave(self, current: Current, project_id: UUID, paper_id: UUID) -> None:
@@ -113,8 +116,10 @@ class MarkService:
             await require_member(
                 uow, current.user.id, brief.project_id, Action.READ_PROJECT, not_found=_NO_BRIEF
             )
-            read = BriefRead(current.user.id, brief.id, brief.project_id, self._clock())
-            if await uow.marks.add_brief_read(read):
+            now = self._clock()
+            read = BriefRead(current.user.id, brief.id, brief.project_id, now)
+            is_new = await uow.marks.add_brief_read(read)
+            if await _read(uow, brief.project_id, now) or is_new:
                 await uow.commit()
 
     async def paper_marks(
@@ -210,6 +215,11 @@ class MarkService:
             )
             names[project.id] = ProjectName(project.id, name.decode())
         return names[project.id]
+
+
+async def _read(uow: UnitOfWork, project_id: UUID, now: datetime) -> bool:
+    """Count an opened paper or brief as activity on the retention clock (ADR 0020)."""
+    return await uow.projects.touch_read(project_id, now, unless_since=now - READ_COUNTS_EVERY)
 
 
 async def _paper_of(

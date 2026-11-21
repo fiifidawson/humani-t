@@ -323,8 +323,10 @@ def add_rule(rt: RunTeam, term: str, entity_type: str = "PERSON") -> None:
     assert response.status_code == 201, response.text
 
 
-def make_run_team(masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT) -> RunTeam:
-    team = make_team(masking_policy)
+def make_run_team(
+    masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT, *, retention_days: int | None = None
+) -> RunTeam:
+    team = make_team(masking_policy, retention_days=retention_days)
     signals = use_test_signals(team.harness)
     review = create_review(team.owner, team.project_id)
     return RunTeam(team, signals, review["id"])

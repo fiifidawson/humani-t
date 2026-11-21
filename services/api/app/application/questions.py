@@ -24,7 +24,7 @@ import structlog
 from app.application.accounts import Current
 from app.application.answer_loop import AnswerLoop, AnswerResult, Turn
 from app.application.audit import AuditLog
-from app.application.brief_loop import LoopFailedError
+from app.application.brief_loop import LoopFailedError, StepSink
 from app.application.briefs import (
     BriefSeal,
     instructions_to_dict,
@@ -47,7 +47,8 @@ from app.domain.briefs import (
 )
 from app.domain.encryption import EncryptionContext
 from app.domain.errors import ConcurrentUpdateError, StorageUnavailableError
-from app.domain.model_instructions import InstructionsKind
+from app.domain.masking import ProjectPrivacy
+from app.domain.model_instructions import InstructionsKind, ModelInstructionsVersion
 from app.domain.projects import Action
 from app.domain.questions import (
     CONTEXT_TURNS,
@@ -448,6 +449,41 @@ class QuestionWorker:
         if work is None:
             await self._finish(record, error=_MASKED_SINCE)
             return
+
+        async def keep_lease(step: AgentStep) -> None:
+            await self._renew(record)
+
+        result = await self._run_loop(work, privacy, in_force, keep_lease)
+        await self._finish(record, result=result, run_id=work.run_id)
+
+    async def answer_alone(
+        self,
+        project_id: UUID,
+        review_id: UUID,
+        question: str,
+        *,
+        asked_at: datetime,
+        on_step: StepSink,
+    ) -> AnswerResult:
+        """Answer one stored question outside any thread, as an evaluation asks it.
+
+        The same corpus, instructions and loop as a thread's question, with no earlier
+        turns. The caller checks the question was stored as the project's masking needs.
+        """
+        async with self._storage.unit_of_work() as uow:
+            privacy = await self._rules.privacy_for(uow, project_id)
+            run_id, corpus = await self._corpus(uow, review_id, is_masked=privacy.is_masked)
+            in_force = await self._instructions.in_force(uow, project_id, asked_at)
+        work = _Work(question, (), run_id, corpus)
+        return await self._run_loop(work, privacy, in_force, on_step)
+
+    async def _run_loop(
+        self,
+        work: _Work,
+        privacy: ProjectPrivacy,
+        in_force: ModelInstructionsVersion | None,
+        on_step: StepSink,
+    ) -> AnswerResult:
         sent = await self._instructions.as_sent(in_force, InstructionsKind.WRITING, privacy)
         loop = AnswerLoop(
             self._inference.for_project(privacy),
@@ -455,13 +491,8 @@ class QuestionWorker:
             max_rounds=self._max_rounds,
             timer=self._timer,
         )
-
-        async def keep_lease(step: AgentStep) -> None:
-            await self._renew(record)
-
-        result = await loop.run(work.question, work.earlier, work.corpus, keep_lease, sent)
-        result = replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
-        await self._finish(record, result=result, run_id=work.run_id)
+        result = await loop.run(work.question, work.earlier, work.corpus, on_step, sent)
+        return replace(result, manifest={**result.manifest, "is_masked": privacy.is_masked})
 
     async def _gather(
         self, uow: UnitOfWork, record: QuestionRecord, *, is_masked: bool
@@ -481,13 +512,13 @@ class QuestionWorker:
             seen = await self._seal.open(uow, previous)
             if seen.answer is not None and (seen.is_masked or not is_masked):
                 earlier.append(Turn(seen.question, _answer_text(seen.answer.answer)))
-        run_id, corpus = await self._corpus(uow, record, is_masked=is_masked)
+        run_id, corpus = await self._corpus(uow, record.review_id, is_masked=is_masked)
         return _Work(opened.question, tuple(earlier[-CONTEXT_TURNS:]), run_id, corpus)
 
     async def _corpus(
-        self, uow: UnitOfWork, record: QuestionRecord, *, is_masked: bool
+        self, uow: UnitOfWork, review_id: UUID, *, is_masked: bool
     ) -> tuple[UUID | None, tuple[Passage, ...]]:
-        brief = await uow.briefs.latest_for_review(record.review_id)
+        brief = await uow.briefs.latest_for_review(review_id)
         cited: tuple[Passage, ...] = ()
         if brief is not None:
             opened = await self._briefs.open_brief(uow, brief)
@@ -495,9 +526,9 @@ class QuestionWorker:
                 cited = tuple(r.passage for r in opened.evidence)
             candidates = [brief.run_id]
         else:
-            candidates = [r.id for r in await uow.runs.list_for_review(record.review_id)]
+            candidates = [r.id for r in await uow.runs.list_for_review(review_id)]
         for run_id in candidates:
-            included = await self._evidence.included_passages(uow, record.review_id, run_id)
+            included = await self._evidence.included_passages(uow, review_id, run_id)
             if included or cited:
                 return run_id, _merged((*included, *cited))
         return None, ()

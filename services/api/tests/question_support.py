@@ -131,8 +131,9 @@ def make_ask_team(
     model: Callable[[AnswerScript], Any] | None = None,
     worker_id: str = "answers-a",
     masking_policy: MaskingPolicy = MASKED_BY_DEPLOYMENT,
+    retention_days: int | None = None,
 ) -> AskTeam:
-    rt = make_run_team(masking_policy)
+    rt = make_run_team(masking_policy, retention_days=retention_days)
     if with_brief:
         write_brief(rt)
     providers = rt.harness.providers

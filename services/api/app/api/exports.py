@@ -3,12 +3,14 @@
 Files are built from the same response models the screens read, so a download says
 what the screen says, masked where the screen is masked. Text from papers and the
 model is data: CSV cells are neutralised against formulas and HTML is escaped. The
-brief's "PDF" is print-ready HTML; no PDF engine runs on the server.
+brief's "PDF" is print-ready HTML that the browser saves as PDF (docs/adr/0019).
 """
 
 from __future__ import annotations
 
+import base64
 import csv
+import hashlib
 import html
 import io
 from collections.abc import Iterable, Sequence
@@ -245,16 +247,26 @@ def _items(claims: Iterable[ClaimOut], mark: str) -> str:
 
 
 _PRINT_CSS = """
-@page { margin: 18mm 16mm 24mm; }
-body { font: 11pt/1.45 system-ui, sans-serif; color: #111; margin: 0 0 20mm; }
+@page { margin: 18mm 16mm; }
+body { font: 11pt/1.45 system-ui, sans-serif; color: #111; margin: 0; }
+@media screen { body { max-width: 46rem; margin: 1.5rem auto; padding: 0 1rem; } }
+@media print { .screen-only { display: none; } }
 h1 { font-size: 18pt; } h2 { font-size: 14pt; margin-top: 1.4em; } h3 { font-size: 12pt; }
 .caveat { border: 1px solid #b45309; padding: 6pt 8pt; }
 .reasoning { color: #555; } .tags { color: #1d4ed8; }
 table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #999;
   padding: 4pt; vertical-align: top; text-align: left; }
-footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8.5pt;
-  border-top: 1px solid #999; padding-top: 3pt; background: #fff; }
+.page, .page > * > tr > td { border: 0; padding: 0; }
+.page-foot { font-size: 8.5pt; border-top: 1px solid #999; padding-top: 3pt; margin-top: 8pt; }
 """
+
+_PRINT_CSS_HASH = base64.b64encode(hashlib.sha256(_PRINT_CSS.encode()).digest()).decode()
+
+# The page's only allowed style: its own, by hash. No script may run in it at all.
+PRINT_PAGE_CSP = (
+    f"default-src 'none'; style-src 'sha256-{_PRINT_CSS_HASH}'; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
 
 
 def _brief_html(brief: BriefOut) -> str:
@@ -264,7 +276,12 @@ def _brief_html(brief: BriefOut) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         f"<title>Decision brief, version {brief.version}</title>",
         f"<style>{_PRINT_CSS}</style></head><body>",
-        f"<footer>{e(brief.caveat)}</footer>",
+        '<p class="screen-only">To keep a copy to read offline, print this page and choose '
+        "Save as PDF as the printer.</p>",
+        # Browsers repeat a table's footer on every printed page, in room of its own.
+        '<table class="page" role="presentation">',
+        f'<tfoot><tr><td><p class="page-foot">{e(brief.caveat)}</p></td></tr></tfoot>',
+        "<tbody><tr><td>",
         f"<h1>Decision brief, version {brief.version}</h1>",
         f"<p>Model {e(brief.model_id)} · round {brief.kept_round} of {brief.rounds} · "
         f"stopped: {e(brief.stopped_because.value)} · {e(brief.created_at.isoformat())}</p>",
@@ -316,5 +333,5 @@ def _brief_html(brief: BriefOut) -> str:
             f"<li>[{e(source.tag)}] {e(details or 'no passage')} "
             f"(cited {source.citations} times)</li>"
         )
-    parts.append("</ul></body></html>")
+    parts.append("</ul></td></tr></tbody></table></body></html>")
     return "\n".join(parts) + "\n"

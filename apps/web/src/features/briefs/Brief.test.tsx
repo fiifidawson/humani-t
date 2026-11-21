@@ -680,6 +680,7 @@ describe("the source panel (UI_UX_SPEC §6.10, §8.4)", () => {
 		).toBeInTheDocument();
 	});
 
+	// The largest page axe checks: about 30 s on a busy laptop, so it gets a minute.
 	it("has no accessibility violations, brief and panel together", async () => {
 		const { path } = briefed();
 		const { container } = renderApp(`${path}/brief?source=P1`);
@@ -687,7 +688,7 @@ describe("the source panel (UI_UX_SPEC §6.10, §8.4)", () => {
 		await within(panel).findByText(/Passage 1 of 2/);
 
 		await expectNoAccessibilityViolations(container);
-	});
+	}, 60_000);
 });
 
 describe("the brief for a viewer", () => {

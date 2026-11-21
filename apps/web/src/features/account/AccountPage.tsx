@@ -24,6 +24,7 @@ import type { components } from "../../api/schema.gen";
 import { useApi } from "../../app/api-context";
 import {
 	type ThemeChoice,
+	useLowData,
 	useReducedMotion,
 	useSingleKeyShortcuts,
 	useTheme,
@@ -42,6 +43,7 @@ import { RecoveryCodes } from "../auth/RecoveryCodes";
 import { TotpSetup } from "../auth/TotpSetup";
 import { isCancelled, isPasskeySupported } from "../auth/webauthn";
 import { fullDate, shortDate } from "../projects/format";
+import { RetentionPolicyNote } from "../retention/RetentionPolicyNote";
 import { describeDevice } from "./describeDevice";
 
 type TotpEnrolment = components["schemas"]["TotpEnrolmentOut"];
@@ -486,6 +488,28 @@ function MotionSwitch() {
 	);
 }
 
+function LowDataSwitch() {
+	const [isOn, setOn] = useLowData();
+	return (
+		<Stack gap="1">
+			<Switch.Root
+				checked={isOn}
+				onCheckedChange={(details) => setOn(details.checked)}
+			>
+				<Switch.HiddenInput />
+				<Switch.Control>
+					<Switch.Thumb />
+				</Switch.Control>
+				<Switch.Label>Low data mode</Switch.Label>
+			</Switch.Root>
+			<Text fontSize="sm" color="fg.muted">
+				Loads less in this browser, for slow or costly connections: your
+				device's own fonts, no animations, and run progress every 10 seconds.
+			</Text>
+		</Stack>
+	);
+}
+
 function ShortcutsSwitch() {
 	const [isOn, setOn] = useSingleKeyShortcuts();
 	return (
@@ -522,9 +546,11 @@ export function AccountPage() {
 				<Stack gap="6">
 					<AppearanceSection />
 					<MotionSwitch />
+					<LowDataSwitch />
 					<ShortcutsSwitch />
 				</Stack>
 			</Section>
+			<RetentionPolicyNote />
 		</Page>
 	);
 }

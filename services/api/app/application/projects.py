@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from app.application.accounts import Current
-from app.application.audit import AuditLog
+from app.application.audit import Actor, AuditLog
 from app.application.encryption import ScopeEncryption
 from app.application.project_labels import NO_LABELS, ProjectLabels, read_labels
 from app.application.runs import RunService
@@ -284,14 +284,14 @@ class ProjectService:
                 needs_recent_sign_in=True,
                 lock=True,
             )
-            await self._encryption.destroy_scope(uow, project_id)
-            await uow.memberships.remove_all_for_project(project_id)
-            # Who pinned what, and where it was filed, go with the members.
-            await uow.pins.remove_for_project(project_id)
-            await uow.placements.remove(project_id)
-            await uow.project_tags.remove(project_id)
-            await uow.projects.save(project.deleted(self._clock()))
-            await self._record(uow, current, request_id, "project.deleted", project_id)
+            await shred(
+                uow,
+                self._encryption,
+                self._audit,
+                project,
+                current.actor(request_id),
+                self._clock(),
+            )
             await uow.commit()
 
     async def list_members(self, current: Current, project_id: UUID) -> list[MemberView]:
@@ -514,6 +514,31 @@ class ProjectService:
             str(membership.user_id),
             scope_id=membership.project_id,
         )
+
+
+async def shred(
+    uow: UnitOfWork,
+    encryption: ScopeEncryption,
+    audit: AuditLog,
+    project: Project,
+    actor: Actor,
+    at: datetime,
+) -> None:
+    """Destroy the project's key and who was in it, and record `project.deleted`.
+
+    Every deletion goes through here, by an owner or for retention. The caller holds the
+    project's row lock and commits.
+    """
+    await encryption.destroy_scope(uow, project.id)
+    await uow.memberships.remove_all_for_project(project.id)
+    # Who pinned what, and where it was filed, go with the members.
+    await uow.pins.remove_for_project(project.id)
+    await uow.placements.remove(project.id)
+    await uow.project_tags.remove(project.id)
+    await uow.projects.save(project.deleted(at))
+    await audit.record(
+        uow, actor, "project.deleted", "project", str(project.id), scope_id=project.id
+    )
 
 
 async def _status(uow: UnitOfWork, project: Project) -> ProjectStatus:

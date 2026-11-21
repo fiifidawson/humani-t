@@ -118,7 +118,7 @@ export function NeedsYouTarget({
 	children: ReactNode;
 }) {
 	const projectId = item.project.id;
-	const reviewId = item.review_id;
+	const reviewId = item.review_id ?? "";
 	switch (item.kind) {
 		case "draft":
 			return (

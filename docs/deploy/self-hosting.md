@@ -299,6 +299,23 @@ What crypto-shredding does not cover:
 - **Container logs.** Application logs carry identifiers, not content, and are rotated by Docker (`max-size` 10 MB, 5 files per container).
 - **The disk space of uploaded files.** A deleted project's files stay in the `documents` volume, unreadable without the destroyed key, until they are swept away. No sweep exists yet. Deleting a single document deletes its file at once.
 
+### Evaluations (off by default)
+
+Evaluation admin compares humani-t's answers with other systems' ([ADR 0022](../adr/0022-evaluations-are-judged-blind-inside-their-project.md)). It is **off** until you set `HUMANI_T_EVALUATIONS_ENABLED=true` in `.env` and restart the API and the worker. While it is off, its pages and routes answer "not found" to everyone, administrators included, the Evaluations link is hidden, and the worker judges nothing.
+
+### Deleting projects for age (retention period)
+
+A deployment can delete projects that nobody has worked on for a while. It is **off** unless you set `HUMANI_T_RETENTION_DAYS` in `.env` (30 to 3650 days), and then restart the stack. With it set:
+
+- A project is deleted that many days after its **last activity**: created, archived, a new question, a run starting or finishing, a brief written, a follow-up question asked, or a member opening a paper or a brief ([ADR 0020](../adr/0020-retention-counts-from-last-activity.md)). A project people still read is never deleted for age.
+- For the last 14 days, the project's owners see "Deleted in N days unless kept" under **Needs you** on Home, archived projects included. Every member sees the date under **Project settings → Retention**, and administrators see the period on their **Account** page.
+- An owner can press **Keep**, which restarts the clock from that day. It is recorded in the audit log as `project.kept`.
+- The worker checks once an hour. A project past its date is deleted exactly as when an owner deletes it: its key is destroyed. The audit log records `project.retention_expired` and then `project.deleted`, with no person as the actor. If the worker is stopped, nothing is deleted until it runs again.
+
+Its limits are those of any deletion, above: **backups keep a deleted project until they pass your backup retention window**, and anything exported or emailed is out of reach. Tell your users both numbers: "projects are deleted N days after their last activity unless an owner keeps them, and stay in backups for M more days".
+
+Turning the setting off, or making it longer, stops or delays deletions from the next check. Making it shorter can make many projects due at once, with only the hour's notice: warn owners first.
+
 ## 7. Upgrades and migrations
 
 ```bash

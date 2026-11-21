@@ -73,19 +73,39 @@ class ProjectListService:
             user = await uow.users.get(membership.user_id)
             name = user.display_name if user is not None else "Unknown account"
             members.append(MemberRef(membership.user_id, name, membership.role))
-        times = [view.created_at, *([view.archived_at] if view.archived_at else [])]
         reviews = await uow.reviews.list_for_project(view.id)
         latest = reviews[0] if reviews else None
         papers = brief_version = None
         if latest is not None:
-            times.append(latest.created_at)
-            runs = await uow.runs.list_for_review(latest.id)
-            if runs:
-                run = runs[0]
-                times += [t for t in (run.created_at, run.started_at, run.finished_at) if t]
             brief = await uow.briefs.latest_for_review(latest.id)
-            if brief is not None:
-                times.append(brief.created_at)
-                brief_version = brief.version
+            brief_version = None if brief is None else brief.version
             papers = await self._papers.tally(uow, latest.id)
-        return ProjectSummary(view, max(times), tuple(members), papers, brief_version)
+        last = await last_activity_at(
+            uow, view.id, created_at=view.created_at, archived_at=view.archived_at
+        )
+        return ProjectSummary(view, last, tuple(members), papers, brief_version)
+
+
+async def last_activity_at(
+    uow: UnitOfWork, project_id: UUID, *, created_at: datetime, archived_at: datetime | None
+) -> datetime:
+    """The latest of: created, archived, its newest review, and that review's latest run,
+    brief and follow-up question.
+
+    The list sorts by it, and the retention clock counts from it (ADR 0020).
+    """
+    times = [created_at, *([archived_at] if archived_at else [])]
+    reviews = await uow.reviews.list_for_project(project_id)
+    if reviews:
+        latest = reviews[0]
+        times.append(latest.created_at)
+        runs = await uow.runs.list_for_review(latest.id)
+        if runs:
+            run = runs[0]
+            times += [t for t in (run.created_at, run.started_at, run.finished_at) if t]
+        brief = await uow.briefs.latest_for_review(latest.id)
+        if brief is not None:
+            times.append(brief.created_at)
+        for thread in await uow.questions.list_threads(latest.id):
+            times += [q.asked_at for q in await uow.questions.list_for_thread(thread.id)]
+    return max(times)

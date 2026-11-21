@@ -7,9 +7,12 @@ from the real answer stage with a scripted model.
 
 from __future__ import annotations
 
+import base64
 import csv
+import hashlib
 import io
 import json
+import re
 import uuid
 from typing import Any
 
@@ -161,9 +164,51 @@ class TestBrief:
 
         assert text.startswith("<!doctype html>")
         assert "@page" in text
-        assert "position: fixed" in text
-        assert CAVEAT in text
+        # Browsers repeat a table's footer at the foot of every printed page, and
+        # it takes room of its own; a fixed footer printed over the last lines.
+        footer = re.search(r"<tfoot>(.*?)</tfoot>", text, re.DOTALL)
+        assert footer is not None
+        assert CAVEAT in footer.group(1)
+        assert "position: fixed" not in text
         assert "<script" not in text.lower()
+
+    def test_the_print_brief_ends_with_its_sources(self, with_brief):
+        text = download(with_brief, "brief.html").text
+
+        headings = re.findall(r"<h2>(.*?)</h2>", text)
+        assert headings[-1] == "Sources"
+        assert text.index("[P0001]", text.index("<h2>Sources</h2>")) > 0
+
+    def test_the_print_brief_opens_in_the_browser_to_print_or_save_as_pdf(self, with_brief):
+        response = download(with_brief, "brief.html")
+
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith('inline; filename="Humani-T-run-')
+        assert disposition.endswith('-brief.html"')
+        assert response.headers["cache-control"] == "no-store"
+        assert "Save as PDF" in response.text
+
+    def test_the_print_brief_may_use_its_own_stylesheet_and_nothing_else(self, with_brief):
+        response = download(with_brief, "brief.html")
+
+        styles = re.findall(r"<style>(.*?)</style>", response.text, re.DOTALL)
+        assert len(styles) == 1
+        digest = base64.b64encode(hashlib.sha256(styles[0].encode()).digest()).decode()
+        directives = dict(
+            d.strip().split(" ", 1)
+            for d in response.headers["content-security-policy"].split(";")
+        )
+        assert directives["default-src"] == "'none'"
+        assert directives["style-src"] == f"'sha256-{digest}'"
+        assert directives["frame-ancestors"] == "'none'"
+        assert "script-src" not in directives
+
+    @pytest.mark.parametrize("name", ["brief.md", "brief.json"])
+    def test_the_other_briefs_are_attachments(self, with_brief, name: str):
+        response = download(with_brief, name)
+
+        assert response.headers["content-disposition"].startswith("attachment; ")
+        assert "style-src" not in response.headers["content-security-policy"]
 
     def test_the_print_brief_escapes_the_models_text(self, p):
         from tests.brief_support import (
