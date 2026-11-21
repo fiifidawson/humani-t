@@ -7014,6 +7014,122 @@
         ],
         "title": "ConsiderationOut"
       },
+      "CoverageIntervalOut": {
+        "properties": {
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "The pair of sources the range comes from."
+          },
+          "estimated_total": {
+            "type": "integer",
+            "title": "Estimated Total",
+            "description": "Chapman's estimate of all relevant papers."
+          },
+          "low_percent": {
+            "type": "integer",
+            "title": "Low Percent",
+            "description": "Lower end of the 95% range, rounded down to 5."
+          },
+          "high_percent": {
+            "type": "integer",
+            "title": "High Percent",
+            "description": "Upper end of the 95% range, rounded up to 5."
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources",
+          "estimated_total",
+          "low_percent",
+          "high_percent"
+        ],
+        "title": "CoverageIntervalOut"
+      },
+      "CoverageOut": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "description": "How it was worked out: chapman-pairs."
+          },
+          "method_version": {
+            "type": "integer",
+            "title": "Method Version"
+          },
+          "rules_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules Version",
+            "description": "The label rules version whose labels were counted; null: the model's."
+          },
+          "relevant_found": {
+            "type": "integer",
+            "title": "Relevant Found",
+            "description": "Papers labelled included in this run."
+          },
+          "searched_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Searched Sources",
+            "description": "Sources that answered, in name order."
+          },
+          "overlaps": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOverlapOut"
+            },
+            "type": "array",
+            "title": "Overlaps",
+            "description": "The counts, for each pair."
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverageIntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when there is no estimate."
+          },
+          "no_estimate_because": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoEstimateReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set exactly when `interval` is null."
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "method_version",
+          "rules_version",
+          "relevant_found",
+          "searched_sources",
+          "overlaps",
+          "interval",
+          "no_estimate_because"
+        ],
+        "title": "CoverageOut",
+        "description": "An estimate of the share of relevant papers found (ADR 0021), or why there is none."
+      },
       "CriterionAnswerOut": {
         "properties": {
           "id": {
@@ -9437,6 +9553,16 @@
         ],
         "title": "NeedsYouOut"
       },
+      "NoEstimateReason": {
+        "type": "string",
+        "enum": [
+          "screening_unfinished",
+          "one_source",
+          "too_few_overlaps",
+          "sources_nested"
+        ],
+        "title": "NoEstimateReason"
+      },
       "OptionOut": {
         "properties": {
           "name": {
@@ -9719,6 +9845,10 @@
             },
             "type": "array",
             "title": "Papers"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageOut",
+            "description": "For the whole run under the labels shown; the same on every page."
           }
         },
         "type": "object",
@@ -9728,7 +9858,8 @@
           "page_size",
           "total",
           "counts",
-          "papers"
+          "papers",
+          "coverage"
         ],
         "title": "PaperPageOut"
       },
@@ -12326,6 +12457,41 @@
           "citations"
         ],
         "title": "SourceOut"
+      },
+      "SourceOverlapOut": {
+        "properties": {
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "Two sources searched, in name order."
+          },
+          "first_found": {
+            "type": "integer",
+            "title": "First Found",
+            "description": "Relevant papers the first source found."
+          },
+          "second_found": {
+            "type": "integer",
+            "title": "Second Found",
+            "description": "Relevant papers the second source found."
+          },
+          "both_found": {
+            "type": "integer",
+            "title": "Both Found",
+            "description": "Relevant papers both found."
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources",
+          "first_found",
+          "second_found",
+          "both_found"
+        ],
+        "title": "SourceOverlapOut"
       },
       "SourceQueryOut": {
         "properties": {

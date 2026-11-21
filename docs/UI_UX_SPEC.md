@@ -777,7 +777,7 @@ The run strip (L0 and L1) is in [5.3.5](#535-run-strip). The canvas (L2) shows:
 - **Edit rules:** opens a side form with the label rules. "Preview" shows how many papers would move ("4 would move from Relevant to Highly relevant") before "Apply". Applying makes no LLM calls and posts a system note in the chat.
 - **PRISMA diagram:** drawn as an accessible SVG with the counts as text, and a table version below for screen readers and small screens.
 - **Downloads:** `dataset.csv`, `dataset.jsonl`, `prisma.md`.
-- **Coverage** (later): an estimate of how much of the relevant literature was found, always labelled "estimate" (Undermind shows that such numbers are uncertain) **(new, needs API)**.
+- **Coverage** (P4): an estimate of how much of the relevant literature was found, always labelled "estimate" (Undermind shows that such numbers are uncertain). Shown below the PRISMA flow as a range in whole fives ("Estimate: this run found between 70% and 100% of the relevant papers its searches could reach"), with "What this estimate means" opening the counts it used, what it leaves out, that the top of the range is likely too high, whose labels it counted and the method. When the data cannot support one it says "No coverage estimate for this run." and why. Capture-recapture across sources, worked out by the API ([ADR-0021](adr/0021-coverage-is-a-capture-recapture-estimate.md)); `coverage` in `GET …/papers`.
 
 Source: `GET /projects/{id}/papers`, `PUT /projects/{id}/rules`, `GET …/exports/{name}`.
 

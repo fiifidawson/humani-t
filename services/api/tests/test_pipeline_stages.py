@@ -410,6 +410,22 @@ class TestScreen:
             "prompt_version": summary["manifest"]["prompt_version"],
             "criteria_version": 3,
             "plan_version": 3,
+            "coverage": {
+                "method": "chapman-pairs",
+                "method_version": 1,
+                "relevant_found": 3,
+                "searched_sources": ["first", "second"],
+                "overlaps": [
+                    {
+                        "sources": ["first", "second"],
+                        "first_found": 2,
+                        "second_found": 2,
+                        "both_found": 1,
+                    }
+                ],
+                "interval": None,
+                "no_estimate_because": "too_few_overlaps",
+            },
         }
 
     def test_screening_runs_at_most_the_configured_number_of_papers_at_once(self):

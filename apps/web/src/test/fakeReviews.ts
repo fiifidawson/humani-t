@@ -53,6 +53,18 @@ const SENSITIVE: readonly [string, Schemas["EntityType"]][] = [
 const MODEL: Author = { kind: "model", user_id: null };
 const MODEL_ID = "llama3.1:8b";
 
+// Fake papers come from OpenAlex alone, so the API would give no estimate.
+const NO_COVERAGE_ONE_SOURCE: Schemas["CoverageOut"] = {
+	method: "chapman-pairs",
+	method_version: 1,
+	rules_version: null,
+	relevant_found: 0,
+	searched_sources: ["openalex"],
+	overlaps: [],
+	interval: null,
+	no_estimate_because: "one_source",
+};
+
 interface FakePlan {
 	mode: Schemas["PlanMode"];
 	questions: Question[];
@@ -273,6 +285,8 @@ export class FakeReviews {
 		string,
 		{ paper: Paper; maskedText: string | null }[]
 	>();
+	/** The coverage estimate the API worked out, per review; one source's "none" if unset. */
+	readonly coverage = new Map<string, Schemas["CoverageOut"]>();
 	readonly briefs: {
 		brief: Brief;
 		evidence: Map<string, Evidence>;
@@ -1003,6 +1017,8 @@ export class FakeReviews {
 					total: matching.length,
 					counts,
 					papers: matching.slice((page - 1) * 50, page * 50),
+					coverage:
+						this.coverage.get(reached.review.id) ?? NO_COVERAGE_ONE_SOURCE,
 				});
 			}),
 

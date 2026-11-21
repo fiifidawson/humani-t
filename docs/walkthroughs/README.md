@@ -62,6 +62,7 @@ Conventions used throughout:
 | 17 | [P3: brief](17-p3-brief.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Trade-off priorities kept in the URL, humanitarian criteria first, one card per criterion on narrow screens, and the optional "Your view first" question. |
 | 17 | [P3: find](17-p3-find.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Search across a person's projects without an index (ADR-0018), the Ctrl K search and command palette, and the rest of the §11.5 keyboard, with single-key shortcuts that can be turned off. |
 | 18 | [P4: retention](18-p4-retention.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | An operator's retention period, off by default; "Deleted in N days unless kept" in Needs you, the date in Project settings, Keep, and deletion when due through the normal delete (ADR-0020). |
+| 18 | [P4: coverage](18-p4-coverage.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | The coverage estimate on the screening results: a capture-recapture range across paper sources, always called an estimate, or no estimate and why (ADR-0021); recorded in the run's manifest. |
 
 Planned phases get their file, from [`TEMPLATE.md`](TEMPLATE.md), when their work starts. M12 (optional OIDC single sign-on) is in the plan but has no phase assigned yet.
 

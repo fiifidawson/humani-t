@@ -431,6 +431,11 @@ ScreeningDecision  per run and paper: label (include | exclude | uncertain),
 LabelRules      how answers become a label: inclusion criteria Possibly
                 relevant needs, and what unclear counts as (met | not_met
                 | uncertain); one LabelRulesVersion per apply, never rewritten
+CoverageEstimate  a range for the share of a run's relevant papers its searches
+                found, from how many each pair of sources found and both
+                found (capture-recapture), or the reason there is none;
+                recorded by the Screen stage, worked out again on read
+                under the labels shown (ADR-0021)
 Passage         a masked excerpt the brief may cite, tagged by the paper's place
 ```
 

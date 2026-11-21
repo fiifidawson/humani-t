@@ -2514,6 +2514,66 @@ export interface components {
             option: string;
             because: components["schemas"]["ClaimOut"];
         };
+        /** CoverageIntervalOut */
+        CoverageIntervalOut: {
+            /**
+             * Sources
+             * @description The pair of sources the range comes from.
+             */
+            sources: string[];
+            /**
+             * Estimated Total
+             * @description Chapman's estimate of all relevant papers.
+             */
+            estimated_total: number;
+            /**
+             * Low Percent
+             * @description Lower end of the 95% range, rounded down to 5.
+             */
+            low_percent: number;
+            /**
+             * High Percent
+             * @description Upper end of the 95% range, rounded up to 5.
+             */
+            high_percent: number;
+        };
+        /**
+         * CoverageOut
+         * @description An estimate of the share of relevant papers found (ADR 0021), or why there is none.
+         */
+        CoverageOut: {
+            /**
+             * Method
+             * @description How it was worked out: chapman-pairs.
+             */
+            method: string;
+            /** Method Version */
+            method_version: number;
+            /**
+             * Rules Version
+             * @description The label rules version whose labels were counted; null: the model's.
+             */
+            rules_version: number | null;
+            /**
+             * Relevant Found
+             * @description Papers labelled included in this run.
+             */
+            relevant_found: number;
+            /**
+             * Searched Sources
+             * @description Sources that answered, in name order.
+             */
+            searched_sources: string[];
+            /**
+             * Overlaps
+             * @description The counts, for each pair.
+             */
+            overlaps: components["schemas"]["SourceOverlapOut"][];
+            /** @description Null when there is no estimate. */
+            interval: components["schemas"]["CoverageIntervalOut"] | null;
+            /** @description Set exactly when `interval` is null. */
+            no_estimate_because: components["schemas"]["NoEstimateReason"] | null;
+        };
         /** CriterionAnswerOut */
         CriterionAnswerOut: {
             /**
@@ -3637,6 +3697,11 @@ export interface components {
              */
             items: components["schemas"]["NeedsYouItemOut"][];
         };
+        /**
+         * NoEstimateReason
+         * @enum {string}
+         */
+        NoEstimateReason: "screening_unfinished" | "one_source" | "too_few_overlaps" | "sources_nested";
         /** OptionOut */
         OptionOut: {
             /** Name */
@@ -3768,6 +3833,8 @@ export interface components {
             };
             /** Papers */
             papers: components["schemas"]["PaperOut"][];
+            /** @description For the whole run under the labels shown; the same on every page. */
+            coverage: components["schemas"]["CoverageOut"];
         };
         /** PassageOut */
         PassageOut: {
@@ -4828,6 +4895,29 @@ export interface components {
              * @description How many times the brief cites this tag.
              */
             citations: number;
+        };
+        /** SourceOverlapOut */
+        SourceOverlapOut: {
+            /**
+             * Sources
+             * @description Two sources searched, in name order.
+             */
+            sources: string[];
+            /**
+             * First Found
+             * @description Relevant papers the first source found.
+             */
+            first_found: number;
+            /**
+             * Second Found
+             * @description Relevant papers the second source found.
+             */
+            second_found: number;
+            /**
+             * Both Found
+             * @description Relevant papers both found.
+             */
+            both_found: number;
         };
         /** SourceQueryOut */
         SourceQueryOut: {
