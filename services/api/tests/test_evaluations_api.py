@@ -116,6 +116,7 @@ class TestJudgeModels:
             mfa_policy=MfaPolicy(is_required=False),
             inference_model=WRITER_MODEL,
             judge_models=f"{JUDGE_MODEL}, gemma3:12b",
+            evaluations_enabled=True,
         )
         harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
         admin = signed_in(harness, ADMIN_EMAIL, ADMIN_PASSWORD)
@@ -129,7 +130,9 @@ class TestJudgeModels:
         }
 
     def test_with_none_configured_the_deployments_own_model_is_the_only_judge(self):
-        harness = make_harness(mfa_policy=MfaPolicy(is_required=False))
+        harness = make_harness(
+            mfa_policy=MfaPolicy(is_required=False), evaluations_enabled=True
+        )
         harness.create_user(ADMIN_EMAIL, ADMIN_PASSWORD, is_admin=True)
         admin = signed_in(harness, ADMIN_EMAIL, ADMIN_PASSWORD)
 
@@ -464,3 +467,32 @@ class TestTheList:
         assert listed[0]["project_id"] == team.project_id
         assert listed[0]["status"] == "queued"
         assert SENSITIVE_PLACE not in json.dumps(listed)
+
+
+class TestTheSwitch:
+    """Evaluations are off until the operator sets HUMANI_T_EVALUATIONS_ENABLED."""
+
+    def test_evaluations_are_off_unless_the_operator_turns_them_on(self):
+        from app.settings import Settings
+
+        assert Settings.model_fields["evaluations_enabled"].default is False
+
+    def test_while_off_every_evaluation_route_answers_404_even_for_an_admin(self):
+        et = make_evaluation_team(is_on=False)
+
+        assert et.admin.get(f"{EVALUATIONS}/judges").status_code == 404
+        assert et.admin.get(EVALUATIONS).status_code == 404
+        assert et.admin.get(f"{EVALUATIONS}/{UUID(int=1)}").status_code == 404
+        assert et.create().status_code == 404
+
+    def test_while_off_the_session_offers_no_evaluations_to_anyone(self):
+        et = make_evaluation_team(is_on=False)
+
+        assert et.admin.get("/api/v1/auth/session").json()["can_evaluate"] is False
+
+    def test_while_on_the_session_offers_them_to_instance_admins_only(self):
+        et = make_evaluation_team()
+
+        assert et.admin.get("/api/v1/auth/session").json()["can_evaluate"] is True
+        owner = et.ask.rt.owner
+        assert owner.get("/api/v1/auth/session").json()["can_evaluate"] is False

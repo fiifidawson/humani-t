@@ -2645,6 +2645,11 @@ export interface components {
             session: components["schemas"]["SessionOut"];
             /** Mfa Enrolment Required */
             mfa_enrolment_required: boolean;
+            /**
+             * Can Evaluate
+             * @description An instance admin on a deployment with evaluations turned on (ADR 0022).
+             */
+            can_evaluate: boolean;
         };
         /**
          * DecisionIn

@@ -67,6 +67,7 @@ from app.auth.webauthn import WebAuthnPasskeyVerifier
 from app.briefs.bm25 import Bm25Retriever
 from app.crypto.aesgcm import AesGcmCipher
 from app.crypto.local_key import LocalKeyProvider, generate_kek
+from app.domain.accounts import NotFoundError
 from app.domain.documents import ExtractionLimits, UploadPolicy
 from app.domain.masking import (
     DOCUMENT_ENTITY_TYPES,
@@ -164,6 +165,8 @@ class Providers:
     marks: MarkService
     # Swept by the worker process (`app/worker.py`); read and kept through the API.
     retention: RetentionService
+    # The operator's switch for evaluation admin; off unless they turn it on.
+    is_evaluations_on: bool = False
 
     async def close(self) -> None:
         """Release every pool and client: once, at shutdown or at the end of a CLI run."""
@@ -721,6 +724,7 @@ def build_providers(
         retention=RetentionService(
             storage=storage, encryption=encryption, audit=audit, policy=retention, clock=clock
         ),
+        is_evaluations_on=settings.evaluations_enabled,
     )
 
 
@@ -854,7 +858,16 @@ QuestionsDep = Annotated[QuestionService, Depends(get_questions)]
 
 
 def get_evaluations(providers: ProvidersDep) -> EvaluationService:
+    if not providers.is_evaluations_on:
+        raise NotFoundError("Evaluations are not available on this deployment.")
     return providers.evaluations
+
+
+def get_is_evaluations_on(providers: ProvidersDep) -> bool:
+    return providers.is_evaluations_on
+
+
+IsEvaluationsOnDep = Annotated[bool, Depends(get_is_evaluations_on)]
 
 
 EvaluationsDep = Annotated[EvaluationService, Depends(get_evaluations)]

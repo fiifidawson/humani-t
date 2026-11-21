@@ -10,8 +10,10 @@ const QUESTIONS =
 const ANSWERS =
 	'{"answer": "Yes, by a tenth."}\n{"answer": "Markets near roads."}\n';
 
+/** An administrator on a deployment that has turned evaluations on. */
 function admin() {
 	const api = fakeApi();
+	api.isEvaluationsOn = true;
 	const user = api.addUser({ hasTotp: true });
 	user.is_admin = true;
 	api.signInAs(user);
@@ -32,6 +34,18 @@ describe("the admin area's link (UI_UX_SPEC §6.15)", () => {
 		expect(
 			await within(nav).findByRole("link", { name: "Evaluations" }),
 		).toHaveAttribute("href", "/admin/evaluations");
+	});
+
+	it("leaves the link out, for administrators too, while the deployment has evaluations off", async () => {
+		const { api } = admin();
+		api.isEvaluationsOn = false;
+		renderApp("/");
+
+		const nav = await screen.findByRole("navigation", { name: "Main" });
+		await within(nav).findByRole("link", { name: "Home" });
+		expect(
+			within(nav).queryByRole("link", { name: "Evaluations" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("leaves the link out for everyone else", async () => {

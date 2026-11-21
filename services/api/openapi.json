@@ -7294,13 +7294,19 @@
           "mfa_enrolment_required": {
             "type": "boolean",
             "title": "Mfa Enrolment Required"
+          },
+          "can_evaluate": {
+            "type": "boolean",
+            "title": "Can Evaluate",
+            "description": "An instance admin on a deployment with evaluations turned on (ADR 0022)."
           }
         },
         "type": "object",
         "required": [
           "user",
           "session",
-          "mfa_enrolment_required"
+          "mfa_enrolment_required",
+          "can_evaluate"
         ],
         "title": "CurrentSessionOut"
       },

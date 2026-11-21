@@ -273,6 +273,13 @@ class Settings(BaseSettings):
             "allow_hosted_inference; off keeps every project's text masked (ADR 0014)."
         ),
     )
+    evaluations_enabled: bool = Field(
+        default=False,
+        description=(
+            "Turn on evaluation admin (ADR 0022). Off: its routes answer 404 to everyone, "
+            "admins included, and the worker judges nothing."
+        ),
+    )
     judge_models: str = Field(
         default="",
         description=(

@@ -247,6 +247,8 @@ export class FakeApi {
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		projects: () => this.projects,
 	});
+	/** The operator's HUMANI_T_EVALUATIONS_ENABLED; off, as on a new deployment. */
+	isEvaluationsOn = false;
 	/** The admin area's evaluations (fakeEvaluations.ts). */
 	readonly evaluations = new FakeEvaluations({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
@@ -652,6 +654,7 @@ export class FakeApi {
 						aal: this.session.stage === "full" ? 2 : 1,
 					},
 					mfa_enrolment_required: this.session.stage === "enrolment",
+					can_evaluate: user.is_admin && this.isEvaluationsOn,
 				});
 			}),
 

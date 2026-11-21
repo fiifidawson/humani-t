@@ -93,7 +93,7 @@ async def _serve(providers: Providers, heartbeat: Heartbeat) -> None:
             providers.answers.serve(stop),
             providers.document_processor.serve(stop),
             providers.retention.serve(stop),
-            providers.evaluation_worker.serve(stop),
+            *([providers.evaluation_worker.serve(stop)] if providers.is_evaluations_on else []),
         )
     finally:
         await providers.close()
@@ -115,7 +115,11 @@ async def running_in_process(providers: Providers) -> AsyncIterator[None]:
     serving = asyncio.create_task(worker.serve(stop))
     reading = asyncio.create_task(providers.document_processor.serve(stop))
     sweeping = asyncio.create_task(providers.retention.serve(stop))
-    judging = asyncio.create_task(providers.evaluation_worker.serve(stop))
+    judging = (
+        asyncio.create_task(providers.evaluation_worker.serve(stop))
+        if providers.is_evaluations_on
+        else None
+    )
     _log.info("worker_started_in_process", worker=worker.worker_id)
     try:
         yield
@@ -124,7 +128,8 @@ async def running_in_process(providers: Providers) -> AsyncIterator[None]:
         await serving
         await reading
         await sweeping
-        await judging
+        if judging is not None:
+            await judging
         _log.info("worker_stopped", worker=worker.worker_id)
 
 
