@@ -32,7 +32,11 @@ import {
 import { unwrap } from "../../api/client";
 import { isApiError } from "../../api/problem";
 import { useApi } from "../../app/api-context";
-import { addMaskingRule, type DocumentReview } from "../../app/documentQueries";
+import {
+	addMaskingRule,
+	type DocumentReview,
+	type DocumentType,
+} from "../../app/documentQueries";
 import { keys } from "../../app/queries";
 import { COMPACT_ZOOM } from "../../shell/railStyles";
 import { DisclosureButton } from "../../ui/DisclosureButton";
@@ -103,25 +107,53 @@ function madeBy(sources: readonly string[]): string {
 		: "Found automatically";
 }
 
-/** `text` in paragraphs: the ranges between blank lines, which are left out. */
-function paragraphs(text: string): Range[] {
+// A PDF line that ends a sentence ends its paragraph; any other line break in a
+// PDF is only where the printed page wrapped.
+const ENDS_SENTENCE = /[.!?:;]["”’')\]]?$/;
+
+/**
+ * `text` in paragraphs, as the document showed them: a Word, text or Markdown
+ * file has one per line; a PDF's lines flow together until a blank line or the
+ * end of a sentence. Blank lines are left out.
+ */
+function paragraphs(text: string, fileType: DocumentType): Range[] {
 	const found: Range[] = [];
-	let start = 0;
-	for (const blank of text.matchAll(/\n[^\S\n]*\n\s*/g)) {
-		found.push({ start, end: blank.index });
-		start = blank.index + blank[0].length;
+	let start: number | null = null;
+	let end = 0;
+	let offset = 0;
+	for (const line of text.split("\n")) {
+		if (line.trim() === "") {
+			if (start !== null) {
+				found.push({ start, end });
+			}
+			start = null;
+		} else {
+			start ??= offset;
+			end = offset + line.length;
+			if (fileType !== "pdf" || ENDS_SENTENCE.test(line.trimEnd())) {
+				found.push({ start, end });
+				start = null;
+			}
+		}
+		offset += line.length + 1;
 	}
-	found.push({ start, end: text.length });
-	return found;
+	if (start !== null) {
+		found.push({ start, end });
+	}
+	return found.length > 0 ? found : [{ start: 0, end: text.length }];
 }
 
 /**
  * The original's and the masked text's paragraphs, side by side. Masking keeps
- * paragraph breaks, so they pair up; if they ever do not, each side is one block.
+ * line breaks, so they pair up; if they ever do not, each side is one block.
  */
-function pairedParagraphs(raw: string, masked: string): [Range[], Range[]] {
-	const left = paragraphs(raw);
-	const right = paragraphs(masked);
+function pairedParagraphs(
+	raw: string,
+	masked: string,
+	fileType: DocumentType,
+): [Range[], Range[]] {
+	const left = paragraphs(raw, fileType);
+	const right = paragraphs(masked, fileType);
 	return left.length === right.length
 		? [left, right]
 		: [[{ start: 0, end: raw.length }], [{ start: 0, end: masked.length }]];
@@ -222,9 +254,11 @@ function Pane({
 export function MaskingCorrections({
 	projectId,
 	review,
+	fileType,
 }: {
 	projectId: string;
 	review: DocumentReview;
+	fileType: DocumentType;
 }) {
 	const api = useApi();
 	const queryClient = useQueryClient();
@@ -361,6 +395,7 @@ export function MaskingCorrections({
 	const [rawParagraphs, maskedParagraphs] = pairedParagraphs(
 		raw,
 		review.masked_text,
+		fileType,
 	);
 	// A run that crosses a paragraph break is cut in two, one piece per paragraph.
 	const runsIn = (paragraph: Range) =>
@@ -382,6 +417,9 @@ export function MaskingCorrections({
 				tabIndex={0}
 				maxH={`calc(70vh / ${COMPACT_ZOOM})`}
 				overflowY="auto"
+				// Holds the placeholders' screen-reader text, which is positioned
+				// absolutely; without it that text stretches the page below the frame.
+				position="relative"
 				pe="2"
 			>
 				<Grid
@@ -403,7 +441,7 @@ export function MaskingCorrections({
 								<Text
 									key={paragraph.start}
 									data-paragraph=""
-									whiteSpace="pre-wrap"
+									whiteSpace="normal"
 									overflowWrap="anywhere"
 								>
 									{runsIn(paragraph).map((run) =>
@@ -423,7 +461,12 @@ export function MaskingCorrections({
 					</Pane>
 					<Pane title="What the model will see" rows={maskedParagraphs.length}>
 						{maskedParagraphs.map((paragraph) => (
-							<Box key={paragraph.start} data-paragraph="">
+							<Box
+								key={paragraph.start}
+								data-paragraph=""
+								// Flow like the original beside it: a PDF's line breaks are page wraps.
+								css={{ "& > p": { whiteSpace: "normal" } }}
+							>
 								<MaskedText
 									text={review.masked_text.slice(
 										paragraph.start,

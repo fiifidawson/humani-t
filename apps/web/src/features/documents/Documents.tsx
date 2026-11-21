@@ -109,8 +109,19 @@ function StatusIcon({ status }: { status: DocumentStatus }) {
 				: status === "rejected"
 					? X
 					: LoaderCircle;
+	// Still being checked or read: it spins, as a run's stage does (theme `spin`).
+	const isWorking = Icon === LoaderCircle;
 	return (
-		<Box as="span" color="fg.muted" display="inline-flex">
+		<Box
+			as="span"
+			color="fg.muted"
+			display="inline-flex"
+			css={
+				isWorking
+					? { "& svg": { animation: "spin 1s linear infinite" } }
+					: undefined
+			}
+		>
 			<Icon size={16} />
 		</Box>
 	);
@@ -576,7 +587,11 @@ function MaskedReview({
 				<ErrorNotice error={shown.error} onRetry={() => void shown.refetch()} />
 			) : null}
 			{canDecide && review.data !== undefined ? (
-				<MaskingCorrections projectId={projectId} review={review.data} />
+				<MaskingCorrections
+					projectId={projectId}
+					review={review.data}
+					fileType={document.file_type}
+				/>
 			) : null}
 			{canDecide || masked.data === undefined ? null : (
 				<Box
