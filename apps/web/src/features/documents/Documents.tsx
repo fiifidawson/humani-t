@@ -59,10 +59,9 @@ import { FormError } from "../../ui/FormError";
 import { Loading } from "../../ui/Loading";
 import { Page } from "../../ui/Page";
 import { SectionHeading } from "../../ui/SectionHeading";
-import { MaskedText } from "../reviews/MaskedText";
 import { maskedCounts, totalMasked } from "../reviews/masking";
 import { formatSize, statusWords } from "./format";
-import { MaskingCorrections } from "./MaskingReview";
+import { MaskedDocument, MaskingCorrections } from "./MaskingReview";
 
 /** How often the list is fetched again while a document is being processed. */
 export const POLL_INTERVAL_MS = 3000;
@@ -594,14 +593,11 @@ function MaskedReview({
 				/>
 			) : null}
 			{canDecide || masked.data === undefined ? null : (
-				<Box
-					p="4"
-					rounded="card"
-					borderWidth="1px"
-					borderColor="border"
-					bg="bg"
-				>
-					<MaskedText text={masked.data.masked_text} />
+				<Box>
+					<MaskedDocument
+						text={masked.data.masked_text}
+						fileType={document.file_type}
+					/>
 					{masked.data.is_truncated ? (
 						<Text mt="3" fontSize="sm" color="fg.muted">
 							Only the first part of this file was read.

@@ -41,7 +41,7 @@ export function MaskedText({
 					part
 				) : (
 					// biome-ignore lint/suspicious/noArrayIndexKey: parts have no identity but their place
-					<Pill key={index}>
+					<Pill key={index} data-placeholder="">
 						<span aria-hidden="true">{shownPlaceholder(part)}</span>
 						<VisuallyHidden>{spokenPlaceholder(part)}</VisuallyHidden>
 					</Pill>
