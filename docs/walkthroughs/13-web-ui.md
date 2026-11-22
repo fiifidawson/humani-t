@@ -1,6 +1,6 @@
 # 13 — Web UI foundation
 
-> **Milestones:** M13 (first pass) · **Status:** in progress · **Previous:** [05 — Accounts and sessions](05-accounts-and-sessions.md) · **Next:** `14-security-docs` (planned)
+> **Milestones:** M13 (first pass) · **Status:** done · **Previous:** [12 — Decision brief](12-decision-brief.md) · **Next:** [14 — Deploy and CI](14-deploy-and-ci.md)
 
 This phase gives humani-t a browser interface. A person can sign in with a password and a second factor (passkey, authenticator code or recovery code), set up that second factor on first sign-in and keep their recovery codes, see and create projects, open an empty project workspace with its composer, manage their signed-in devices and sign-in methods, re-authenticate in a dialog when the API asks for it, and switch between light and dark themes. It wears the LiGHT lab's brand, built on Chakra UI. Every rule stays in the API: the browser sends what was typed and follows the answer, as [`CLAUDE.md`](../../CLAUDE.md) requires. The app runs under a strict Content Security Policy with no `unsafe-inline`, styles allowed only with a nonce that Caddy makes fresh for every response, and Trusted Types enforced. It implements phase P1 of [`UI_UX_SPEC.md` §15](../UI_UX_SPEC.md#15-delivery-phases) up to the empty workspace, with §4 (layout), §6.1 (sign-in), §6.16 (account), §9 (design system), §11.2 and §11.4 (live events and errors), §12 (accessibility) and §13.1 (the JavaScript budget).
 

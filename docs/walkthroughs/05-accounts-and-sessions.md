@@ -1,6 +1,6 @@
 # 05 — Accounts and sessions
 
-> **Milestones:** M8, plus the concurrency and resource-safety pass · **Status:** done · **Previous:** [04 — Audit log](04-audit-log.md) · **Next:** `06-mfa` (planned)
+> **Milestones:** M8, plus the concurrency and resource-safety pass · **Status:** done · **Previous:** [04 — Audit log](04-audit-log.md) · **Next:** [06 — Multi-factor authentication](06-mfa.md)
 
 This phase lets people in, and keeps the wrong people out. An administrator is created from the command line and invites others by email; an invitee registers from the emailed link. Passwords follow NIST SP 800-63B rev 4 and are hashed with Argon2id off the event loop. Sessions live on the server and travel in `__Host-` cookies; every signed-in write must prove it came from our own page in three independent ways. Sign-in and reset attempts are throttled, counted before the slow check. Passwords can be changed (after a recent sign-in) and reset by email. Every one of these actions is written to the audit log ([04](04-audit-log.md)). A final pass made it all hold up under concurrent load: no connection is held across hashing or email, single-use links are single-use under races, and no request can silently overwrite another's change. It implements [`architecture.md` §5.1](../architecture.md#51-sign-in), [§5.2](../architecture.md#52-sessions), [§5.3](../architecture.md#53-request-integrity) and [§5.7](../architecture.md#57-concurrency-and-resources), and brief rule 6 (without MFA, which is phase 06).
 

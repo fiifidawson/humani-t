@@ -1,6 +1,6 @@
 # 18 — P4: evaluations
 
-> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [18 — P4 coverage](18-p4-coverage.md) · **Next:** [18 — P4 field](18-p4-field.md)
+> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [18 — P4: coverage estimate](18-p4-coverage.md) · **Next:** [18 — P4: low data mode and the brief as a PDF](18-p4-field.md)
 
 An instance administrator can now compare humani-t's answers with other systems' in the admin area (UI_UX_SPEC §6.15): pick a project they belong to, upload a question file and, optionally, other systems' answers, and pick a judge from the models the operator configured. The worker answers each question with the follow-up pipeline and asks the judge to compare each pair blind, as A and B. The results show each quality check's means and difference, with wins, ties and losses, and each judgement side by side with a "Reveal systems" toggle. It serves [`architecture.md` §4](../architecture.md) (Evaluation, Judgement, PairResult) and [ADR 0022](../adr/0022-evaluations-are-judged-blind-inside-their-project.md).
 

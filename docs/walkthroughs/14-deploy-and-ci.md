@@ -1,6 +1,6 @@
 # 14 — Deploy and CI
 
-> **Milestones:** M3, M4, and the deployment guide from M14 · **Status:** in progress · **Previous:** `13-web-ui` (planned) · **Next:** none yet
+> **Milestones:** M3, M4, and the deployment guide from M14 · **Status:** done (CI is complete; the hosting guides have not yet been tried on a real server) · **Previous:** [13 — Web UI foundation](13-web-ui.md) · **Next:** [15 — Exports and follow-up questions](15-exports-and-questions.md)
 
 Until this phase humani-t ran only on a developer's machine: the API under `uv run`, with Postgres, Valkey and Mailpit in containers beside it. At the end of it, an organisation can run the whole system on a server it controls with one command, behind HTTPS with automatic certificates, with every container locked down; and every pull request is checked by CI — tests against a real Postgres and Valkey, type checks, the layering rules, the web app's checks, secret scanning, dependency and image scanning, static analysis, a linter for the workflows themselves, and a smoke test that starts the full stack and checks it from the outside. The project also gains the files an open-source contributor looks for first. It implements [`architecture.md` §2](../architecture.md#2-deployment) and the deployment half of [§5.3](../architecture.md#53-request-integrity) and [§5.4](../architecture.md#54-encryption), and brief rules 15 and 17 (encryption in transit and at rest, with keys the operator holds).
 

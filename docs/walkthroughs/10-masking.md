@@ -1,6 +1,6 @@
 # 10 — Masking
 
-> **Milestones:** M11 · **Status:** in progress (papers, questions and the prompt guard done; documents and their review screen are P2) · **Previous:** [09 — Plan and discover](09-plan-and-discover.md) · **Next:** [11 — Discover, ingest and screening](11-screening.md)
+> **Milestones:** M11 · **Status:** done · **Previous:** [09 — Plan and discover](09-plan-and-discover.md) · **Next:** [11 — Discover, ingest and screening](11-screening.md)
 
 After this phase, nothing reaches a model unmasked. Every paper's kept text is masked by the `mask` stage before screening reads it, every question and change request is masked before planning calls the model, and every outgoing prompt is scanned again immediately before it leaves, refusing the call rather than repairing it. Owners can add project masking rules ("always mask Kofi Mensah"), and every masked span says what produced it. This serves the brief's rules 1 to 5 and [`architecture.md` §3.9.1](../architecture.md#391-masking-is-derived-reviewable-and-re-runnable). **Masking is not anonymity:** detectors miss formats, unlabelled numbers are left alone on purpose, and rare details still identify people.
 

@@ -1,6 +1,6 @@
 # 17 — P3: trade-off priorities and "Your view first"
 
-> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 compare](17-p3-compare.md) · **Next:** [17 — P3 find](17-p3-find.md)
+> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [17 — P3: compare versions and runs](17-p3-compare.md) · **Next:** [17 — P3: find (search, the command palette and the keyboard)](17-p3-find.md)
 
 A reader of a decision brief can now say what matters most to them and see the trade-off matrix reordered and highlighted, with no scores invented ([UI_UX_SPEC §6.9](../UI_UX_SPEC.md#69-decision-brief)). An owner can also turn on "Your view first": each member is then asked which option they lean towards before reading the brief, and only they see their answer.
 

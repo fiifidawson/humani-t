@@ -1,6 +1,6 @@
 # 17 — P3: compare versions and runs
 
-> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 history](17-p3-history.md) · **Next:** [17 — P3 brief](17-p3-brief.md)
+> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [17 — P3 history: Needs you, activity, timeline, seen and saved](17-p3-history.md) · **Next:** [17 — P3: trade-off priorities and "Your view first"](17-p3-brief.md)
 
 A reviewer can open any earlier version of a review's brief, see what changed against another version (options added or removed, evidence strength changes, sources added or removed), and put two runs of a review side by side: setup, discovery, screening and brief. Every comparison is computed by the API from what was stored when each brief and run was made ([UI_UX_SPEC §6.9 Versions, §7.4](../UI_UX_SPEC.md), [`architecture.md` §4.2](../architecture.md#42-reviews)).
 

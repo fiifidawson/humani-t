@@ -49,65 +49,34 @@ Conventions used throughout:
 | 07 | [Projects and roles](07-projects-and-roles.md) | M10 | ✅ done | Projects, memberships and the owner/reviewer/viewer roles through `can(role, action)`, a data key per project, delete by shredding, 404 for non-members, and the search endpoints made signed-in and project-scoped. |
 | 08 | [Runs, events and gates](08-runs-events-and-gates.md) | [architecture §4.4](../architecture.md#44-runs-live-events-and-gates) | ✅ done | Reviews inside a project; runs as background jobs on a Postgres queue with leases and crash recovery; one Server-Sent Events stream per run that replays missed events from `Last-Event-ID`; vocabulary and privacy gates decided once; cancel keeping finished stages; the stage seam the real stages plug into ([ADR-0003](../adr/0003-run-queue-and-event-fan-out.md)). |
 | 09 | [Plan and discover](09-plan-and-discover.md) | M11 | ✅ done | The SSRF-guarded `HttpFetcher` every outbound request goes through, OpenAlex, Europe PMC and arXiv behind `PaperSearchProvider`, `InferenceProvider` with Ollama behind a fail-closed prompt guard, and the search-planning conversation: clarifying questions, versioned drafts with their differences, change requests, a first-accept-wins accept, your own terms used exactly as given, privacy receipts, and the `queries` stage with its vocabulary gate ([ADR-0005](../adr/0005-plan-versions-are-written-once.md)). |
-| 10 | [Masking](10-masking.md) | [architecture §3.9](../architecture.md#39-masking) | 🟡 in progress | Masking as derived, reviewable spans over encrypted raw text, several local detectors, project masking rules, human review before use, and a last check on everything that leaves. |
-| 11 | [Discover, ingest and screening](11-screening.md) | UI_UX_SPEC §15 P1 | 🟡 in progress | Discover across every enabled source with merged duplicates, kept text for masking, screening of masked text with full provenance on every `ScreeningDecision`, PRISMA counts, the run manifest, and the paper routes. The mask store and the brief stage are still to be wired. |
-| 12 | [Decision brief](12-decision-brief.md) | [architecture §4.2](../architecture.md#42-reviews) | 🟡 in progress | The `answer` stage: a plain-Python agent loop (planner, BM25 retriever, writer, code checks, critic) that writes a `DecisionBrief` from masked passages with citations checked against what was retrieved, stored once per run, sealed, with its trace; and the routes to read the brief, a cited source and how it was made ([ADR-0007](../adr/0007-bm25-retrieval-for-the-brief.md)). |
-| 13 | `13-web-ui` | M13, [UI spec](../UI_UX_SPEC.md#15-delivery-phases) phase P1 | ⬜ planned | The React web app with strict TypeScript and generated API types: sign-in and MFA, projects, the workspace chat, and reading a brief. |
-| 14 | [Deploy and CI](14-deploy-and-ci.md) | M3, M4, M14 (deployment guide) | 🟡 in progress | Open-source files, the self-hosted Compose stack behind Caddy with hardened containers, CI with tests against real services, scanning, CodeQL and a smoke test of the whole stack, Dependabot, and the self-hosting and remote-model guides. Mutation testing, fuzzing and the threat model are still to come. |
-| 15 | [Exports and follow-up questions](15-exports-and-questions.md) | UI_UX_SPEC §15 P2 | 🟡 in progress | Downloads of the screening dataset, included papers, PRISMA, the manifest and the brief (Markdown, JSON, print-ready HTML), generated on request, audited, never cached, with CSV formula injection neutralised; follow-up questions in threads, masked before storage and answered in the background from the review's evidence by the brief's own loop; and the brief loop's `no_progress` stop. |
-| 16 | [Documents](16-documents.md) | UI_UX_SPEC §15 P2 | 🟡 in progress | A team's own files: upload with CSRF and every check before storage, sealed on a volume (ADR-0008), malware scanning as the operator's explicit choice, text read in an isolated child process within limits (ADR-0009), masking with the broad list, the owner's review of each masked version, approved documents as evidence tagged D1, D2…, and the privacy_review gate resumed by the last decision. |
-| 17 | [P3: organise projects](17-p3-organise.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Shared collections (ADR-0016), tags and per-user pins; the All projects page with cards and list, grouping, sorting, filters in the URL and bulk actions; Home's Pinned and Collections; collections in the rail. |
-| 17 | [P3: history](17-p3-history.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Needs you on Home and in the rail, recent activity, the project timeline, and seen and saved marks on papers, all derived from records already kept (ADR-0017). |
-| 17 | [P3: compare](17-p3-compare.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Brief versions with a version menu and "Compare with", the run manifest, and the Compare runs screen, all computed by the API. |
-| 17 | [P3: brief](17-p3-brief.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Trade-off priorities kept in the URL, humanitarian criteria first, one card per criterion on narrow screens, and the optional "Your view first" question. |
-| 17 | [P3: find](17-p3-find.md) | UI_UX_SPEC §15 P3 | 🟡 in progress | Search across a person's projects without an index (ADR-0018), the Ctrl K search and command palette, and the rest of the §11.5 keyboard, with single-key shortcuts that can be turned off. |
-| 18 | [P4: retention](18-p4-retention.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | An operator's retention period, off by default; "Deleted in N days unless kept" in Needs you, the date in Project settings, Keep, and deletion when due through the normal delete (ADR-0020). |
-| 18 | [P4: coverage](18-p4-coverage.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | The coverage estimate on the screening results: a capture-recapture range across paper sources, always called an estimate, or no estimate and why (ADR-0021); recorded in the run's manifest. |
-| 18 | [P4: evaluations](18-p4-evaluations.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | The admin area's evaluations: humani-t's answers against other systems', judged blind by a model the operator configured, inside a project the administrator belongs to (ADR-0022). |
-| 18 | [P4: field](18-p4-field.md) | UI_UX_SPEC §15 P4 | 🟡 in progress | Low data mode (system fonts, no motion, run progress every 10 s, offered once on a slow connection) and the brief as a PDF from the browser's print page (ADR-0019). |
+| 10 | [Masking](10-masking.md) | [architecture §3.9](../architecture.md#39-masking) | ✅ done | Masking as derived, reviewable spans over encrypted raw text, several local detectors, project masking rules, human review before use, and a last check on everything that leaves. |
+| 11 | [Discover, ingest and screening](11-screening.md) | UI_UX_SPEC §15 P1 | ✅ done | Discover across every enabled source with merged duplicates, kept text for masking, screening of masked text with full provenance on every `ScreeningDecision`, PRISMA counts, the run manifest, and the paper routes. |
+| 12 | [Decision brief](12-decision-brief.md) | [architecture §4.2](../architecture.md#42-reviews) | ✅ done | The `answer` stage: a plain-Python agent loop (planner, BM25 retriever, writer, code checks, critic) that writes a `DecisionBrief` from masked passages with citations checked against what was retrieved, stored once per run, sealed, with its trace; and the routes to read the brief, a cited source and how it was made ([ADR-0007](../adr/0007-bm25-retrieval-for-the-brief.md)). |
+| 13 | [Web UI](13-web-ui.md) | M13, [UI spec](../UI_UX_SPEC.md#15-delivery-phases) phase P1 | ✅ done | The React web app with strict TypeScript and generated API types: sign-in and MFA, projects, the workspace chat, and reading a brief. |
+| 14 | [Deploy and CI](14-deploy-and-ci.md) | M3, M4, M14 (deployment guide) | ✅ done | Open-source files, the self-hosted Compose stack behind Caddy with hardened containers, CI with tests against real services, scanning, CodeQL and a smoke test of the whole stack, Dependabot, and the self-hosting and remote-model guides. Mutation testing, fuzzing and the threat model are still to come. |
+| 15 | [Exports and follow-up questions](15-exports-and-questions.md) | UI_UX_SPEC §15 P2 | ✅ done | Downloads of the screening dataset, included papers, PRISMA, the manifest and the brief (Markdown, JSON, print-ready HTML), generated on request, audited, never cached, with CSV formula injection neutralised; follow-up questions in threads, masked before storage and answered in the background from the review's evidence by the brief's own loop; and the brief loop's `no_progress` stop. |
+| 16 | [Documents](16-documents.md) | UI_UX_SPEC §15 P2 | ✅ done | A team's own files: upload with CSRF and every check before storage, sealed on a volume (ADR-0008), malware scanning as the operator's explicit choice, text read in an isolated child process within limits (ADR-0009), masking with the broad list, the owner's review of each masked version, approved documents as evidence tagged D1, D2…, and the privacy_review gate resumed by the last decision. |
+| 17 | [P3: organise projects](17-p3-organise.md) | UI_UX_SPEC §15 P3 | ✅ done | Shared collections (ADR-0016), tags and per-user pins; the All projects page with cards and list, grouping, sorting, filters in the URL and bulk actions; Home's Pinned and Collections; collections in the rail. |
+| 17 | [P3: history](17-p3-history.md) | UI_UX_SPEC §15 P3 | ✅ done | Needs you on Home and in the rail, recent activity, the project timeline, and seen and saved marks on papers, all derived from records already kept (ADR-0017). |
+| 17 | [P3: compare](17-p3-compare.md) | UI_UX_SPEC §15 P3 | ✅ done | Brief versions with a version menu and "Compare with", the run manifest, and the Compare runs screen, all computed by the API. |
+| 17 | [P3: brief](17-p3-brief.md) | UI_UX_SPEC §15 P3 | ✅ done | Trade-off priorities kept in the URL, humanitarian criteria first, one card per criterion on narrow screens, and the optional "Your view first" question. |
+| 17 | [P3: find](17-p3-find.md) | UI_UX_SPEC §15 P3 | ✅ done | Search across a person's projects without an index (ADR-0018), the Ctrl K search and command palette, and the rest of the §11.5 keyboard, with single-key shortcuts that can be turned off. |
+| 18 | [P4: retention](18-p4-retention.md) | UI_UX_SPEC §15 P4 | ✅ done | An operator's retention period, off by default; "Deleted in N days unless kept" in Needs you, the date in Project settings, Keep, and deletion when due through the normal delete (ADR-0020). |
+| 18 | [P4: coverage](18-p4-coverage.md) | UI_UX_SPEC §15 P4 | ✅ done | The coverage estimate on the screening results: a capture-recapture range across paper sources, always called an estimate, or no estimate and why (ADR-0021); recorded in the run's manifest. |
+| 18 | [P4: evaluations](18-p4-evaluations.md) | UI_UX_SPEC §15 P4 | ✅ done | The admin area's evaluations: humani-t's answers against other systems', judged blind by a model the operator configured, inside a project the administrator belongs to (ADR-0022). |
+| 18 | [P4: field](18-p4-field.md) | UI_UX_SPEC §15 P4 | ✅ done | Low data mode (system fonts, no motion, run progress every 10 s, offered once on a slow connection) and the brief as a PDF from the browser's print page (ADR-0019). |
 
 Planned phases get their file, from [`TEMPLATE.md`](TEMPLATE.md), when their work starts. M12 (optional OIDC single sign-on) is in the plan but has no phase assigned yet.
 
-## Where the project stood at checkpoint 1
+## Where the project stands
 
-These numbers are from the checkpoint guide and were re-checked for the walkthroughs where it was possible without a database.
+As of 21 November 2026, everything in the plan is built, tested and merged to `main`: the security core (M0–M14, without the optional M12 single sign-on) and phases P1 to P4 of the [UI spec](../UI_UX_SPEC.md#15-delivery-phases).
 
-| Milestone | Status | Walkthrough | Notes |
-| --- | --- | --- | --- |
-| M0 Commit the existing work | ✅ Done | [01](01-baseline-and-quality-gates.md) | Session 1–2 search skeleton committed; `main.py` repaired |
-| M1 Strip the desktop (V2) version | ✅ Done | [01](01-baseline-and-quality-gates.md) | [ADR-0001](../adr/0001-web-only-self-hosted.md) |
-| M2 Python quality gates | ✅ Done | [01](01-baseline-and-quality-gates.md) | ruff, pyright, import-linter, coverage, hypothesis, pre-commit |
-| M3 Open-source files | 🟡 Partial | 14 | README only; CONTRIBUTING, SECURITY.md, code of conduct, templates missing |
-| M4 Containers and CI | 🟡 Partial | 14 | Development Compose only; no Dockerfile, Caddy or GitHub Actions |
-| M5 Configuration and persistence | ✅ Done | [02](02-configuration-and-persistence.md) | Settings, storage seam, Postgres, migrations, middleware |
-| M6 Envelope encryption | ✅ Done | [03](03-envelope-encryption.md) | Per-project keys, crypto-shredding, key rotation |
-| M7 Audit log | ✅ Done | [04](04-audit-log.md) | Hash chain, append-only, verifiable |
-| M8 Accounts and sessions | ✅ Done | [05](05-accounts-and-sessions.md) | Plus the concurrency and resource-safety hardening |
-| M9 Multi-factor authentication | ✅ Done | [06](06-mfa.md) | Passkeys, TOTP, recovery codes; G1 closed |
-| M10 Projects and roles | ⬜ | 07 | Owner, reviewer, viewer |
-| M11 SSRF-guarded outbound HTTP | ⬜ | 09 | |
-| M12 Optional OIDC single sign-on | ⬜ | — | |
-| M13 Web UI | ⬜ | 13 | React, strict TypeScript |
-| M14 Security documentation | 🟡 Partial | 14 | Control map done; threat model to do |
+- **Checked on every change:** the API suite against Postgres and Valkey (about 3,500 tests), ruff, pyright, the layering rules, the web lint and type check, about 640 vitest tests, the Playwright browser tests, the image and dependency scans, CodeQL, and a smoke test of the whole Compose stack on x86 and Arm.
+- **Seen end to end:** a real review with a hosted model (gpt-5-mini) from question to brief, document upload and its masking review, and the P3 and P4 screens in a browser.
+- **Off until the operator turns them on:** sending unmasked text to a hosted model (ADR 0014), the retention period (ADR 0020) and evaluation admin (ADR 0022).
 
-Rough completion at the checkpoint: **about 44% of the foundation plan**, and **about 15% of the whole product** in the brief (the review workflow itself — search, masking, screening, Q&A — has not started). Treat both as ±10 points.
-
-Test suite at the checkpoint: **291 tests**. Without Postgres and Valkey, `uv run pytest --cov` gives **268 passed, 23 skipped** and about **90%** branch coverage (re-run for these walkthroughs). With `TEST_DATABASE_URL` and `TEST_VALKEY_URL` set, all 291 run; the checkpoint recorded **94%** branch coverage for that run. The coverage gate is 85%. Ruff, pyright and import-linter reported no errors at the checkpoint.
-
-What works end to end:
-
-- An administrator is created from the command line, signs in, and invites people by email.
-- An invited person registers from the emailed link and is signed in.
-- Sessions live on the server; users can list them, sign out one device, or sign out everywhere else.
-- Passwords can be changed (with re-confirmation after 15 minutes) and reset by email.
-- Accounts can be disabled by an administrator.
-- Every sign-in, failure, sign-out and credential change is written to a tamper-evident audit log.
-- Brute-force attempts are throttled per account, per client and per email address.
-- Cross-site request forgery is blocked in three independent ways.
-- Per-project encryption keys exist and can be destroyed (crypto-shredding) and rotated, ready for projects in M10.
-- The original search skeleton still works: compiling a vocabulary into a Boolean query and searching an in-memory corpus.
-
-Deliberately not built yet: multi-factor authentication, projects and roles, the web UI, real paper sources, document upload, masking, screening, indexing, Q&A, production containers and CI. Each is planned; none is half-built.
+Nothing here has had an independent security review. Until it has, use fictional or already-public data only.
 
 ## Threats and where they are handled
 
@@ -130,12 +99,16 @@ The brief's 18 rules are the requirements; [`security/controls.md`](../security/
 | Overload and denial of service | Bounded pool with 503, body limit, throttling, no connection held across slow work | [02](02-configuration-and-persistence.md), [05](05-accounts-and-sessions.md) |
 | Race conditions | Conditional updates, optimistic locking, atomic claims, atomic rate limiting | [05](05-accounts-and-sessions.md) |
 | Secrets in the repository | Git-ignored `.env` and `secrets/`, gitleaks hook, Docker secrets in production | [00](00-setup.md), [01](01-baseline-and-quality-gates.md) |
+| A request to an internal address (SSRF) | One guarded fetcher with an allow list, checked again at connect time and on every redirect | [09](09-plan-and-discover.md) |
+| Personal data reaching a hosted model | Masking before anything is sent, project rules, the owner's review of each document, a last check on every call | [10](10-masking.md), [16](16-documents.md) |
+| A malicious upload | Type and size checks before storage, malware scanning, text read in an isolated child process within limits | [16](16-documents.md) |
+| Uploaded text giving the model instructions | Passed only as data in structured requests, with output limited to a schema | [16](16-documents.md), [18 — evaluations](18-p4-evaluations.md) |
+| Learning that someone else's project exists | The same `404` as for a missing project, in every list, count, search and activity line | [07](07-projects-and-roles.md), [17 — find](17-p3-find.md) |
 
-## Recommended order from here
+## What comes next
 
-1. Your end-to-end pass through walkthroughs 00 to 05.
-2. ~~Fix gap G1 — Valkey outage answers `500` instead of `503`~~ — done in [06](06-mfa.md).
-3. An independent security review of everything built so far (gap G13: everything here is self-checked; before any real data, an independent review, then a professional assessment).
-4. ~~M9 — multi-factor authentication~~ — [06](06-mfa.md).
-5. M10 — projects and roles; protect the search endpoints.
-6. M3 and M4 — open-source files, containers, CI with mutation testing, fuzzing and SAST.
+1. **An independent security review** of everything built, then a professional assessment, before any real data goes in.
+2. **Hosting:** try one of the deployment guides on a real server ([Oracle](../deploy/oracle-cloud.md) or another host); none has been run end to end yet.
+3. **Gaps found in P4:** the first screen's JavaScript is about 44 KB over its 170 KB budget, and Lighthouse does not check it in CI ([18 — field](18-p4-field.md)); evaluations cannot be deleted or rerun, and the admin screens for users and invitations are not built ([18 — evaluations](18-p4-evaluations.md)); printing the brief in Safari is not checked.
+4. **The spec's open questions** that are still open ([UI_UX_SPEC §16](../UI_UX_SPEC.md#16-open-questions)): phones, languages (French and Arabic), notifications, sharing, and who sees raw-text views in the audit log.
+5. **Masking quality:** a larger name model would catch names the small one misses ([10 — masking](10-masking.md)).

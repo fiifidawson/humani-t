@@ -1,6 +1,6 @@
 # 09 — Plan and discover
 
-> **Milestones:** M11 · **Status:** done (the outbound layer, then the [planning conversation](#planning-conversation)) · **Previous:** [07 — Projects and roles](07-projects-and-roles.md) · **Next:** `10-masking` (planned)
+> **Milestones:** M11 · **Status:** done (the outbound layer, then the [planning conversation](#planning-conversation)) · **Previous:** [08 — Runs, events and gates](08-runs-events-and-gates.md) · **Next:** [10 — Masking](10-masking.md)
 
 This phase gives humani-t its way out to the world, and makes it safe. Every request to another server now goes through one SSRF-guarded fetcher that can only reach the hosts an operator configured, checks the address at the moment it connects, and follows redirects by hand. Behind it sit three real paper sources (OpenAlex, Europe PMC and arXiv), each compiling the same `BooleanQuery` into its own syntax and returning `PaperRecord`s stamped with where they came from, and the `InferenceProvider` seam with an Ollama implementation that only ever asks for JSON matching a schema. A `PromptGuard` stands in front of every model call and fails closed. It serves brief rules 1 and 10, [`architecture.md` §3.1](../architecture.md#31-inferenceprovider), [§3.7](../architecture.md#37-papersearchprovider) and [§5.6](../architecture.md#56-outbound-requests). The [planning conversation](#planning-conversation) that turns a question into an accepted plan is the second part of this file.
 

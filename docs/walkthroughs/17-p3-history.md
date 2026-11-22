@@ -1,6 +1,6 @@
 # 17 — P3 history: Needs you, activity, timeline, seen and saved
 
-> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 organise](17-p3-organise.md) · **Next:** [17 — P3 compare](17-p3-compare.md)
+> **Milestones:** P3 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [17 — P3: organise projects (collections, tags, pins)](17-p3-organise.md) · **Next:** [17 — P3: compare versions and runs](17-p3-compare.md)
 
 A person coming back after a week sees what waits for them and what happened, on Home and in each project's history, and the papers they already read are marked wherever they appear ([UI_UX_SPEC §7.1, §7.4, §7.5](../UI_UX_SPEC.md#7-history-and-project-grouping)). Everything is derived from records the pipeline already keeps; only dismissals and marks are stored ([ADR-0017](../adr/0017-history-is-derived-and-marks-die-with-their-project.md)).
 

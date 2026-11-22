@@ -326,5 +326,4 @@ Proven by CI jobs rather than pytest: each job fails if the control is removed. 
 | No independent security review | Before any real data |
 | A stage that never calls `raise_if_cancelled` is cancelled only when it finishes; cancellation is cooperative | With the real stages, which check between items |
 | Watching a stream is not activity: a member who only watches a long run is signed out after an hour idle, and the stream ends | Revisit with the web app if it proves annoying (UI_UX_SPEC §11.4) |
-| The worker runs fake stages for mask, index and answer until those lanes land; Screen reads masked text from a placeholder that has none, so nothing is screened until the mask store is wired | Mask and brief lanes |
-| Screening reads abstracts only; open-access full text with PDF extraction is not built | P2 |
+| Screening reads abstracts only; open-access full text with PDF extraction is not built | Not yet planned; a team's own PDFs can be uploaded as documents instead |
