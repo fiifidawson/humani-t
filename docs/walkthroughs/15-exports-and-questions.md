@@ -1,6 +1,6 @@
 # 15 — Exports and follow-up questions
 
-> **Milestones:** P2 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested; answers have not been watched against Ollama) · **Previous:** [12 — Decision brief](12-decision-brief.md) · **Next:** [16 — Documents](16-documents.md)
+> **Milestones:** P2 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** done (follow-up answers not yet watched against a local Ollama model) · **Previous:** [14 — Deploy and CI](14-deploy-and-ci.md) · **Next:** [16 — Documents](16-documents.md)
 
 Before this phase a member could read a review's papers and its brief only on screen, and could not ask anything about them. Now any member can download what the screens show: the screening dataset as CSV or JSON lines, the included papers as RIS for a reference manager, the PRISMA counts, the run manifest, and the brief as Markdown, JSON or a print-ready page the browser saves as PDF. Reviewers and owners can ask follow-up questions in threads; each question is masked before it is stored, answered in the background from the review's own evidence by the brief's machinery, and every claim in the answer cites a passage that was actually retrieved. The brief loop also gains the "no new evidence and no better score" stop that UI_UX_SPEC §6.9 names. This serves UI_UX_SPEC §6.8, §6.9 (downloads), §6.12 and §5.3.9 (ask), [`architecture.md` §4.2](../architecture.md#42-reviews), §5.3 and §5.7.
 

@@ -1813,9 +1813,9 @@ Each phase is usable on its own. Endpoints marked **new** are not in the API yet
 
 ## 16. Open questions
 
-1. **Collections:** should a collection have its own owner and members, or is it only a label that each project owner sets? (This document assumes a label, with no access rules of its own.)
+1. **Collections:** should a collection have its own owner and members, or is it only a label that each project owner sets? **Decided:** a label shared across the deployment, with no access rules of its own; only its creator or an administrator renames or deletes it ([ADR 0016](adr/0016-collections-are-shared-labels.md)).
 2. **Several reviews per project:** first version with one review per project, or several from the start?
-3. **"Your view first":** off by default, as proposed, or on for new projects?
+3. **"Your view first":** off by default, as proposed, or on for new projects? **Decided:** off by default; an owner turns it on in Project settings.
 4. **Sharing outside the organisation:** never, or a read-only export only (PDF)? This document assumes export only.
 5. **Phones:** full features, or read-only (briefs, answers, Needs you) for the first version?
 6. **Direct editing of the search draft** (pills) versus chat only.

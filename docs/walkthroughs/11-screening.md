@@ -1,6 +1,6 @@
 # 11 — Discover, ingest and screening
 
-> **Milestones:** P1 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested; the mask store and the brief stage are still to be wired to it) · **Previous:** [09 — Plan and discover](09-plan-and-discover.md) · **Next:** `12-decision-brief` (planned)
+> **Milestones:** P1 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** done · **Previous:** [10 — Masking](10-masking.md) · **Next:** [12 — Decision brief](12-decision-brief.md)
 
 Before this phase a run's Discover, Ingest, Screen and Export stages were stand-ins that counted to five. Now a run searches every paper source the operator switched on with the review's accepted plan, merges what they return into one list of distinct papers, keeps each paper's title and abstract for the mask stage, sends each paper's **masked** text to the deployment's own model with the accepted criteria, and stores one `ScreeningDecision` per paper with the model id, prompt version and criteria version that produced it. Export counts the run PRISMA-style. Members can list a run's papers with their decisions, open one, see the PRISMA counts and read the run manifest. Everything is sealed under the project's key, so deleting the project shreds it. This answers the provenance test in [`CLAUDE.md`](../../CLAUDE.md) ("could a reviewer reconstruct why this paper was included or excluded, six months from now?"), [`architecture.md` §3.8](../architecture.md#38-screening) and [§4.2](../architecture.md#42-reviews), and the screening parts of UI_UX_SPEC [§5.3.7](../UI_UX_SPEC.md#537-screening-summary), [§6.7](../UI_UX_SPEC.md#67-run-progress) and [§6.8](../UI_UX_SPEC.md#68-screening-results).
 
@@ -13,7 +13,7 @@ Before this phase a run's Discover, Ingest, Screen and Export stages were stand-
 - **A malformed answer is asked again once.** A second failure is recorded as `uncertain` with the reason "the model's answer could not be read".
 - **Every stage is safe to repeat:** a crash, a deploy or a retry never searches twice, duplicates a paper or re-screens a decided one.
 - **A run started without Discover** (for example "try again from Screen") works from the review's newest discovery.
-- **Export** puts the PRISMA counts and a dataset summary in its stage summary. Downloadable files are P2.
+- **Export** puts the PRISMA counts and a dataset summary in its stage summary. The downloadable files come from the export routes ([15](15-exports-and-questions.md)).
 - **Endpoints:** `GET /api/v1/reviews/{review_id}/papers`, `GET /api/v1/reviews/{review_id}/papers/{paper_id}`, `GET /api/v1/reviews/{review_id}/prisma`, `GET /api/v1/runs/{run_id}/manifest` ([`api.md`](../api.md#papers-screening-and-the-manifest)).
 - **For the brief stage:** `ScreenedEvidence`, the `EvidenceSource` that yields included papers' masked passages tagged `P<place>`.
 - **Settings added:** `HUMANI_T_PAPERS_PER_SOURCE` (default 25), `HUMANI_T_SCREENING_CONCURRENCY` (default 2).
@@ -346,7 +346,7 @@ uv run pytest tests/test_screening_domain.py tests/test_papers_storage_contract.
 | Id | Gap | Effect | Plan |
 | --- | --- | --- | --- |
 | G11.1 | The mask store is not wired: `MaskedTextSource` is a placeholder that has nothing | Screen fails closed in a real run (T11.6) | Wire the mask lane's store in `api/dependencies.py` at integration |
-| G11.2 | Abstracts only; open-access full text and PDF extraction are not built | Screening and the brief see less than the paper says | P2 |
+| G11.2 | Abstracts only; open-access full text and PDF extraction are not built | Screening and the brief see less than the paper says | Not yet planned; a team's own PDFs can be uploaded as documents ([16](16-documents.md)) |
 | G11.3 | No downloadable files (`dataset.csv`, `dataset.jsonl`, `prisma.md`) | Export is summary-only | P2 |
 | G11.4 | Decisions are per run: a retried or repeated run re-screens every paper | Model time on a CPU-only server | Reuse a decision when masked text, criteria version, prompt version and model are all unchanged |
 | G11.5 | ~~Relabelling and the rules editor are not built~~ | Resolved: label rules (D11.13). Briefs and answers written after a change read the labels the rules give, and the expanded row says which rules version set a label | Done |

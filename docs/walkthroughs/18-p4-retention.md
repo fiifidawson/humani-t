@@ -1,6 +1,6 @@
 # 18 — P4 retention: the period, "Deleted in N days unless kept", Keep
 
-> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** in progress · **Previous:** [17 — P3 find](17-p3-find.md) · **Next:** [18 — P4 coverage](18-p4-coverage.md)
+> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [17 — P3: find (search, the command palette and the keyboard)](17-p3-find.md) · **Next:** [18 — P4: coverage estimate](18-p4-coverage.md)
 
 An operator can have projects deleted for age, and nobody is surprised by it: owners are warned in Needs you for the last 14 days, every member sees the date in Project settings, and one click on **Keep** restarts the clock ([UI_UX_SPEC §7.7](../UI_UX_SPEC.md#77-archive-delete-retention), [ADR-0020](../adr/0020-retention-counts-from-last-activity.md)). A deletion for age is exactly an owner's deletion: the project's key is destroyed.
 

@@ -6,7 +6,7 @@ A reviewer states a research question. humani-t searches academic repositories, 
 
 humani-t is a **self-hosted web application**. An organisation runs it on infrastructure it controls, so questions, documents and results stay within that deployment. Personal data is masked before any text reaches a language model, and by default that model runs inside the deployment as well.
 
-> **Status: early development.** The security core (accounts, MFA, projects, encryption at rest, a tamper-evident audit log) is in place and the review workflow is being built on top of it. **Do not use it with real data yet:** it has not had an independent security review.
+> **Status: feature-complete, not yet reviewed.** The security core (accounts, MFA, projects, encryption at rest, a tamper-evident audit log) and the whole review workflow, from question to decision brief, are built and tested. **Do not use it with real data yet:** it has not had an independent security review.
 
 ## How it works
 
@@ -14,7 +14,8 @@ humani-t is a **self-hosted web application**. An organisation runs it on infras
 2. **Discover** papers in OpenAlex, Europe PMC and arXiv.
 3. **Mask** personal data in papers and your own documents, locally, with no LLM.
 4. **Screen** each paper against the criteria. Every decision keeps its evidence and provenance.
-5. **Review, export and ask.** Relabel, export a dataset and a PRISMA report, and ask follow-up questions answered with cited sources.
+5. **Read the decision brief:** the options, their trade-offs, where the evidence disagrees and what is missing, with every claim linked to its source.
+6. **Review, export and ask.** Relabel, export a dataset, a PRISMA report and the brief, and ask follow-up questions answered with cited sources.
 
 See [`docs/WEB_APP_BRIEF.md`](docs/WEB_APP_BRIEF.md) for the full workflow and the security rules the app keeps.
 
