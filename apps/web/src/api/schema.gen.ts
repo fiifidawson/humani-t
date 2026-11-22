@@ -2914,7 +2914,7 @@ export interface components {
             is_truncated: boolean;
             /**
              * Notice
-             * @default You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read.
+             * @default You're seeing original text. This view is recorded.
              */
             notice: string;
         };
