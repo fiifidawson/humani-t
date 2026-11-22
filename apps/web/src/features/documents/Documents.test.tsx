@@ -605,7 +605,7 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		).toHaveLength(4);
 	});
 
-	it("opens a masked word's row in the list when it is clicked in the original", async () => {
+	it("opens a card at a masked word, saying what masked it, with its actions", async () => {
 		const { project } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
 		await user.click(
@@ -618,14 +618,133 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 			).getByText("Kofi Mensah"),
 		);
 
-		const masks = await screen.findByRole("list", { name: "Masks" });
+		const card = await screen.findByRole("dialog", {
+			name: "Mask: Kofi Mensah",
+		});
+		expect(card).toHaveTextContent("Person · Found automatically");
 		await waitFor(() =>
 			expect(
-				within(masks).getByRole("button", {
-					name: "Not personal: Kofi Mensah",
-				}),
+				within(card).getByRole("button", { name: "Not personal: Kofi Mensah" }),
 			).toHaveFocus(),
 		);
+		expect(
+			within(card).getByRole("button", {
+				name: "Always mask in this project: Kofi Mensah",
+			}),
+		).toBeInTheDocument();
+	});
+
+	it("unmasks from the card at the word, with the reason the owner gives", async () => {
+		const { api, project, waiting } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			within(
+				await screen.findByRole("region", { name: "Original text" }),
+			).getByText("12 March"),
+		);
+		const card = await screen.findByRole("dialog", { name: "Mask: 12 March" });
+		await user.click(
+			within(card).getByRole("button", { name: "Not personal: 12 March" }),
+		);
+		await user.type(
+			within(card).getByRole("textbox", { name: "Why it isn't personal" }),
+			"Date of a public meeting",
+		);
+		await user.click(within(card).getByRole("button", { name: "Remove mask" }));
+
+		expect(
+			await screen.findByText("“12 March” is no longer masked."),
+		).toBeInTheDocument();
+		expect(
+			api.requestsTo(
+				"POST",
+				`/projects/${project.id}/documents/${waiting.id}/unmask`,
+			)[0]?.body,
+		).toEqual({
+			version: 1,
+			start: 13,
+			end: 21,
+			reason: "Date of a public meeting",
+		});
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Mask: 12 March" }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("opens the same card from a placeholder in what the model will see", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		await user.click(
+			within(
+				await screen.findByRole("region", { name: "What the model will see" }),
+			).getByText("Date 1"),
+		);
+
+		expect(
+			await screen.findByRole("dialog", { name: "Mask: 12 March" }),
+		).toBeInTheDocument();
+	});
+
+	it("closes the card with Esc", async () => {
+		const { project } = withDocumentWaiting();
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		await user.click(
+			within(
+				await screen.findByRole("region", { name: "Original text" }),
+			).getByText("Kofi Mensah"),
+		);
+		await screen.findByRole("dialog", { name: "Mask: Kofi Mensah" });
+
+		await user.keyboard("{Escape}");
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Mask: Kofi Mensah" }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("puts the mask bar right at a selection in the original", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: { text: "Dr Traoré met the team at the clinic.", found: [] },
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+
+		selectText(
+			await screen.findByRole("region", { name: "Original text" }),
+			"Dr Traoré",
+		);
+
+		const bar = await screen.findByRole("toolbar", {
+			name: "Mask the selection",
+		});
+		expect(
+			within(bar).getByRole("combobox", { name: "Mask as" }),
+		).toBeInTheDocument();
+		expect(
+			within(bar).getByRole("button", { name: "Mask it" }),
+		).toBeInTheDocument();
+		expect(
+			within(bar).getByRole("button", { name: "Always mask in this project" }),
+		).toBeInTheDocument();
 	});
 
 	it("lists every mask with what it hides, and offers Not personal only where the API allows it", async () => {
@@ -841,6 +960,31 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		});
 		expect(await screen.findByText("masked person 1")).toBeInTheDocument();
 		expect(api.requests.filter((r) => r.path.endsWith("/review"))).toEqual([]);
+	});
+
+	it("shows an approved document's masked text in paragraphs, in a scrolling frame", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.pdf", {
+			status: "approved",
+			fileType: "pdf",
+			original: {
+				text: "Interview notes. The team met\nKofi Mensah at the clinic in the\nmorning.\nThe committee met twice.",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "See masked text D1 notes.pdf",
+			}),
+		);
+
+		const frame = await screen.findByRole("region", {
+			name: "The masked text",
+		});
+		expect(frame).toHaveAttribute("tabindex", "0");
+		expect(frame.querySelectorAll("[data-paragraph]")).toHaveLength(2);
 	});
 
 	it.each<Role>(["reviewer", "viewer"])(

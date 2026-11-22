@@ -1,8 +1,8 @@
 /**
  * The owner's masking review of one document (UI_UX_SPEC §6.6): the original
- * and the masked text side by side in one scrolling frame, every mask (with
- * "Not personal" where the API allows it) one click away, and masking what was
- * missed.
+ * and the masked text side by side in one scrolling frame. Selecting words in
+ * the original masks them; clicking a mask opens its card ("Not personal" where
+ * the API allows it). The full list of masks stays below, for the keyboard.
  *
  * Offsets come from the API's `raw_text` and go back to it as they are; the API
  * decides what may be masked or unmasked, and this only shows its answer.
@@ -18,12 +18,14 @@ import {
 	HStack,
 	Stack,
 	Text,
+	VisuallyHidden,
 } from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, EyeOff, Shield } from "lucide-react";
 import {
 	type FormEvent,
 	type ReactNode,
+	useCallback,
 	useEffect,
 	useId,
 	useRef,
@@ -199,6 +201,211 @@ function offsetIn(
 	return Number(start) + offset;
 }
 
+/** Where something sits inside the frame's scrolled content, in CSS pixels. */
+interface Place {
+	top: number;
+	bottom: number;
+	left: number;
+}
+
+type Rect = Pick<DOMRect, "top" | "bottom" | "left">;
+
+const NOWHERE: Rect = { top: 0, bottom: 0, left: 0 };
+
+function placeIn(frame: HTMLElement, rect: Rect): Place {
+	const box = frame.getBoundingClientRect();
+	// The app's zoom makes client rectangles smaller than CSS pixels; this undoes it.
+	const scale = frame.offsetWidth > 0 ? box.width / frame.offsetWidth : 1;
+	return {
+		top: (rect.top - box.top) / scale + frame.scrollTop,
+		bottom: (rect.bottom - box.top) / scale + frame.scrollTop,
+		left: (rect.left - box.left) / scale,
+	};
+}
+
+// Keeps a pop-up of `width` inside the frame, however close to its right edge it opens.
+const leftWithin = (place: Place, width: string) =>
+	`max(0px, min(${place.left}px, calc(100% - ${width})))`;
+
+const POP_UP = {
+	position: "absolute",
+	zIndex: "2",
+	p: "3",
+	bg: "bg.panel",
+	rounded: "card",
+	borderWidth: "1px",
+	borderColor: "border",
+	boxShadow: "md",
+	maxW: "calc(100% - 1rem)",
+} as const;
+
+// A native dialog left open: not modal, so the text beside it stays readable.
+const CardDialog = chakra("dialog");
+
+/** A masked word's card, opened where it was clicked: what it is, and its actions. */
+function MaskCard({
+	mask,
+	words,
+	place,
+	isBusy,
+	onUnmask,
+	onAlwaysMask,
+	onClose,
+}: {
+	mask: Mask;
+	words: string;
+	place: Place;
+	isBusy: boolean;
+	onUnmask: (reason: string) => void;
+	onAlwaysMask: () => void;
+	onClose: () => void;
+}) {
+	const card = useRef<HTMLDialogElement>(null);
+	const [isRemoving, setRemoving] = useState(false);
+	const [reason, setReason] = useState("");
+	const isRule = mask.sources.some((s) => s.startsWith("rule:"));
+
+	useEffect(() => {
+		card.current?.querySelector("button")?.focus();
+	}, []);
+	useEffect(() => {
+		const away = (event: MouseEvent) => {
+			if (
+				event.target instanceof Node &&
+				!card.current?.contains(event.target)
+			) {
+				onClose();
+			}
+		};
+		document.addEventListener("mousedown", away);
+		return () => document.removeEventListener("mousedown", away);
+	}, [onClose]);
+
+	return (
+		<CardDialog
+			ref={card}
+			open
+			aria-label={`Mask: ${words}`}
+			{...POP_UP}
+			m="0"
+			color="fg"
+			top={`${place.bottom + 4}px`}
+			left={leftWithin(place, "20rem")}
+			w="20rem"
+			onKeyDown={(event) => {
+				if (event.key === "Escape") {
+					event.stopPropagation();
+					onClose();
+				}
+			}}
+		>
+			<Stack gap="2">
+				<Text fontSize="sm" color="fg.muted">
+					{`${entityTypeName(mask.type)} · ${madeBy(mask.sources)}`}
+				</Text>
+				{isRemoving ? (
+					<Stack
+						as="form"
+						gap="2"
+						onSubmit={(event: FormEvent) => {
+							event.preventDefault();
+							if (reason.trim() !== "" && !isBusy) {
+								onUnmask(reason);
+							}
+						}}
+					>
+						<Field
+							label="Why it isn't personal"
+							hint="One line. It is kept with the review."
+							maxLength={200}
+							required
+							value={reason}
+							onChange={(event) => setReason(event.target.value)}
+						/>
+						<HStack gap="2">
+							<Button
+								type="submit"
+								size="xs"
+								disabled={reason.trim() === "" || isBusy}
+							>
+								<Check />
+								Remove mask
+							</Button>
+							<Button size="xs" variant="ghost" onClick={onClose}>
+								Cancel
+							</Button>
+						</HStack>
+					</Stack>
+				) : (
+					<HStack gap="2" wrap="wrap">
+						{mask.canRemove ? (
+							<Button
+								size="xs"
+								variant="outline"
+								aria-label={`Not personal: ${words}`}
+								onClick={() => setRemoving(true)}
+							>
+								<EyeOff />
+								Not personal
+							</Button>
+						) : null}
+						{isRule ? null : (
+							<Button
+								size="xs"
+								variant="outline"
+								aria-label={`Always mask in this project: ${words}`}
+								disabled={isBusy}
+								onClick={onAlwaysMask}
+							>
+								Always mask in this project
+							</Button>
+						)}
+						<Button size="xs" variant="ghost" onClick={onClose}>
+							Close
+						</Button>
+					</HStack>
+				)}
+			</Stack>
+		</CardDialog>
+	);
+}
+
+/** What the model reads from a document, for anyone who does not see the original. */
+export function MaskedDocument({
+	text,
+	fileType,
+}: {
+	text: string;
+	fileType: DocumentType;
+}) {
+	return (
+		<Box
+			as="section"
+			aria-label="The masked text"
+			tabIndex={0}
+			maxH={`calc(70vh / ${COMPACT_ZOOM})`}
+			overflowY="auto"
+			// Holds the placeholders' screen-reader text, as the review's frame does.
+			position="relative"
+			p="4"
+			rounded="card"
+			borderWidth="1px"
+			borderColor="border"
+			bg="bg"
+			css={{
+				"& [data-paragraph]:not(:last-child)": { pb: "4" },
+				"& [data-paragraph] > p": { whiteSpace: "normal" },
+			}}
+		>
+			{paragraphs(text, fileType).map((paragraph) => (
+				<Box key={paragraph.start} data-paragraph="">
+					<MaskedText text={text.slice(paragraph.start, paragraph.end)} />
+				</Box>
+			))}
+		</Box>
+	);
+}
+
 // On wide screens both panes share the outer grid's rows (subgrid), so a
 // paragraph and its masked version always start level, however each one wraps.
 function Pane({
@@ -262,15 +469,20 @@ export function MaskingCorrections({
 }) {
 	const api = useApi();
 	const queryClient = useQueryClient();
+	const frame = useRef<HTMLDivElement>(null);
 	const original = useRef<HTMLDivElement>(null);
+	const maskedPane = useRef<HTMLDivElement>(null);
 	const typeId = useId();
 	const [selected, setSelected] = useState<Range | null>(null);
+	const [selectedAt, setSelectedAt] = useState<Place | null>(null);
+	const [opened, setOpened] = useState<{ mask: Mask; place: Place } | null>(
+		null,
+	);
 	const [type, setType] = useState<EntityType>("PERSON");
 	const [removing, setRemoving] = useState<Range | null>(null);
 	const [reason, setReason] = useState("");
 	const [outcome, setOutcome] = useState<string | null>(null);
 	const [isListOpen, setListOpen] = useState(false);
-	const [focusing, setFocusing] = useState<string | null>(null);
 	const listId = useId();
 	const raw = review.raw_text;
 	const quoted = ({ start, end }: Range) => raw.slice(start, end);
@@ -332,6 +544,7 @@ export function MaskingCorrections({
 						: `${words} is masked.`,
 			);
 			setSelected(null);
+			setOpened(null);
 			setRemoving(null);
 			setReason("");
 			queryClient.setQueryData(reviewKey, updated);
@@ -344,44 +557,75 @@ export function MaskingCorrections({
 
 	const readSelection = () => {
 		const pane = original.current;
+		const box = frame.current;
 		const selection = window.getSelection();
-		if (pane === null || selection === null || selection.rangeCount === 0) {
+		if (
+			pane === null ||
+			box === null ||
+			selection === null ||
+			selection.rangeCount === 0
+		) {
 			return;
 		}
 		const range = selection.getRangeAt(0);
 		const start = offsetIn(pane, range.startContainer, range.startOffset);
 		const end = offsetIn(pane, range.endContainer, range.endOffset);
-		setSelected(
-			start === null || end === null || start >= end ? null : { start, end },
-		);
+		if (start === null || end === null || start >= end) {
+			setSelected(null);
+			return;
+		}
+		setOpened(null);
+		setSelected({ start, end });
+		// jsdom has no layout, so a range has no rectangle there.
+		const rect =
+			typeof range.getBoundingClientRect === "function"
+				? range.getBoundingClientRect()
+				: NOWHERE;
+		setSelectedAt(placeIn(box, rect));
 	};
 
-	// A click (not a drag) on a masked word opens its row, where its actions are.
-	const openClickedMask = (target: EventTarget) => {
+	const masks = masksOf(review.spans);
+
+	// A click (not a drag) on a masked word, or on its placeholder, opens its card there.
+	const openCard = (element: Element | null, mask: Mask | undefined) => {
+		const box = frame.current;
+		if (
+			element === null ||
+			mask === undefined ||
+			box === null ||
+			window.getSelection()?.isCollapsed === false
+		) {
+			return;
+		}
+		setSelected(null);
+		setOpened({ mask, place: placeIn(box, element.getBoundingClientRect()) });
+	};
+
+	const openFromOriginal = (target: EventTarget) => {
 		const mark = target instanceof Element ? target.closest("mark") : null;
 		const offset = Number(
 			mark?.querySelector("[data-offset]")?.getAttribute("data-offset") ??
 				Number.NaN,
 		);
-		const mask = masksOf(review.spans).find(
-			(m) => m.start <= offset && offset < m.end,
+		openCard(
+			mark,
+			masks.find((m) => m.start <= offset && offset < m.end),
 		);
-		if (mask !== undefined && window.getSelection()?.isCollapsed !== false) {
-			setListOpen(true);
-			setFocusing(maskKey(mask));
-		}
 	};
 
-	useEffect(() => {
-		if (focusing === null) {
-			return;
-		}
-		const row = document.getElementById(`${listId}-${focusing}`);
-		const target = row?.querySelector("button") ?? row;
-		target?.focus();
-		target?.scrollIntoView?.({ block: "nearest" });
-		setFocusing(null);
-	}, [focusing, listId]);
+	// Placeholders follow the masks in order, so the k-th is the k-th mask; if the
+	// counts ever differ, a placeholder opens nothing rather than the wrong mask.
+	const openFromMasked = (target: EventTarget) => {
+		const pill =
+			target instanceof Element ? target.closest("[data-placeholder]") : null;
+		const pills = [
+			...(maskedPane.current?.querySelectorAll("[data-placeholder]") ?? []),
+		];
+		const index = pill === null ? -1 : pills.indexOf(pill);
+		openCard(pill, pills.length === masks.length ? masks[index] : undefined);
+	};
+
+	const closeCard = useCallback(() => setOpened(null), []);
 
 	const unmask = (event: FormEvent) => {
 		event.preventDefault();
@@ -390,7 +634,6 @@ export function MaskingCorrections({
 		}
 	};
 
-	const masks = masksOf(review.spans);
 	const allRuns = runs(raw, review.spans);
 	const [rawParagraphs, maskedParagraphs] = pairedParagraphs(
 		raw,
@@ -413,6 +656,7 @@ export function MaskingCorrections({
 			    together. Zoom scales viewport units, hence the division. */}
 			<Box
 				as="section"
+				ref={frame}
 				aria-label="The original and the masked text"
 				tabIndex={0}
 				maxH={`calc(70vh / ${COMPACT_ZOOM})`}
@@ -432,8 +676,8 @@ export function MaskingCorrections({
 							ref={original}
 							display="contents"
 							onMouseUp={(event) => {
-								openClickedMask(event.target);
 								readSelection();
+								openFromOriginal(event.target);
 							}}
 							onKeyUp={readSelection}
 						>
@@ -460,80 +704,115 @@ export function MaskingCorrections({
 						</Box>
 					</Pane>
 					<Pane title="What the model will see" rows={maskedParagraphs.length}>
-						{maskedParagraphs.map((paragraph) => (
-							<Box
-								key={paragraph.start}
-								data-paragraph=""
-								// Flow like the original beside it: a PDF's line breaks are page wraps.
-								css={{ "& > p": { whiteSpace: "normal" } }}
-							>
-								<MaskedText
-									text={review.masked_text.slice(
-										paragraph.start,
-										paragraph.end,
-									)}
-								/>
-							</Box>
-						))}
+						<Box
+							ref={maskedPane}
+							display="contents"
+							onMouseUp={(event) => openFromMasked(event.target)}
+						>
+							{maskedParagraphs.map((paragraph) => (
+								<Box
+									key={paragraph.start}
+									data-paragraph=""
+									// Flow like the original beside it: a PDF's line breaks are page wraps.
+									css={{ "& > p": { whiteSpace: "normal" } }}
+								>
+									<MaskedText
+										text={review.masked_text.slice(
+											paragraph.start,
+											paragraph.end,
+										)}
+									/>
+								</Box>
+							))}
+						</Box>
 					</Pane>
 				</Grid>
+				{selected === null || selectedAt === null ? null : (
+					<Flex
+						role="toolbar"
+						aria-label="Mask the selection"
+						{...POP_UP}
+						p="2"
+						gap="2"
+						align="center"
+						wrap="wrap"
+						// Above the selection, unless that would hide it under the frame's top.
+						{...(selectedAt.top > 56
+							? {
+									top: `${selectedAt.top - 6}px`,
+									transform: "translateY(-100%)",
+								}
+							: { top: `${selectedAt.bottom + 6}px` })}
+						left={leftWithin(selectedAt, "28rem")}
+					>
+						<VisuallyHidden>{`Selected: “${quoted(selected)}”`}</VisuallyHidden>
+						<chakra.label htmlFor={typeId} fontSize="sm" fontWeight="medium">
+							Mask as
+						</chakra.label>
+						<EntityTypeSelect id={typeId} value={type} onChange={setType} />
+						<Button
+							size="xs"
+							disabled={correct.isPending}
+							onClick={() =>
+								correct.mutate({
+									kind: "mask",
+									range: selected,
+									type,
+									isRule: false,
+								})
+							}
+						>
+							<Shield />
+							Mask it
+						</Button>
+						<Button
+							size="xs"
+							variant="outline"
+							disabled={correct.isPending}
+							onClick={() =>
+								correct.mutate({
+									kind: "mask",
+									range: selected,
+									type,
+									isRule: true,
+								})
+							}
+						>
+							Always mask in this project
+						</Button>
+					</Flex>
+				)}
+				{opened === null ? null : (
+					<MaskCard
+						key={maskKey(opened.mask)}
+						mask={opened.mask}
+						words={quoted(opened.mask)}
+						place={opened.place}
+						isBusy={correct.isPending}
+						onUnmask={(why) =>
+							correct.mutate({
+								kind: "unmask",
+								range: opened.mask,
+								reason: why,
+							})
+						}
+						onAlwaysMask={() =>
+							correct.mutate({
+								kind: "mask",
+								range: opened.mask,
+								type: opened.mask.type,
+								isRule: true,
+							})
+						}
+						onClose={closeCard}
+					/>
+				)}
 			</Box>
 
-			<Stack
-				gap="3"
-				p="4"
-				rounded="card"
-				borderWidth="1px"
-				borderColor="border"
-			>
-				{selected === null ? (
-					<Text fontSize="sm" color="fg.muted">
-						Select words in the original text to mask something that was missed.
-					</Text>
-				) : (
-					<>
-						<Text fontWeight="medium" overflowWrap="anywhere">
-							{`Selected: “${quoted(selected)}”`}
-						</Text>
-						<Flex gap="3" align="center" wrap="wrap">
-							<chakra.label htmlFor={typeId} fontSize="sm" fontWeight="medium">
-								Mask as
-							</chakra.label>
-							<EntityTypeSelect id={typeId} value={type} onChange={setType} />
-							<Button
-								size="sm"
-								disabled={correct.isPending}
-								onClick={() =>
-									correct.mutate({
-										kind: "mask",
-										range: selected,
-										type,
-										isRule: false,
-									})
-								}
-							>
-								<Shield />
-								Mask it
-							</Button>
-							<Button
-								size="sm"
-								variant="outline"
-								disabled={correct.isPending}
-								onClick={() =>
-									correct.mutate({
-										kind: "mask",
-										range: selected,
-										type,
-										isRule: true,
-									})
-								}
-							>
-								Always mask in this project
-							</Button>
-						</Flex>
-					</>
-				)}
-			</Stack>
+			<Text fontSize="sm" color="fg.muted">
+				Select words in the original to mask them. Click a highlighted word, or
+				its placeholder, to change its mask.
+			</Text>
 
 			<Box aria-live="polite">
 				{outcome === null ? null : <Text fontWeight="medium">{outcome}</Text>}
@@ -586,8 +865,6 @@ export function MaskingCorrections({
 									<Stack
 										as="li"
 										key={maskKey(mask)}
-										id={`${listId}-${maskKey(mask)}`}
-										tabIndex={-1}
 										gap="2"
 										py="2"
 										borderBottomWidth="1px"

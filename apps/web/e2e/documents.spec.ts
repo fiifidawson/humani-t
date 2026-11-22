@@ -151,3 +151,88 @@ test("a long document stays in a frame shorter than the window, both sides scrol
 	});
 	await expect(page.getByRole("button", { name: "Approve" })).toBeInViewport();
 });
+
+test("the mask bar and a mask's card open right at the words, even after scrolling", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1366, height: 768 });
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill("Masking on the text");
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	await page.goto(`${page.url()}/documents`);
+	await page.locator("input[type=file]").setInputFiles({
+		name: "long_report.txt",
+		mimeType: "text/plain",
+		buffer: Buffer.from(Array.from({ length: 6 }, () => REPORT).join("\n\n")),
+	});
+	await page
+		.getByRole("button", { name: "Review D1 long_report.txt" })
+		.click({ timeout: 60_000 });
+	const frame = page.getByRole("region", {
+		name: "The original and the masked text",
+	});
+	const original = frame.getByRole("region", { name: "Original text" });
+	await expect(original).toBeVisible();
+	await frame.scrollIntoViewIfNeeded();
+	await frame.evaluate((element) => {
+		element.scrollTop = 300;
+	});
+
+	// Select words that are on screen, as a mouse drag would.
+	const selected = await original.evaluate((pane) => {
+		const walker = document.createTreeWalker(pane, NodeFilter.SHOW_TEXT);
+		for (
+			let node = walker.nextNode();
+			node !== null;
+			node = walker.nextNode()
+		) {
+			const at = node.textContent?.indexOf("the queue") ?? -1;
+			const holder = node.parentElement;
+			const top = holder?.getBoundingClientRect().top ?? 0;
+			if (
+				at >= 0 &&
+				holder !== null &&
+				top > 200 &&
+				top < window.innerHeight - 120
+			) {
+				const range = document.createRange();
+				range.setStart(node, at);
+				range.setEnd(node, at + "the queue".length);
+				window.getSelection()?.removeAllRanges();
+				window.getSelection()?.addRange(range);
+				holder.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+				const rect = range.getBoundingClientRect();
+				return { top: rect.top, bottom: rect.bottom };
+			}
+		}
+		throw new Error("No visible text to select");
+	});
+	const bar = page.getByRole("toolbar", { name: "Mask the selection" });
+	await expect(bar).toBeInViewport();
+	const barBox = await bar.boundingBox();
+	const barGap = Math.min(
+		Math.abs((barBox?.y ?? 0) + (barBox?.height ?? 0) - selected.top),
+		Math.abs((barBox?.y ?? 0) - selected.bottom),
+	);
+	expect(barGap).toBeLessThan(16);
+
+	// Click a masked name that is on screen: its card opens just below it.
+	const name = original.locator("mark", { hasText: "Kofi Mensah" });
+	let target = name.first();
+	for (const candidate of await name.all()) {
+		const box = await candidate.boundingBox();
+		if (box !== null && box.y > 160 && box.y < 560) {
+			target = candidate;
+			break;
+		}
+	}
+	await target.click();
+	const card = page.getByRole("dialog", { name: "Mask: Kofi Mensah" });
+	await expect(card).toBeInViewport();
+	const markBox = await target.boundingBox();
+	const cardBox = await card.boundingBox();
+	expect(
+		Math.abs((cardBox?.y ?? 0) - ((markBox?.y ?? 0) + (markBox?.height ?? 0))),
+	).toBeLessThan(16);
+});
