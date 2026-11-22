@@ -627,6 +627,37 @@ export function MaskingCorrections({
 
 	const closeCard = useCallback(() => setOpened(null), []);
 
+	// The bar closes as the card does: Esc, or a click outside it and the original.
+	const bar = useRef<HTMLDivElement>(null);
+	const hasBar = selected !== null;
+	useEffect(() => {
+		if (!hasBar) {
+			return;
+		}
+		const close = () => setSelected(null);
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				close();
+			}
+		};
+		const onDown = (event: MouseEvent) => {
+			const target = event.target instanceof Node ? event.target : null;
+			if (
+				target !== null &&
+				!bar.current?.contains(target) &&
+				!original.current?.parentElement?.contains(target)
+			) {
+				close();
+			}
+		};
+		document.addEventListener("keydown", onKey);
+		document.addEventListener("mousedown", onDown);
+		return () => {
+			document.removeEventListener("keydown", onKey);
+			document.removeEventListener("mousedown", onDown);
+		};
+	}, [hasBar]);
+
 	const unmask = (event: FormEvent) => {
 		event.preventDefault();
 		if (removing !== null && reason.trim() !== "" && !correct.isPending) {
@@ -729,6 +760,7 @@ export function MaskingCorrections({
 				</Grid>
 				{selected === null || selectedAt === null ? null : (
 					<Flex
+						ref={bar}
 						role="toolbar"
 						aria-label="Mask the selection"
 						{...POP_UP}

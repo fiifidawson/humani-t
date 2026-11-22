@@ -216,6 +216,8 @@ test("the mask bar and a mask's card open right at the words, even after scrolli
 		Math.abs((barBox?.y ?? 0) - selected.bottom),
 	);
 	expect(barGap).toBeLessThan(16);
+	await page.keyboard.press("Escape");
+	await expect(bar).toBeHidden();
 
 	// Click a masked name that is on screen: its card opens just below it.
 	const name = original.locator("mark", { hasText: "Kofi Mensah" });

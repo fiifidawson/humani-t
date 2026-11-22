@@ -747,6 +747,31 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		).toBeInTheDocument();
 	});
 
+	it("closes the mask bar with Esc, as the card closes", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "report.txt", {
+			status: "awaiting_review",
+			original: { text: "Dr Traoré met the team at the clinic.", found: [] },
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 report.txt" }),
+		);
+		selectText(
+			await screen.findByRole("region", { name: "Original text" }),
+			"Dr Traoré",
+		);
+		await screen.findByRole("toolbar", { name: "Mask the selection" });
+
+		await user.keyboard("{Escape}");
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("toolbar", { name: "Mask the selection" }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
 	it("lists every mask with what it hides, and offers Not personal only where the API allows it", async () => {
 		const { project } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
