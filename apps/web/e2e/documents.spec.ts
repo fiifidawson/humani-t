@@ -219,10 +219,13 @@ test("the mask bar and a mask's card open right at the words, even after scrolli
 	await page.keyboard.press("Escape");
 	await expect(bar).toBeHidden();
 
-	// Click a masked name that is on screen: its card opens just below it.
-	const name = original.locator("mark", { hasText: "Kofi Mensah" });
-	let target = name.first();
-	for (const candidate of await name.all()) {
+	// Click a masked email that is on screen: its card opens just below it. An email,
+	// not a name: CI's API has no name detector (the optional `ner` extra), only patterns.
+	const email = original.locator("mark", {
+		hasText: "kofi.mensah@example.org",
+	});
+	let target = email.first();
+	for (const candidate of await email.all()) {
 		const box = await candidate.boundingBox();
 		if (box !== null && box.y > 160 && box.y < 560) {
 			target = candidate;
@@ -230,7 +233,9 @@ test("the mask bar and a mask's card open right at the words, even after scrolli
 		}
 	}
 	await target.click();
-	const card = page.getByRole("dialog", { name: "Mask: Kofi Mensah" });
+	const card = page.getByRole("dialog", {
+		name: "Mask: kofi.mensah@example.org",
+	});
 	await expect(card).toBeInViewport();
 	const markBox = await target.boundingBox();
 	const cardBox = await card.boundingBox();
