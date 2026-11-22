@@ -243,12 +243,7 @@ class DocumentReviewOut(BaseModel):
     items: list[MaskedItemOut] = Field(description="Placeholders in `masked_text`.")
     page_starts: list[int] = Field(description="Where each page starts in `raw_text`.")
     is_truncated: bool
-    notice: str = Field(
-        default=(
-            "You're seeing original text. This view is recorded. Masking is not anonymity: "
-            "text that is only in images was not read."
-        )
-    )
+    notice: str = Field(default="You're seeing original text. This view is recorded.")
 
     @classmethod
     def from_view(cls, view: ReviewView) -> DocumentReviewOut:

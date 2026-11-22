@@ -7851,7 +7851,7 @@
           "notice": {
             "type": "string",
             "title": "Notice",
-            "default": "You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read."
+            "default": "You're seeing original text. This view is recorded."
           }
         },
         "type": "object",

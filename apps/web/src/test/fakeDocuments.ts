@@ -33,7 +33,7 @@ export const MASKING_CHANGED =
 export const NOT_YOUR_ROLE = "Your role in this project does not allow this.";
 export const DUPLICATE_RULE = "This project already masks that term.";
 export const REVIEW_NOTICE =
-	"You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read.";
+	"You're seeing original text. This view is recorded.";
 
 /** A value the fake's detectors find wherever it occurs, exactly as written. */
 export interface Found {
