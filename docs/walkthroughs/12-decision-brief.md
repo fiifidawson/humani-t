@@ -1,6 +1,6 @@
 # 12 — Decision brief
 
-> **Milestones:** P1 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** in progress (built and tested on memory storage; not yet watched end to end against Ollama) · **Previous:** [11 — Discover, ingest and screening](11-screening.md) · **Next:** [13 — Web UI](13-web-ui.md)
+> **Milestones:** P1 of [UI_UX_SPEC §15](../UI_UX_SPEC.md#15-delivery-phases) · **Status:** done (seen end to end with a hosted model; not yet with a local Ollama model) · **Previous:** [11 — Discover, ingest and screening](11-screening.md) · **Next:** [13 — Web UI foundation](13-web-ui.md)
 
 Before this phase a run's last stage, `answer`, was a stand-in that reported a few empty agent steps. Now it writes a **decision brief** from the run's screened-in evidence: it masks the review's question with the project's rules, asks the deployment's own model to plan the options to compare, retrieves masked passages for each sub-question, has the model draft a brief that compares the options with cited claims, checks every citation in code against what was actually retrieved, and has the model critique the draft until it is accepted or the round limit is reached. Every step is streamed as `agent.step` and kept as the brief's trace. Any member can then read the brief, open each cited source with the claims that cite it, and see how the brief was made. This serves [`architecture.md` §4.2](../architecture.md#42-reviews) and §4.4, the CHITCHAT loop in [`dependencies.md` §3](../dependencies.md#3-ammore), and UI_UX_SPEC §6.9 to §6.11 and §8.
 

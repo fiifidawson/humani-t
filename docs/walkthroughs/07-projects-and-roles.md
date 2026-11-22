@@ -1,6 +1,6 @@
 # 07 — Projects and roles
 
-> **Milestones:** M10 · **Status:** done · **Previous:** `06-mfa` · **Next:** `08-runs-events-and-gates`
+> **Milestones:** M10 · **Status:** done · **Previous:** [06 — Multi-factor authentication](06-mfa.md) · **Next:** [08 — Runs, events and gates](08-runs-events-and-gates.md)
 
 Before this phase, every signed-in user could do the same things, and the search endpoints were open to anyone. Now a signed-in user can create a **project**, share it with existing accounts as owner, reviewer or viewer, rename and archive it, and delete it completely. Every request about a project checks membership: a non-member gets the same `404` as for a project that does not exist, and a member whose role does not allow the action gets `403`. A project's name is stored only encrypted under the project's own data key. Deleting a project destroys that key, so every copy of its data, backups included once they expire, becomes unreadable, while the audit chain still verifies. Search now runs inside a project, and compiling a vocabulary or listing sources needs a sign-in. This serves brief rules 7, 8, 15, 16 and 17, [`architecture.md` §4.1](../architecture.md#41-access-and-accountability) and [§5.5](../architecture.md#55-authorisation-and-audit).
 
