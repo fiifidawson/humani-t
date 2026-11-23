@@ -6,10 +6,12 @@ can get and which is audited. Every other response carries masked text, counts a
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.application.documents import (
     DocumentListing,
@@ -17,6 +19,7 @@ from app.application.documents import (
     MaskedDocumentView,
     ReviewView,
 )
+from app.domain.document_lines import DocumentLine, lines_to_json
 from app.domain.documents import (
     ACCEPTED_TYPES,
     FAILURE_MESSAGES,
@@ -158,6 +161,44 @@ class MaskedItemOut(BaseModel):
         )
 
 
+class ParagraphLineOut(BaseModel):
+    kind: Literal["paragraph"]
+
+
+class HeadingLineOut(BaseModel):
+    kind: Literal["heading"]
+    level: int = Field(ge=1, le=3, description="1 for Title and Heading 1.")
+
+
+class ListItemLineOut(BaseModel):
+    kind: Literal["list_item"]
+
+
+class TableCellLineOut(BaseModel):
+    kind: Literal["table_cell"]
+    table: int = Field(ge=0, description="Counting from 0 in the document.")
+    row: int = Field(ge=0)
+    column: int = Field(ge=0)
+
+
+DocumentLineOut = Annotated[
+    ParagraphLineOut | HeadingLineOut | ListItemLineOut | TableCellLineOut,
+    Field(discriminator="kind"),
+]
+
+_LINES = (
+    "What each line of the text is, one per line, as the Word file said; `null` for "
+    "other files and for texts read before this was kept."
+)
+
+
+_LINES_OUT: TypeAdapter[list[DocumentLineOut]] = TypeAdapter(list[DocumentLineOut])
+
+
+def _lines_out(lines: Sequence[DocumentLine] | None) -> list[DocumentLineOut] | None:
+    return None if lines is None else _LINES_OUT.validate_python(lines_to_json(lines))
+
+
 class MaskedDocumentOut(BaseModel):
     """What the model will see once the document is approved."""
 
@@ -168,6 +209,9 @@ class MaskedDocumentOut(BaseModel):
     masked_text: str
     items: list[MaskedItemOut]
     page_starts: list[int] = Field(description="Where each page starts in `masked_text`.")
+    lines: list[DocumentLineOut] | None = Field(
+        description=_LINES + " `null` too when a mask joined two lines."
+    )
     is_truncated: bool
 
     @classmethod
@@ -181,6 +225,7 @@ class MaskedDocumentOut(BaseModel):
             masked_text=view.masked_text,
             items=[MaskedItemOut.from_region(r, view.masked_text) for r in view.regions],
             page_starts=list(view.masked_page_starts),
+            lines=_lines_out(view.lines),
             is_truncated=d.is_truncated,
         )
 
@@ -242,6 +287,7 @@ class DocumentReviewOut(BaseModel):
     removed: list[ExemptionOut] = Field(description="Masks people removed, and why.")
     items: list[MaskedItemOut] = Field(description="Placeholders in `masked_text`.")
     page_starts: list[int] = Field(description="Where each page starts in `raw_text`.")
+    lines: list[DocumentLineOut] | None = Field(description=_LINES + " Lines of `raw_text`.")
     is_truncated: bool
     notice: str = Field(default="You're seeing original text. This view is recorded.")
 
@@ -259,6 +305,7 @@ class DocumentReviewOut(BaseModel):
             removed=[ExemptionOut.from_domain(e) for e in view.exemptions],
             items=[MaskedItemOut.from_region(r, view.masked_text) for r in view.regions],
             page_starts=list(view.raw_page_starts),
+            lines=_lines_out(view.lines),
             is_truncated=d.is_truncated,
         )
 

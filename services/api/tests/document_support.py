@@ -75,6 +75,44 @@ def document_xml(*paragraphs: str) -> str:
     )
 
 
+def word_body(body: str) -> str:
+    """A `document.xml` around `body`, raw WordprocessingML."""
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>'
+    )
+
+
+def word_paragraph(text: str, style: str | None = None, *, numbered: bool = False) -> str:
+    properties = ""
+    if style is not None:
+        properties += f'<w:pStyle w:val="{style}"/>'
+    if numbered:
+        properties += '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
+    head = f"<w:pPr>{properties}</w:pPr>" if properties else ""
+    return f'<w:p>{head}<w:r><w:t xml:space="preserve">{_xml_text(text)}</w:t></w:r></w:p>'
+
+
+def word_table(*rows: tuple[str, ...]) -> str:
+    cells = "".join(
+        "<w:tr>" + "".join(f"<w:tc>{word_paragraph(c)}</w:tc>" for c in row) + "</w:tr>"
+        for row in rows
+    )
+    return f"<w:tbl>{cells}</w:tbl>"
+
+
+def word_styles(styles: dict[str, str]) -> bytes:
+    """A `styles.xml` naming each style id, as Word writes it (names stay English)."""
+    body = "".join(
+        f'<w:style w:type="paragraph" w:styleId="{style_id}"><w:name w:val="{name}"/></w:style>'
+        for style_id, name in styles.items()
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:styles xmlns:w="{W}">{body}</w:styles>'
+    ).encode()
+
+
 def _xml_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 

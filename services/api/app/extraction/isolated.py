@@ -18,6 +18,7 @@ from typing import Any
 
 import structlog
 
+from app.domain.document_lines import lines_from_json
 from app.domain.documents import (
     DocumentFailure,
     DocumentType,
@@ -47,12 +48,14 @@ def _child_environment() -> dict[str, str]:
 def _parse(answer: dict[str, Any]) -> ExtractedDocument:
     if not answer.get("ok"):
         raise ExtractionFailedError(DocumentFailure(answer["failure"]))
+    lines = answer.get("lines")
     return ExtractedDocument(
         text=str(answer["text"]),
         page_starts=tuple(int(p) for p in answer["page_starts"]),
         is_truncated=bool(answer["is_truncated"]),
         extractor=str(answer["extractor"]),
         is_paged=bool(answer["is_paged"]),
+        lines=None if lines is None else lines_from_json(lines),
     )
 
 

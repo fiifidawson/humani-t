@@ -12,6 +12,7 @@ import math
 import sys
 from typing import Any
 
+from app.domain.document_lines import lines_to_json
 from app.domain.documents import (
     DocumentFailure,
     DocumentType,
@@ -79,6 +80,7 @@ def _answer(header: dict[str, Any], content: bytes) -> dict[str, Any]:
         "is_truncated": extracted.is_truncated,
         "is_paged": extracted.is_paged,
         "extractor": extracted.extractor,
+        "lines": None if extracted.lines is None else lines_to_json(extracted.lines),
     }
 
 

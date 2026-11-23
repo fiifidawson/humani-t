@@ -333,6 +333,10 @@ Review          a question, a Vocabulary, and a set of Criteria
                 rejected, failed); a row that is also its processing job
     DocumentText  its extracted raw text, sealed, and where each page starts;
                 read only by masking and the owner's review
+      DocumentLine  what one line of a Word file's text is: paragraph,
+                heading (level 1 to 3), list item, or table cell (table,
+                row, column); one per line, beside the text, never in it
+                (ADR 0023)
     DocumentMask  one masked version: masked text and its detail (spans in
                 force, masks removed with who and why, page starts), sealed
                 and bound to the version

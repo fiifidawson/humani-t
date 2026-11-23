@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from app.domain.document_lines import DocumentLine, LineKind
 from app.domain.documents import (
     DocumentFailure,
     DocumentType,
@@ -23,7 +24,17 @@ from app.domain.documents import (
 )
 from app.extraction.isolated import IsolatedDocumentExtractor
 from app.extraction.local import EXTRACTOR_ID, LocalDocumentExtractor, extract_document
-from tests.document_support import W, document_xml, docx, encrypted_pdf, pdf
+from tests.document_support import (
+    W,
+    document_xml,
+    docx,
+    encrypted_pdf,
+    pdf,
+    word_body,
+    word_paragraph,
+    word_styles,
+    word_table,
+)
 
 LIMITS = ExtractionLimits()
 
@@ -172,6 +183,174 @@ class TestDocx:
         assert _failure(b"PK\x03\x04broken", DocumentType.DOCX) is DocumentFailure.UNREADABLE
 
 
+PARAGRAPH = DocumentLine(LineKind.PARAGRAPH)
+ITEM = DocumentLine(LineKind.LIST_ITEM)
+
+
+def _heading(level: int) -> DocumentLine:
+    return DocumentLine(LineKind.HEADING, level=level)
+
+
+def _cell(row: int, column: int, table: int = 0) -> DocumentLine:
+    return DocumentLine(LineKind.TABLE_CELL, table=table, row=row, column=column)
+
+
+def _structured(body: str, styles: dict[str, str] | None = None):
+    extra = {"word/styles.xml": word_styles(styles)} if styles is not None else None
+    return extract_document(docx(xml=word_body(body), extra=extra), DocumentType.DOCX, LIMITS)
+
+
+class TestDocxStructure:
+    """What each line of a Word file is, read from its styles, numbering and tables."""
+
+    def test_the_extractor_says_this_version_records_structure(self):
+        assert EXTRACTOR_ID.startswith("local@2+")
+
+    def test_title_and_headings_one_to_three_are_headings_with_their_level(self):
+        extracted = _structured(
+            word_paragraph("Field report", "Title")
+            + word_paragraph("Background", "Heading1")
+            + word_paragraph("Gao", "Heading2")
+            + word_paragraph("Clinics", "Heading3")
+            + word_paragraph("The team met twice."),
+            {
+                "Title": "Title",
+                "Heading1": "heading 1",
+                "Heading2": "heading 2",
+                "Heading3": "heading 3",
+            },
+        )
+
+        assert extracted.text == "Field report\nBackground\nGao\nClinics\nThe team met twice."
+        assert extracted.lines == (
+            _heading(1),
+            _heading(1),
+            _heading(2),
+            _heading(3),
+            PARAGRAPH,
+        )
+
+    def test_a_heading_is_found_by_its_style_name_whatever_its_id(self):
+        extracted = _structured(
+            word_paragraph("Contexte", "Titre1") + word_paragraph("Le comité."),
+            {"Titre1": "heading 1"},
+        )
+
+        assert extracted.lines == (_heading(1), PARAGRAPH)
+
+    def test_headings_below_three_are_shown_at_level_three(self):
+        extracted = _structured(
+            word_paragraph("Detail", "Heading5") + word_paragraph("Text."),
+            {"Heading5": "heading 5"},
+        )
+
+        assert extracted.lines == (_heading(3), PARAGRAPH)
+
+    def test_without_a_styles_part_words_own_heading_ids_are_still_read(self):
+        extracted = _structured(word_paragraph("Background", "Heading1") + word_paragraph("x."))
+
+        assert extracted.lines == (_heading(1), PARAGRAPH)
+
+    def test_numbered_paragraphs_and_list_styles_are_list_items(self):
+        extracted = _structured(
+            word_paragraph("Water", numbered=True)
+            + word_paragraph("Food", "ListBullet")
+            + word_paragraph("Shelter", "ListParagraph")
+            + word_paragraph("The end."),
+            {"ListBullet": "List Bullet", "ListParagraph": "List Paragraph"},
+        )
+
+        assert extracted.lines == (ITEM, ITEM, ITEM, PARAGRAPH)
+
+    def test_numbering_switched_off_is_not_a_list_item(self):
+        body = (
+            '<w:p><w:pPr><w:numPr><w:numId w:val="0"/></w:numPr></w:pPr>'
+            "<w:r><w:t>Plain</w:t></w:r></w:p>"
+        )
+
+        assert _structured(body).lines == (PARAGRAPH,)
+
+    def test_table_cells_say_their_table_row_and_column(self):
+        extracted = _structured(
+            word_paragraph("Before.")
+            + word_table(("Site", "Households"), ("Gao", "120"))
+            + word_paragraph("Between.")
+            + word_table(("Only",))
+        )
+
+        assert extracted.text == "Before.\nSite\nHouseholds\nGao\n120\nBetween.\nOnly"
+        assert extracted.lines == (
+            PARAGRAPH,
+            _cell(0, 0),
+            _cell(0, 1),
+            _cell(1, 0),
+            _cell(1, 1),
+            PARAGRAPH,
+            _cell(0, 0, table=1),
+        )
+
+    def test_a_table_inside_a_cell_belongs_to_the_cell_it_sits_in(self):
+        inner = word_table(("a", "b"))
+        body = (
+            "<w:tbl><w:tr>"
+            f"<w:tc>{word_paragraph('Outer')}{inner}</w:tc>"
+            f"<w:tc>{word_paragraph('Next')}</w:tc>"
+            "</w:tr></w:tbl>"
+        )
+
+        extracted = _structured(body)
+
+        assert extracted.text == "Outer\na\nb\nNext"
+        assert extracted.lines == (_cell(0, 0), _cell(0, 0), _cell(0, 0), _cell(0, 1))
+
+    def test_a_style_is_read_from_the_paragraph_not_from_its_tracked_history(self):
+        body = (
+            '<w:p><w:pPr><w:pPrChange w:id="1"><w:pPr><w:pStyle w:val="Heading1"/>'
+            "</w:pPr></w:pPrChange></w:pPr><w:r><w:t>Was a heading.</w:t></w:r></w:p>"
+        )
+
+        assert _structured(body).lines == (PARAGRAPH,)
+
+    def test_every_line_of_a_paragraph_with_a_break_has_its_kind(self):
+        body = (
+            '<w:p><w:pPr><w:numPr><w:numId w:val="3"/></w:numPr></w:pPr>'
+            "<w:r><w:t>First</w:t><w:br/><w:t>second</w:t></w:r></w:p>"
+        )
+
+        assert _structured(body).lines == (ITEM, ITEM)
+
+    def test_blank_paragraphs_cut_from_either_end_take_their_lines_with_them(self):
+        extracted = _structured(
+            word_paragraph("")
+            + word_paragraph("Background", "Heading1")
+            + word_paragraph("Text.")
+            + word_paragraph("")
+        )
+
+        assert extracted.text == "Background\nText."
+        assert extracted.lines == (_heading(1), PARAGRAPH)
+
+    def test_cut_off_text_keeps_one_kind_per_line(self):
+        limits = ExtractionLimits(max_characters=1000)
+        body = "".join(word_paragraph("Twenty characters ok.", "Heading1") for _ in range(200))
+
+        extracted = extract_document(docx(xml=word_body(body)), DocumentType.DOCX, limits)
+
+        assert extracted.is_truncated
+        assert extracted.lines is not None
+        assert len(extracted.lines) == extracted.text.count("\n") + 1
+
+    def test_a_styles_part_with_a_doctype_is_refused(self):
+        styles = f'<?xml version="1.0"?><!DOCTYPE s [<!ENTITY a "x">]><w:styles xmlns:w="{W}"/>'
+        content = docx("Hello", extra={"word/styles.xml": styles.encode()})
+
+        assert _failure(content, DocumentType.DOCX) is DocumentFailure.REFUSED_CONTENT
+
+    def test_text_markdown_and_pdf_files_have_no_structure(self):
+        assert extract_document(b"# Notes", DocumentType.MD, LIMITS).lines is None
+        assert extract_document(pdf("One page"), DocumentType.PDF, LIMITS).lines is None
+
+
 class TestLocalExtractor:
     async def test_it_runs_off_the_event_loop_and_gives_the_same_text(self):
         extracted = await LocalDocumentExtractor().extract(
@@ -188,6 +367,16 @@ class TestIsolatedExtractor:
         isolated = await IsolatedDocumentExtractor().extract(content, DocumentType.PDF, LIMITS)
 
         assert isolated == extract_document(content, DocumentType.PDF, LIMITS)
+
+    async def test_a_child_process_answers_a_word_files_structure_too(self):
+        content = docx(
+            xml=word_body(word_paragraph("Background", "Heading1") + word_table(("a", "b")))
+        )
+
+        isolated = await IsolatedDocumentExtractor().extract(content, DocumentType.DOCX, LIMITS)
+
+        assert isolated == extract_document(content, DocumentType.DOCX, LIMITS)
+        assert isolated.lines == (_heading(1), _cell(0, 0), _cell(0, 1))
 
     async def test_a_failure_in_the_child_comes_back_as_its_reason(self):
         with pytest.raises(ExtractionFailedError) as failed:

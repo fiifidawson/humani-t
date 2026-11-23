@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.domain.accounts import User
+from app.domain.document_lines import DocumentLine, LineKind
 from app.domain.documents import (
     Document,
     DocumentDecision,
@@ -246,6 +247,21 @@ class TestTextsAndMasks:
         async with storage.unit_of_work() as uow:
             assert await uow.documents.add_text(text) is True
             assert await uow.documents.add_text(text) is False
+            await uow.commit()
+
+        async with storage.unit_of_work() as uow:
+            assert await uow.documents.get_text(document.id) == text
+
+    async def test_a_word_files_lines_are_kept_with_its_text(self, storage):
+        document = await self._ready(storage)
+        lines = (
+            DocumentLine(LineKind.HEADING, level=1),
+            DocumentLine(LineKind.TABLE_CELL, table=0, row=0, column=0),
+        )
+        text = DocumentText(document.id, document.project_id, b"raw", (0,), NOW, lines)
+
+        async with storage.unit_of_work() as uow:
+            await uow.documents.add_text(text)
             await uow.commit()
 
         async with storage.unit_of_work() as uow:
