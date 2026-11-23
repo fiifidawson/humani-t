@@ -676,6 +676,7 @@ The review's latest brief, or the one run `run_id` wrote. **Response** `200` wit
   "bottom_line": [Claim, Claim],
   "options": [{"name", "description", "strength": "strong|moderate|weak|insufficient", "benefits": [Claim], "risks": [Claim]}],
   "trade_offs": [{"criterion", "is_humanitarian": true, "assessments": [{"option", "claim": Claim}]}],
+  "principles": [{"name": "Humanity", "trade_off": null}, …, {"name": "Do no harm", "trade_off": "Do no harm"}],
   "conflicts": [{"question", "conflict_type": "hierarchy|context|noise", "positions": [Claim], "meaning": Claim | null}],
   "considerations": [{"criterion", "option", "because": Claim}],
   "gaps": ["…"],
@@ -687,7 +688,7 @@ The review's latest brief, or the one run `run_id` wrote. **Response** `200` wit
 }
 ```
 
-`options` keep the Writer's order (2 to 4). `assessments` hold one cell per option. `sources` lists every cited tag by first appearance, with how often it is cited; `has_passage` is false only for a citation the checks flagged. `quality` holds the Critic's scores (0 to 2 each), never summed. `warnings` are checks still failing on the kept draft, such as `citation_not_retrieved`, `no_humanitarian_criterion` or `option_without_evidence`. `404` for no such review, a review with no brief yet, or a `run_id` whose brief belongs to another review.
+`options` keep the Writer's order (2 to 4). `assessments` hold one cell per option. `principles` lists the five humanitarian principles in a fixed order, each with the trade-off row that weighs it, or `null` when the brief does not discuss it: coverage, worked out from the rows, never a score. `sources` lists every cited tag by first appearance, with how often it is cited; `has_passage` is false only for a citation the checks flagged. `quality` holds the Critic's scores (0 to 2 each), never summed. `warnings` are checks still failing on the kept draft, such as `citation_not_retrieved`, `no_humanitarian_criterion` or `option_without_evidence`. `404` for no such review, a review with no brief yet, or a `run_id` whose brief belongs to another review.
 
 ### `GET /api/v1/briefs/{brief_id}/evidence/{tag}`
 

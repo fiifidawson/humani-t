@@ -835,12 +835,14 @@ The order of parts follows `agents/render.py::brief_markdown`. The canvas has a 
 - **Layout:** side by side (2 to 4 cards). Below 900 px of canvas width, they stack, each collapsed to its name, strength and counts ("3 benefits · 2 risks"), and open on tap.
 - **Benefits** start with `+` and use the blue `benefit.*` style; **risks** start with `−` and use the yellow `risk.*` style (§9.2.3). The words "Benefits" and "Risks" head each list.
 - **Claims marked `hypothesis`** are in italics with "⟡ reasoning, not a source". They never carry citation chips.
-- **Evidence strength** uses the four words and a three-dot meter (section [8.1](#81-evidence-strength)). The meter's meaning is on hover and in the "?" next to it.
+- **Evidence strength** uses the four words and a three-step bar (section [8.1](#81-evidence-strength)). The meter's meaning is on hover and in the "?" next to it.
 - **No ranking.** Cards keep the order the Writer gave. No card is highlighted unless the user picks a priority (below).
 
 #### Trade-off matrix
 
 A table of criteria (rows) by options (columns). Each cell is the Writer's short assessment with its source chips.
+
+Above it, **Humanitarian principles in this brief** lists Humanity, Neutrality, Independence, Impartiality and Do no harm, each marked **Weighed** (a link to its row) or **Not discussed**. It shows coverage, never a score; the API works it out from the rows.
 
 ```text
 ┌ Trade-offs ─────────────────────── What matters most to you? [Do no harm ▾] ┐
@@ -916,13 +918,13 @@ Collapsed by default, at the end.
 
 ```text
 ▸ Quality checks · the model's own review of this brief
-  Coverage ●●  Groundedness ●●  Disagreements ●○  Uncertainty ●●
-  Humanitarian awareness ●●  Specificity ●○
+  Coverage        ▬▬  good      Groundedness ▬▬  good    Disagreements ▬▭ partly
+  Uncertainty     ▬▬  good      Humanitarian awareness ▬▬ good  Specificity ▬▭ partly
   These scores come from the same model that wrote the brief. They catch
   gaps and weak citations, not every error. They are not a verification.
 ```
 
-- Each score is 0, 1 or 2, shown as two dots and a word on hover (poor, partly, good). No total is shown, so it can't become a trust badge.
+- Each score is 0, 1 or 2, shown as a two-step bar with its word (poor, partly, good), coloured by value but never by colour alone. No total is shown, so it can't become a trust badge.
 
 #### Your view first (optional)
 
@@ -1256,7 +1258,7 @@ These patterns are shared by every screen. They are written once here, so the wo
 
 ### 8.1 Evidence strength
 
-The brief uses four values (`Strength` in `schemas.py`). The interface always shows the word with a three-dot meter:
+The brief uses four values (`Strength` in `schemas.py`). The interface always shows the word with a three-step bar (drawn as dots here):
 
 | Value | Meter | Word | Hover text |
 |---|---|---|---|

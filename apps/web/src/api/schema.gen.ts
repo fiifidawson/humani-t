@@ -2220,6 +2220,11 @@ export interface components {
             options: components["schemas"]["OptionOut"][];
             /** Trade Offs */
             trade_offs: components["schemas"]["TradeOffOut"][];
+            /**
+             * Principles
+             * @description Each humanitarian principle and whether the trade-offs weigh it.
+             */
+            principles: components["schemas"]["PrincipleOut"][];
             /** Conflicts */
             conflicts: components["schemas"]["ConflictOut"][];
             /** Considerations */
@@ -4205,6 +4210,16 @@ export interface components {
             plan: components["schemas"]["VersionOut"];
             /** @description What changed from the version before. */
             diff: components["schemas"]["DiffOut"];
+        };
+        /** PrincipleOut */
+        PrincipleOut: {
+            /** Name */
+            name: string;
+            /**
+             * Trade Off
+             * @description The trade-off row that weighs it; null when the brief does not.
+             */
+            trade_off: string | null;
         };
         /**
          * Priority
