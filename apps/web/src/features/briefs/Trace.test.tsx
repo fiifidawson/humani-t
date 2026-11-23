@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { loopAgent, loopDiagram } from "../../test/agentLoop";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import { FakeEventSource } from "../../test/fakeEventSource";
 import { currentPath, renderApp } from "../../test/render";
@@ -69,10 +70,38 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		);
 	});
 
-	it("tells the loop as a timeline, round by round, one row per step", async () => {
+	it("opens the loop on the latest round, with a picker for the others", async () => {
 		const { path } = briefed();
 		const { canvas } = await openTrace(path);
 
+		const picker = within(canvas).getByRole("group", { name: "Round" });
+		expect(
+			within(picker)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Before the first draft", "Round 1", "Round 2"]);
+		expect(
+			within(picker).getByRole("button", { name: "Round 2" }),
+		).toHaveAttribute("aria-pressed", "true");
+		expect(
+			within(canvas).queryByRole("list", { name: "Round 1" }),
+		).not.toBeInTheDocument();
+		const rows = within(
+			within(canvas).getByRole("list", { name: "Round 2" }),
+		).getAllByRole("listitem");
+		expect(rows[0]).toHaveTextContent(
+			"Writer · failed · The model server isn't answering.",
+		);
+		expect(rows[1]).toHaveTextContent("Critic · accept");
+	});
+
+	it("switches rounds from the picker, one row per step", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openTrace(path);
+
+		await user.click(
+			within(canvas).getByRole("button", { name: "Before the first draft" }),
+		);
 		const before = within(canvas).getByRole("list", {
 			name: "Before the first draft",
 		});
@@ -86,27 +115,104 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 				"Retriever · 2 searches · 5 new passages (5 in all)",
 			),
 		]);
-		const first = within(canvas).getByRole("list", { name: "Round 1" });
-		const rows = within(first).getAllByRole("listitem");
+
+		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
+		expect(
+			within(canvas).getByRole("button", { name: "Round 1" }),
+		).toHaveAttribute("aria-pressed", "true");
+		const rows = within(
+			within(canvas).getByRole("list", { name: "Round 1" }),
+		).getAllByRole("listitem");
 		expect(rows[0]).toHaveTextContent("Writer · 3 options · 14 claims · 2 min");
 		expect(rows[1]).toHaveTextContent("Checks · 1 problem");
 		expect(rows[2]).toHaveTextContent("Critic · revise");
 	});
 
-	it("shows a failed step with its short error", async () => {
+	it("draws each agent with an icon, its state in words and the round's result", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openTrace(path);
+		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
+
+		const planner = loopAgent(canvas, "Planner");
+		expect(planner).toHaveTextContent("done");
+		expect(planner).toHaveTextContent("1 call · 41 s");
+		expect(planner.querySelector("svg")).not.toBeNull();
+		const writer = loopAgent(canvas, "Writer");
+		expect(writer).toHaveTextContent("done");
+		expect(writer).toHaveTextContent("3 options · 14 claims · 2 min");
+		expect(loopAgent(canvas, "Critic")).toHaveTextContent("revise");
+	});
+
+	it("marks a failed agent with a word and its short error, not colour alone", async () => {
 		const { path } = briefed();
 		const { canvas } = await openTrace(path);
 
-		const second = within(canvas).getByRole("list", { name: "Round 2" });
-		expect(within(second).getAllByRole("listitem")[0]).toHaveTextContent(
-			"Writer · failed · The model server isn't answering.",
+		const writer = loopAgent(canvas, "Writer");
+		expect(writer).toHaveTextContent("failed");
+		expect(writer).toHaveTextContent("The model server isn't answering.");
+	});
+
+	it("mutes an agent that did not run in the round", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openTrace(path);
+		await user.click(
+			within(canvas).getByRole("button", { name: "Before the first draft" }),
 		);
+
+		expect(loopAgent(canvas, "Retriever")).toHaveTextContent(
+			"2 searches · 5 new passages (5 in all)",
+		);
+		expect(loopAgent(canvas, "Writer")).toHaveTextContent("not run");
+		expect(loopAgent(canvas, "Critic")).toHaveTextContent("not run");
+	});
+
+	it("shows the checks as a badge on the way from the Writer to the Critic", async () => {
+		const { api, path } = briefed();
+		api.reviews.briefs[0]?.trace.steps.push({
+			round: 2,
+			role: "checks",
+			status: "ok",
+			seconds: 0,
+			problems: [],
+		});
+		const { canvas, user } = await openTrace(path);
+
+		expect(loopAgent(canvas, "Checks")).toHaveTextContent("no problems");
+		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
+		expect(loopAgent(canvas, "Checks")).toHaveTextContent("1 problem");
+	});
+
+	it("labels the way back with what the Critic decided", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openTrace(path);
+
+		expect(loopDiagram(canvas)).toHaveTextContent("accepted ✓");
+		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
+		expect(loopDiagram(canvas)).toHaveTextContent("asked for 1 search");
+		expect(loopDiagram(canvas)).not.toHaveTextContent("accepted");
+	});
+
+	it("says when the checks overruled the Critic's acceptance", async () => {
+		const { api, path } = briefed();
+		const critic = api.reviews.briefs[0]?.trace.steps.at(-1);
+		if (critic?.output != null) {
+			critic.output["overruled_by_checks"] = true;
+		}
+		const { canvas } = await openTrace(path);
+
+		expect(loopDiagram(canvas)).toHaveTextContent(
+			"accepted · overruled by the checks",
+		);
+		expect(loopDiagram(canvas)).not.toHaveTextContent("✓");
 	});
 
 	it("opens a step to its detail: the plan, the searches, the checks' problems, the Critic's requests", async () => {
 		const { path } = briefed();
 		const { canvas, user } = await openTrace(path);
 
+		await user.click(
+			within(canvas).getByRole("button", { name: "Before the first draft" }),
+		);
 		await user.click(
 			within(canvas).getByRole("button", { name: "Planner · 1 call · 41 s" }),
 		);
@@ -117,6 +223,7 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 			"Options: Cash transfers · Vouchers · In-kind food",
 		);
 
+		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
 		await user.click(
 			within(canvas).getByRole("button", { name: "Checks · 1 problem" }),
 		);
@@ -128,6 +235,7 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		expect(canvas).toHaveTextContent(
 			"Asked for: price effects of cash in small markets",
 		);
+		expect(canvas).toHaveTextContent("20,000 tokens in, 2,000 out");
 	});
 
 	it("ends with the totals and what the run used", async () => {
@@ -214,9 +322,9 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		).toHaveTextContent("None. The Writer had only the built-in instructions.");
 	});
 
-	it("shows the steps live while the brief is still being written", async () => {
+	it("draws the loop live while the brief is still being written", async () => {
 		const { path, run } = briefed(false, "running");
-		renderApp(`${path}/trace`);
+		const { user } = renderApp(`${path}/trace`);
 		const source = await waitFor(() => {
 			const found = FakeEventSource.instances.find((s) =>
 				s.url.includes(run.id),
@@ -233,22 +341,93 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 				at: "2026-11-03T10:51:00Z",
 			});
 			source.emit("agent.step", 2, { round: 0, role: "planner", status: "ok" });
-			source.emit("agent.step", 3, { round: 1, role: "writer", status: "ok" });
+			source.emit("agent.step", 3, {
+				round: 0,
+				role: "retriever",
+				status: "ok",
+				seconds: 1,
+				queries: ["cash transfers prices"],
+				passages_new: 4,
+				passages_total: 4,
+			});
+			source.emit("agent.step", 4, {
+				round: 1,
+				role: "writer",
+				status: "ok",
+				seconds: 90,
+				output: { options: ["Cash", "Vouchers"], claims: 6 },
+			});
 		});
 
 		await screen.findByText("Still writing. Steps appear as they finish.");
 		const canvas = screen.getByRole("region", {
 			name: "How this brief was made",
 		});
-		expect(canvas).toHaveTextContent(
-			"Still writing. Steps appear as they finish.",
-		);
-		const live = within(canvas).getByRole("list", { name: "Steps so far" });
 		expect(
-			within(live)
-				.getAllByRole("listitem")
-				.map((li) => li.textContent),
-		).toEqual(["Planner · round 0 · done", "Writer · round 1 · done"]);
+			within(canvas).getByRole("button", { name: "Round 1" }),
+		).toHaveAttribute("aria-pressed", "true");
+		expect(loopAgent(canvas, "Writer")).toHaveTextContent(
+			"2 options · 6 claims · 2 min",
+		);
+		expect(loopAgent(canvas, "Checks")).toHaveTextContent("running");
+		expect(loopAgent(canvas, "Critic")).toHaveTextContent("not reached yet");
+		const rows = within(
+			within(canvas).getByRole("list", { name: "Round 1" }),
+		).getAllByRole("listitem");
+		expect(rows.map((row) => row.textContent)).toEqual([
+			expect.stringContaining("Writer · 2 options · 6 claims · 2 min"),
+			expect.stringContaining("Checks · running"),
+		]);
+
+		act(() => {
+			source.emit("agent.step", 5, {
+				round: 1,
+				role: "checks",
+				status: "ok",
+				seconds: 0,
+				problems: [],
+			});
+		});
+		expect(loopAgent(canvas, "Checks")).toHaveTextContent("no problems");
+		expect(loopAgent(canvas, "Critic")).toHaveTextContent("running");
+
+		await user.click(
+			within(canvas).getByRole("button", { name: "Before the first draft" }),
+		);
+		expect(loopAgent(canvas, "Retriever")).toHaveTextContent(
+			"1 search · 4 new passages (4 in all)",
+		);
+		await user.click(
+			within(canvas).getByRole("button", {
+				name: "Retriever · 1 search · 4 new passages (4 in all)",
+			}),
+		);
+		expect(canvas).toHaveTextContent("Searches: cash transfers prices");
+	});
+
+	it("has no accessibility violations while the brief is being written", async () => {
+		const { path, run } = briefed(false, "running");
+		const { container } = renderApp(`${path}/trace`);
+		const source = await waitFor(() => {
+			const found = FakeEventSource.instances.find((s) =>
+				s.url.includes(run.id),
+			);
+			expect(found).toBeDefined();
+			return found as FakeEventSource;
+		});
+		act(() => {
+			source.open();
+			source.emit("stage.started", 1, {
+				stage: "answer",
+				position: 8,
+				total: 8,
+				at: "2026-11-03T10:51:00Z",
+			});
+			source.emit("agent.step", 2, { round: 0, role: "planner", status: "ok" });
+		});
+		await screen.findByText("Still writing. Steps appear as they finish.");
+
+		await expectNoAccessibilityViolations(container);
 	});
 
 	it("has no accessibility violations", async () => {
