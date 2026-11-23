@@ -965,8 +965,7 @@ function Quality({ quality }: { quality: NonNullable<Brief["quality"]> }) {
 							))}
 						</chakra.ul>
 						<Text mt="2" fontSize="xs" color="fg.muted">
-							These scores come from the same model that wrote the brief. They
-							catch gaps and weak citations, not every error. They are not a
+							Scored by the model that wrote the brief: a check for gaps, not a
 							verification.
 						</Text>
 					</Box>

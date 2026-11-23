@@ -92,9 +92,8 @@ export function EnrolPage() {
 				{step.kind === "choose" ? (
 					<Stack gap="5">
 						<Text>
-							Humani-T needs a second way to confirm it's you. A passkey is the
-							safest: it uses your fingerprint, face or a security key, and
-							can't be phished.
+							Add a second way to confirm it's you. A passkey (fingerprint, face
+							or security key) is safest.
 						</Text>
 						{message === null ? null : (
 							<FormError role="alert" icon={<CircleX size={16} />}>

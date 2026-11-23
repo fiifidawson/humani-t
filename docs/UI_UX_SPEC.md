@@ -431,8 +431,8 @@ A gate pauses the job until a person acts. It appears as a chat card, in the run
 
 ```text
 L1  ┌ ⏸ Needs you · Privacy review ────────────────────────────────┐
-    │ 2 uploaded documents need a masking check before any model   │
-    │ reads them. The run continues when you approve.              │
+    │ An owner must check the documents' masking. The run          │
+    │ continues once they approve.                                 │
     │                                                              │
     │ field_report_march.docx   14 masked · 3 to check             │
     │ meeting_minutes.txt        6 masked · 0 to check             │
@@ -588,7 +588,7 @@ Each screen lists its purpose, how people reach it, its layout, its states, and 
 - **Second factor:** the passkey prompt starts by itself. Links below it: "Use an authenticator code instead" and "Use a recovery code". No SMS.
 - **First sign-in from an invitation:** set a password (15 characters or more, shown with a strength hint and the blocklist message if it fails), then add a passkey (recommended) or TOTP, then save recovery codes. The recovery-code step shows the codes once, with "Download" and "I've saved them" (required to continue).
 - **Re-authentication:** a modal over the current screen, not a page change, when the API returns 401 `reauthentication_required` for a sensitive action (delete a project, change members or credentials). After success the original action is retried once. The modal says why: "Deleting a project needs you to sign in again."
-- **Session expired** (idle 1 hour): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
+- **Session expired** (idle 8 hours): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
 
 Source: [api.md](api.md) auth endpoints; [architecture.md](architecture.md) §5.1–5.2.
 
@@ -690,9 +690,7 @@ Source: `SearchPlan`, notes from `plan_problems`, `normalize_plan`, `fit_to_limi
 
 ```text
 ┌ Masking review · field_report_march.docx ─────────────── 1 of 2 ─────┐
-│ ⚠ Masking is not anonymity. Codes, numbers and rare details can     │
-│   identify people. Text that is only in images is masked only if it │
-│   was read by OCR.                                                   │
+│ You're seeing original text. This view is recorded.                  │
 │                                                                      │
 │ To check first (3)                │ Text                              │
 │ ┌──────────────────────────────┐  │ … the team met ⟦PERSON⟧ at the    │
@@ -920,8 +918,7 @@ Collapsed by default, at the end.
 ▸ Quality checks · the model's own review of this brief
   Coverage        ▬▬  good      Groundedness ▬▬  good    Disagreements ▬▭ partly
   Uncertainty     ▬▬  good      Humanitarian awareness ▬▬ good  Specificity ▬▭ partly
-  These scores come from the same model that wrote the brief. They catch
-  gaps and weak citations, not every error. They are not a verification.
+  Scored by the model that wrote the brief: a check for gaps, not a verification.
 ```
 
 - Each score is 0, 1 or 2, shown as a two-step bar with its word (poor, partly, good), coloured by value but never by colour alone. No total is shown, so it can't become a trust badge.

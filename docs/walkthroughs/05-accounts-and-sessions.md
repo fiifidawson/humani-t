@@ -31,7 +31,7 @@ This phase lets people in, and keeps the wrong people out. An administrator is c
 - **Migrations:** `0003` (users, sessions, invitations, password resets) and `0004` (`users.version` for optimistic locking).
 - **Operator commands:** `create-admin` (password from standard input only) and `purge-expired`.
 - **Settings:** `VALKEY_URL`, `SMTP_*` ([settings reference](02-configuration-and-persistence.md#settings-reference)).
-- **Fixed in code** (deliberately not configurable yet): session idle 1 h, absolute 24 h, re-authentication window 15 min; invitation 7 days; reset link 30 min; 10 sign-in attempts per account and 100 per client, 5 reset requests per email, each per 15 min; 4 concurrent password hashes; passwords 15–1024 characters (the HTTP boundary caps input at 4096); tokens of 32 random bytes; user agents stored up to 256 characters.
+- **Fixed in code** (deliberately not configurable yet): session idle 8 h, absolute 24 h, re-authentication window 15 min; invitation 7 days; reset link 30 min; 10 sign-in attempts per account and 100 per client, 5 reset requests per email, each per 15 min; 4 concurrent password hashes; passwords 15–1024 characters (the HTTP boundary caps input at 4096); tokens of 32 random bytes; user agents stored up to 256 characters.
 
 ### Data model
 
@@ -93,7 +93,7 @@ This phase lets people in, and keeps the wrong people out. An administrator is c
 
 ### D5.7 Session lifetimes and recent sign-in
 
-- **Decision:** 1 hour idle, 24 hours absolute (`SessionPolicy`). A new token pair at every sign-in, registration and password change, so a token known before sign-in is useless after it (no session fixation). Sensitive actions — today, changing the password — require a sign-in within 15 minutes (`authenticated_at`); otherwise they answer `401` with `"reauthentication_required": true`, and `POST /auth/reauthenticate` with the password moves the session to a new token pair (step-up rotation, [`architecture.md` §5.2](../architecture.md#52-sessions)): the old token stops working at once, `authenticated_at` becomes now, and the assurance level and creation time carry over, so a password alone never extends the 24-hour limit. A wrong password there is `403` and an `auth.reauthentication_failed` audit event. Password change ends every other session and continues this one under a fresh token; password reset ends every session.
+- **Decision:** 8 hours idle, 24 hours absolute (`SessionPolicy`). NIST AAL2 suggests 1 hour idle; 8 hours lets a working day of reading pass without signing out. A new token pair at every sign-in, registration and password change, so a token known before sign-in is useless after it (no session fixation). Sensitive actions — today, changing the password — require a sign-in within 15 minutes (`authenticated_at`); otherwise they answer `401` with `"reauthentication_required": true`, and `POST /auth/reauthenticate` with the password moves the session to a new token pair (step-up rotation, [`architecture.md` §5.2](../architecture.md#52-sessions)): the old token stops working at once, `authenticated_at` becomes now, and the assurance level and creation time carry over, so a password alone never extends the 24-hour limit. A wrong password there is `403` and an `auth.reauthentication_failed` audit event. Password change ends every other session and continues this one under a fresh token; password reset ends every session.
 - **Why:** NIST 800-63B rev 4 at assurance level 2 (AAL2).
 - **Proven by:** `tests/test_sessions.py::TestSessionPolicy`, `TestSessionLifetime`, `tests/test_auth_api.py::TestCurrentSession`, `TestSessionCookie::test_signing_in_always_issues_a_new_token`, `TestChangePassword`, `TestReauthentication`, `tests/test_mfa_api.py::TestTotpEnrolment::test_the_rotated_session_keeps_its_second_factor_level`.
 
@@ -183,7 +183,7 @@ The test harness proves rule 1 without a database: `TrackingStorage` counts open
 
 ### D5.16 Purging what has ended
 
-- **Decision:** `python -m app.cli purge-expired` deletes sessions that are revoked, idle for over an hour or older than 24 hours; reset links that are used or expired; and invitations that are accepted or expired. It prints the three counts. The worker (M4) will run it on a schedule.
+- **Decision:** `python -m app.cli purge-expired` deletes sessions that are revoked, idle for over 8 hours or older than 24 hours; reset links that are used or expired; and invitations that are accepted or expired. It prints the three counts. The worker (M4) will run it on a schedule.
 - **Why:** these tables would otherwise grow forever; a session row is useless once it can never be active again.
 - **Proven by:** `tests/test_concurrency_and_resources.py::TestBoundedGrowth`.
 
@@ -382,7 +382,7 @@ The last-admin refusal (`409`, `"last_admin": true`) cannot be reached one reque
 | T5.8.5 | Sign in with the new password | `200` | |
 | T5.8.6 | `POST {{base}}/auth/reauthenticate` `{"password":"wrong-password-entirely"}` | `403`, `"The password is incorrect."`; an `auth.reauthentication_failed` row in `audit_events` | Step-up refuses a wrong password, on record |
 | T5.8.8 | Copy the `session` collection variable. `POST {{base}}/auth/reauthenticate` `{"password":"<current>"}`, then send `GET {{base}}/auth/session` with the header `Cookie: __Host-session=<the copied value>` | `204` with new `set-cookie` headers for `__Host-session` and `__Host-csrf` (the variables change); the copied token gets `401`; the normal request gets `200` | Step-up rotates the token (D5.7) |
-| T5.8.7 | Optional, slow: stay signed in, wait 16 minutes (a `GET /auth/session` every few minutes keeps the session alive, though the idle limit is an hour), then try T5.8.3's request again with the current passwords | `401` with `"reauthentication_required": true` and `"Confirm your password to continue."`; then `POST /auth/reauthenticate` `{"password":"<current>"}` → `204`, and the change works | The 15-minute window |
+| T5.8.7 | Optional, slow: stay signed in, wait 16 minutes (a `GET /auth/session` every few minutes keeps the session alive, though the idle limit is 8 hours), then try T5.8.3's request again with the current passwords | `401` with `"reauthentication_required": true` and `"Confirm your password to continue."`; then `POST /auth/reauthenticate` `{"password":"<current>"}` → `204`, and the change works | The 15-minute window |
 
 From here on, the admin password is the one you set in T5.8.3.
 
@@ -481,7 +481,7 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | 256-bit tokens, never repeated, only hashes kept; NIST AAL2 lifetimes | `tests/test_sessions.py::TestTokens`, `TestSessionPolicy`, `TestSessionLifetime` |
 | Sign-in: success, case-insensitive, indistinguishable unknown accounts with equal work, disabled accounts refused, malformed input rejected | `tests/test_auth_api.py::TestLogin` |
 | Cookie attributes; tokens never stored in the clear; a new token at every sign-in | `tests/test_auth_api.py::TestSessionCookie` |
-| Anonymous and forged tokens 401; idle 1 h, absolute 24 h, activity extends | `tests/test_auth_api.py::TestCurrentSession` |
+| Anonymous and forged tokens 401; idle 8 h, absolute 24 h, activity extends | `tests/test_auth_api.py::TestCurrentSession` |
 | Logout ends the session on the server and clears both cookies | `tests/test_auth_api.py::TestLogout` |
 | List and revoke sessions; others' sessions invisible; sign out everywhere else | `tests/test_auth_api.py::TestSessionManagement` |
 | Password change: other sessions end, current password required, policy, 15-minute window, email | `tests/test_auth_api.py::TestChangePassword` |

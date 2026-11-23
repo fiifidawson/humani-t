@@ -30,9 +30,8 @@ export function RecoveryCodes({ codes, onDone }: RecoveryCodesProps) {
 		<Stack gap="5">
 			<SectionHeading>Save your recovery codes</SectionHeading>
 			<Text>
-				Each code signs you in once if you lose your passkey or phone. This is
-				the only time they are shown: download them or write them down, and keep
-				them somewhere safe.
+				Each code signs you in once if you lose your passkey or phone. They're
+				shown only now: save them somewhere safe.
 			</Text>
 			<Grid
 				as="ul"

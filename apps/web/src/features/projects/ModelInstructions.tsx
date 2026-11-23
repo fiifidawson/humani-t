@@ -78,9 +78,8 @@ export function ModelInstructionsSection({
 		<SettingsSection title="Instructions for the model">
 			<Stack gap="4" fontSize="sm">
 				<Text>
-					Added after the model's own instructions, never in place of them.
-					Masked like your questions before they are sent. A run uses the
-					version saved when it started.
+					Added to the model's own instructions, never replacing them, and
+					masked like your questions.
 				</Text>
 				{instructions.isPending ? (
 					<Loading what="the instructions" />

@@ -622,7 +622,7 @@ describe("disagreements, gaps, sources and checks (UI_UX_SPEC §6.9, §8.3)", ()
 			within(canvas).getByRole("button", { name: "Show quality checks" }),
 		);
 
-		expect(canvas).toHaveTextContent("They are not a verification.");
+		expect(canvas).toHaveTextContent("not a verification");
 		expect(canvas).not.toHaveTextContent("10 of 12");
 	});
 
