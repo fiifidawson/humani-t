@@ -8,7 +8,7 @@
 # Base images are pinned by digest so a rebuild cannot silently pick up a different
 # image under the same tag. Dependabot proposes the new digest when the tag moves.
 
-FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS deps
+FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS deps
 
 # Corepack installs the exact pnpm named by "packageManager" in package.json, so
 # the image and every contributor build with the same pnpm.
@@ -37,7 +37,7 @@ RUN pnpm --filter @humani-t/web build
 # can lag behind security releases of Go and of Caddy's dependencies. Caddy faces
 # the internet, so those fixes must reach it as soon as they ship. CADDY_VERSION
 # must match the runtime image's tag below; Dependabot updates the tags, not this.
-FROM golang:1.26.11-alpine@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab AS caddy
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS caddy
 
 ARG CADDY_VERSION=v2.11.7
 # Dependencies raised above what Caddy's go.mod asks for, each fixing a HIGH
@@ -56,7 +56,7 @@ RUN go mod init humani-t.local/caddy \
         -ldflags="-s -w -X github.com/caddyserver/caddy/v2.CustomVersion=${CADDY_VERSION}" .
 
 
-FROM caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5 AS runtime
+FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0 AS runtime
 
 LABEL org.opencontainers.image.title="humani-t web" \
       org.opencontainers.image.description="Caddy serving the humani-t single-page app." \
