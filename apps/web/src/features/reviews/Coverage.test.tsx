@@ -106,12 +106,8 @@ describe("the coverage estimate (UI_UX_SPEC §6.8)", () => {
 			within(section).getByRole("button", { name: "What this estimate means" }),
 		);
 
-		expect(section).toHaveTextContent(
-			"It isn't a count of everything published.",
-		);
-		expect(section).toHaveTextContent(
-			"the top of the range is likely too high",
-		);
+		expect(section).toHaveTextContent("Not a count of everything published");
+		expect(section).toHaveTextContent("the top of the range likely too high");
 	});
 
 	it("names its method and version", async () => {

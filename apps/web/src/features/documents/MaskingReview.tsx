@@ -947,8 +947,7 @@ export function MaskingCorrections({
 			</Box>
 
 			<Text fontSize="sm" color="fg.muted">
-				Select words in the original to mask them. Click a highlighted word, or
-				its placeholder, to change its mask.
+				Select words to mask them. Click a masked word to change it.
 			</Text>
 
 			<Box aria-live="polite">

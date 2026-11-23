@@ -72,9 +72,8 @@ function OwnerRules({ projectId }: { projectId: string }) {
 	return (
 		<Stack gap="4" fontSize="sm">
 			<Text>
-				Terms masked in every text of this project before any model reads it,
-				such as staff names or a clinic's name. Matching ignores case and needs
-				whole words. Removing a rule doesn't unmask texts already masked.
+				Words always masked in this project, such as staff or clinic names.
+				Whole words, any case.
 			</Text>
 			{rules.isPending ? <Loading what="the masking rules" /> : null}
 			{rules.isError ? (

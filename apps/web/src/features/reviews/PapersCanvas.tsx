@@ -786,8 +786,8 @@ export function PapersCanvas() {
 
 			<CanvasHeading>How this list was made</CanvasHeading>
 			<Text color="fg.muted">
-				Each paper's abstract was screened against the plan's criteria by the
-				model. Open a row to see why it got its label.
+				The model screened each abstract against the criteria. Open a row to see
+				why.
 			</Text>
 		</Canvas>
 	);

@@ -48,9 +48,8 @@ export function LowDataOffer() {
 				<Alert.Content color="fg" gap="2">
 					<Alert.Title id={headingId}>Low data mode</Alert.Title>
 					<Text>
-						Your connection looks slow, or your browser asks to save data. Low
-						data mode loads less: your device's own fonts, no animations, and
-						run progress every 10 seconds. You can change it later in Account.
+						Your connection looks slow. Low data mode loads less; you can change
+						it in Account.
 					</Text>
 					<HStack gap="2" wrap="wrap">
 						<Button
