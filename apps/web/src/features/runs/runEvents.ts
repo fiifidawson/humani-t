@@ -44,10 +44,10 @@ export const RUN_EVENT_NAMES = [
 
 export type RunEventName = (typeof RUN_EVENT_NAMES)[number];
 
-export type AgentStep = Pick<
-	Schemas["AgentStepData"],
-	"round" | "role" | "status"
->;
+type StepOut = Schemas["AgentStepOut"];
+/** Round, role and status always; the rest is whatever the step reported that reads right. */
+export type AgentStep = Pick<StepOut, "round" | "role" | "status"> &
+	Partial<Omit<StepOut, "round" | "role" | "status">>;
 export type Summary = Schemas["StageFinishedData"]["summary"];
 
 type Payloads = {
@@ -161,6 +161,48 @@ const STEP_STATUSES = [
 const oneOf = <T extends string>(options: readonly T[], value: unknown) =>
 	options.find((option) => option === value);
 
+const strings = (value: unknown) =>
+	Array.isArray(value) && value.every((v) => typeof v === "string")
+		? (value as string[])
+		: undefined;
+
+const isProblem = (value: unknown): value is Schemas["ProblemOut"] =>
+	isRecord(value) &&
+	typeof value["code"] === "string" &&
+	typeof value["message"] === "string" &&
+	(value["where"] === null || typeof value["where"] === "string");
+
+function stepDetails(
+	fields: Fields,
+): Omit<AgentStep, "round" | "role" | "status"> {
+	const tokens = isRecord(fields["tokens"]) ? fields["tokens"] : {};
+	const prompt = num(tokens, "prompt");
+	const completion = num(tokens, "completion");
+	const problems = fields["problems"];
+	const details = {
+		seconds: num(fields, "seconds"),
+		tokens:
+			prompt === undefined || completion === undefined
+				? undefined
+				: { prompt, completion },
+		model_id: str(fields, "model_id"),
+		prompt_version: str(fields, "prompt_version"),
+		output: isRecord(fields["output"]) ? fields["output"] : undefined,
+		error: str(fields, "error"),
+		queries: strings(fields["queries"]),
+		passages_found: num(fields, "passages_found"),
+		passages_new: num(fields, "passages_new"),
+		passages_total: num(fields, "passages_total"),
+		problems:
+			Array.isArray(problems) && problems.every(isProblem)
+				? problems
+				: undefined,
+	};
+	return Object.fromEntries(
+		Object.entries(details).filter(([, value]) => value !== undefined),
+	);
+}
+
 function readPayload(
 	type: RunEventName,
 	fields: Fields,
@@ -193,7 +235,7 @@ function readPayload(
 			const role = oneOf(ROLES, fields["role"]);
 			const status = oneOf(STEP_STATUSES, fields["status"]);
 			return round !== undefined && role && status
-				? { round, role, status }
+				? { round, role, status, ...stepDetails(fields) }
 				: null;
 		}
 		case "gate.required": {
