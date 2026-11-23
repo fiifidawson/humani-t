@@ -102,10 +102,8 @@ function OwnerSwitch({ project }: { project: Project }) {
 			>
 				<Stack gap="4" fontSize="sm">
 					<Text>
-						Names, places, email addresses and other identifiers in this
-						project's questions, papers and documents will reach the model as
-						written. Only the masking rules still apply. You can turn masking
-						back on at any time.
+						Names, places and other identifiers will reach the model as written.
+						Only your masking rules still apply.
 					</Text>
 					{failure === null ? null : <ErrorNotice error={failure} />}
 					<Flex gap="2" justify="flex-end">

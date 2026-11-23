@@ -503,8 +503,8 @@ function LowDataSwitch() {
 				<Switch.Label>Low data mode</Switch.Label>
 			</Switch.Root>
 			<Text fontSize="sm" color="fg.muted">
-				Loads less in this browser, for slow or costly connections: your
-				device's own fonts, no animations, and run progress every 10 seconds.
+				Loads less for slow or costly connections: system fonts, no animations,
+				slower run updates.
 			</Text>
 		</Stack>
 	);
@@ -525,8 +525,8 @@ function ShortcutsSwitch() {
 				<Switch.Label>Single-key shortcuts</Switch.Label>
 			</Switch.Root>
 			<Text fontSize="sm" color="fg.muted">
-				Keys such as [ and ? act on their own. Turn this off if they get in the
-				way of your keyboard or speech software. Ctrl K still works.
+				Keys such as [ and ? act on their own. Turn off if they clash with
+				speech software. Ctrl K still works.
 			</Text>
 		</Stack>
 	);

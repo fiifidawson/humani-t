@@ -222,9 +222,8 @@ function DeleteDialog({
 			<form onSubmit={submit}>
 				<Stack gap="4" fontSize="sm">
 					<Text>
-						Its questions, search plans, papers, screening decisions, documents
-						and briefs become unreadable for good. Backups follow once they
-						expire. This can't be undone.
+						Its questions, papers, documents and briefs become unreadable for
+						good, backups once they expire. This can't be undone.
 					</Text>
 					<Field
 						label="Type the project's name to confirm"

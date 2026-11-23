@@ -8,7 +8,6 @@
  */
 
 import {
-	Alert,
 	Box,
 	Button,
 	chakra,
@@ -28,7 +27,6 @@ import {
 	LoaderCircle,
 	Pause,
 	Trash2,
-	TriangleAlert,
 	Upload,
 	X,
 } from "lucide-react";
@@ -553,27 +551,15 @@ function MaskedReview({
 					Close
 				</Button>
 			</Flex>
-			<Alert.Root
-				colorPalette="caveat"
-				variant="subtle"
-				rounded="card"
-				alignItems="flex-start"
-			>
-				<Alert.Indicator>
-					<TriangleAlert />
-				</Alert.Indicator>
-				<Alert.Content color="fg">
-					<Text>
-						{canDecide && review.data !== undefined
-							? review.data.notice
-							: "Masking is not anonymity. Codes, numbers and rare details can still point to a person, and text that is only in images was not read."}
-					</Text>
-				</Alert.Content>
-			</Alert.Root>
+			<Text color="fg.muted">
+				{canDecide && review.data !== undefined
+					? review.data.notice
+					: "Masking is not anonymity: rare details can still point to a person."}
+			</Text>
 			{isMasked ? null : (
 				<Text fontWeight="medium">
-					Masking is off, so the model reads this document as written. Your
-					decision applies if masking is turned back on.
+					Masking is off, so the model reads this as written. Your decision
+					counts if it's turned back on.
 				</Text>
 			)}
 			<Text>
@@ -689,14 +675,12 @@ export function DocumentsPage() {
 				<Stack as="section" aria-labelledby="documents-title" gap="5">
 					<SectionHeading id="documents-title">Documents</SectionHeading>
 					<Text maxW="3xl">
-						Your team's own files. Each one is checked for viruses, read and
-						masked, then an owner checks the masking. Only approved documents
-						are used, and the brief cites them as D1, D2 and so on.
+						Your team's files. Only those an owner approves are used, cited in
+						the brief as D1, D2 and so on.
 					</Text>
 					{isMasked ? null : (
 						<Text maxW="3xl" fontWeight="medium">
-							Masking is off for this project, so the model reads each ready
-							document as written. The project's masking rules still apply.
+							Masking is off for this project. Only its masking rules apply.
 						</Text>
 					)}
 					{listing.isPending || project.isPending ? (
