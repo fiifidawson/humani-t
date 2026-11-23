@@ -5,7 +5,7 @@
  */
 
 import { Box, chakra, Text } from "@chakra-ui/react";
-import { Circle, FileText, Folder, Sparkle, TriangleAlert } from "lucide-react";
+import { FileText, Folder, Sparkle, TriangleAlert } from "lucide-react";
 import type { components } from "../../api/schema.gen";
 import { MaskedText } from "../reviews/MaskedText";
 import { STRENGTHS, type Strength } from "./words";
@@ -29,21 +29,58 @@ export function EvidenceBadge({ strength }: { strength: Strength }) {
 			as="span"
 			display="inline-flex"
 			alignItems="center"
-			gap="1.5"
+			gap="2"
 			title={meaning}
 		>
-			<Box as="span" display="inline-flex" gap="0.5" color={tone}>
-				{[0, 1, 2].map((dot) => (
-					<Circle
-						key={dot}
-						size={9}
-						fill={dot < dots ? "currentColor" : "none"}
-					/>
-				))}
-			</Box>
+			<ScoreBar value={dots} max={3} tone={tone} width="12" />
 			<Text as="span" fontWeight="medium" fontSize="sm">
 				{word}
 			</Text>
+		</Box>
+	);
+}
+
+/**
+ * A short bar in `max` steps, the first `value` filled in `tone`. It repeats a word
+ * shown beside it, so screen readers skip it (UI_UX_SPEC §10.2).
+ */
+export function ScoreBar({
+	value,
+	max,
+	tone,
+	width,
+}: {
+	value: number;
+	max: number;
+	tone: string;
+	width: string;
+}) {
+	return (
+		<Box
+			as="span"
+			aria-hidden="true"
+			data-meter=""
+			data-value={value}
+			data-max={max}
+			display="inline-flex"
+			gap="0.5"
+			w={width}
+			flex="none"
+		>
+			{Array.from({ length: max }, (_, step) => (
+				<Box
+					as="span"
+					// biome-ignore lint/suspicious/noArrayIndexKey: a step has no identity but its place
+					key={step}
+					flex="1"
+					h="1.5"
+					rounded="full"
+					bg={step < value ? tone : "bg.muted"}
+					// The empty steps still show the scale when the colour is unclear.
+					borderWidth={step < value ? "0" : "1px"}
+					borderColor="border"
+				/>
+			))}
 		</Box>
 	);
 }

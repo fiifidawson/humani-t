@@ -92,6 +92,17 @@ class TestReadingTheBrief:
         assert read_brief(rt)["options"][1]["risks"][0]["support"] == "hypothesis"
         assert read_brief(rt)["options"][1]["risks"][0]["citations"] == []
 
+    def test_the_brief_says_which_humanitarian_principles_its_trade_offs_weigh(self, rt):
+        write_brief(rt)
+
+        assert read_brief(rt)["principles"] == [
+            {"name": "Humanity", "trade_off": None},
+            {"name": "Neutrality", "trade_off": None},
+            {"name": "Independence", "trade_off": None},
+            {"name": "Impartiality", "trade_off": None},
+            {"name": "Do no harm", "trade_off": "Do no harm"},
+        ]
+
     def test_trade_off_rows_mark_the_humanitarian_principles(self, rt):
         write_brief(rt)
 
