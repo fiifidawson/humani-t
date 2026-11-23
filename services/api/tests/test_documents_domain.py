@@ -13,6 +13,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.domain.document_lines import (
+    DocumentLine,
+    LineKind,
+    lines_fit,
+    lines_from_json,
+    lines_to_json,
+)
 from app.domain.documents import (
     Document,
     DocumentDecision,
@@ -381,3 +388,75 @@ class TestSmallTypes:
 
     def test_unpaged_text_has_no_page_count(self):
         assert _extracted().page_count is None
+
+
+class TestDocumentLines:
+    """What each line of a Word file is, kept beside the text and never inside it."""
+
+    def test_a_heading_needs_a_level_from_one_to_three(self):
+        assert DocumentLine(LineKind.HEADING, level=2).level == 2
+        for level in (None, 0, 4):
+            with pytest.raises(ValueError, match=r"DocumentLine\.level"):
+                DocumentLine(LineKind.HEADING, level=level)
+
+    def test_a_table_cell_needs_its_table_row_and_column(self):
+        cell = DocumentLine(LineKind.TABLE_CELL, table=0, row=1, column=2)
+
+        assert (cell.table, cell.row, cell.column) == (0, 1, 2)
+        with pytest.raises(ValueError, match=r"DocumentLine\.table"):
+            DocumentLine(LineKind.TABLE_CELL, table=0, row=1)
+        with pytest.raises(ValueError, match=r"DocumentLine\.table"):
+            DocumentLine(LineKind.TABLE_CELL, table=-1, row=0, column=0)
+
+    def test_a_paragraph_or_list_item_carries_no_level_or_place(self):
+        with pytest.raises(ValueError, match="DocumentLine"):
+            DocumentLine(LineKind.PARAGRAPH, level=1)
+        with pytest.raises(ValueError, match="DocumentLine"):
+            DocumentLine(LineKind.LIST_ITEM, table=0, row=0, column=0)
+
+    def test_lines_round_trip_through_their_stored_form(self):
+        lines = (
+            DocumentLine(LineKind.HEADING, level=1),
+            DocumentLine(LineKind.PARAGRAPH),
+            DocumentLine(LineKind.LIST_ITEM),
+            DocumentLine(LineKind.TABLE_CELL, table=0, row=0, column=1),
+        )
+
+        stored = lines_to_json(lines)
+
+        assert stored[0] == {"kind": "heading", "level": 1}
+        assert stored[1] == {"kind": "paragraph"}
+        assert lines_from_json(stored) == lines
+
+    @pytest.mark.parametrize(
+        "stored",
+        [
+            [{"kind": "script"}],
+            [{"kind": "heading", "level": "1"}],
+            [{"kind": "heading", "level": True}],
+            [{"kind": "paragraph", "html": "<b>x</b>"}],
+            [{"kind": "table_cell", "table": 0, "row": 0}],
+            ["paragraph"],
+            {"kind": "paragraph"},
+        ],
+    )
+    def test_anything_outside_the_fixed_vocabulary_is_refused(self, stored: object):
+        with pytest.raises(ValueError, match="DocumentLine"):
+            lines_from_json(stored)
+
+    def test_lines_fit_a_text_only_with_one_per_line(self):
+        lines = (DocumentLine(LineKind.HEADING, level=1), DocumentLine(LineKind.PARAGRAPH))
+
+        assert lines_fit(lines, "Visit\nThe team met.")
+        assert not lines_fit(lines, "Visit [PERSON_1] met.")
+        assert not lines_fit(lines, "Visit\nThe team\nmet.")
+
+    def test_extracted_lines_must_describe_every_line_of_the_text(self):
+        with pytest.raises(ValueError, match=r"ExtractedDocument\.lines"):
+            ExtractedDocument(
+                "Visit\nThe team met.",
+                (0,),
+                is_truncated=False,
+                extractor="local@2",
+                lines=(DocumentLine(LineKind.PARAGRAPH),),
+            )

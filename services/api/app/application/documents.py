@@ -28,6 +28,7 @@ from app.application.masking import MaskingRuleService
 from app.application.membership import require_member
 from app.application.runs import RunService
 from app.domain.accounts import NotFoundError, ThrottledError
+from app.domain.document_lines import DocumentLine, lines_fit
 from app.domain.documents import (
     MAX_PROCESSING_ATTEMPTS,
     Document,
@@ -40,6 +41,7 @@ from app.domain.documents import (
     DocumentStatus,
     DocumentText,
     DocumentUsage,
+    ExtractedDocument,
     ExtractionFailedError,
     ExtractionLimits,
     MalwareScanRefusedError,
@@ -211,12 +213,17 @@ class DocumentListing:
 
 @dataclass(frozen=True, slots=True)
 class MaskedDocumentView:
-    """What the model will see: masked text, and what each placeholder hides and why."""
+    """What the model will see: masked text, and what each placeholder hides and why.
+
+    `lines` is `None` unless the file said what each line is and they still fit the
+    masked text, which a mask over a line break prevents.
+    """
 
     document: Document
     masked_text: str
     regions: tuple[MaskedRegion, ...]
     masked_page_starts: tuple[int, ...]
+    lines: tuple[DocumentLine, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +237,7 @@ class ReviewView:
     exemptions: tuple[MaskExemption, ...]
     raw_page_starts: tuple[int, ...]
     regions: tuple[MaskedRegion, ...]
+    lines: tuple[DocumentLine, ...] | None = None
 
 
 # Scanned and read: what a document needs before use when there is no masking to review.
@@ -385,13 +393,15 @@ class DocumentService:
             document = await self._document(
                 uow, current, project_id, document_id, Action.READ_PROJECT
             )
-            mask = await uow.documents.get_mask(document.id)
-            if mask is None:
-                raise NotFoundError("This document has not been masked yet.")
+            text, mask = await self._text_and_mask(uow, document)
             masked_text = await self._seal.open_masked(uow, mask)
             detail = await self._seal.open_detail(uow, mask)
         regions = masked_regions(MaskedText(masked_text, detail.spans, {}))
-        return MaskedDocumentView(document, masked_text, regions, detail.masked_page_starts)
+        fits = text.lines is not None and lines_fit(text.lines, masked_text)
+        lines = text.lines if fits else None
+        return MaskedDocumentView(
+            document, masked_text, regions, detail.masked_page_starts, lines
+        )
 
     async def review(
         self,
@@ -604,6 +614,7 @@ class DocumentService:
             exemptions=exemptions,
             raw_page_starts=text.page_starts,
             regions=masked_regions(masked),
+            lines=text.lines,
         )
 
     async def _review_view(self, uow: UnitOfWork, document: Document) -> ReviewView:
@@ -619,6 +630,7 @@ class DocumentService:
             exemptions=detail.exemptions,
             raw_page_starts=text.page_starts,
             regions=masked_regions(MaskedText(masked_text, detail.spans, {})),
+            lines=text.lines,
         )
 
     @staticmethod
@@ -811,9 +823,7 @@ class DocumentProcessor:
             rules = list(await self._rules.rules_for(uow, document.project_id))
         masked = await self._sanitizer.mask(extracted.text, rules=rules)
         _, page_starts = remask(extracted.text, masked.spans, extracted.page_starts)
-        await self._store(
-            document, extracted.text, extracted.page_starts, masked, page_starts, rules
-        )
+        await self._store(document, extracted, masked, page_starts, rules)
 
     async def _scan(self, document: Document, content: bytes) -> bool:
         try:
@@ -839,8 +849,7 @@ class DocumentProcessor:
     async def _store(
         self,
         document: Document,
-        raw: str,
-        raw_page_starts: tuple[int, ...],
+        extracted: ExtractedDocument,
         masked: MaskedText,
         masked_page_starts: tuple[int, ...],
         rules: Sequence[MaskingRule],
@@ -853,9 +862,10 @@ class DocumentProcessor:
                 DocumentText(
                     document_id=saved.id,
                     project_id=saved.project_id,
-                    raw_sealed=await self._seal.seal_raw(uow, saved, raw),
-                    page_starts=raw_page_starts,
+                    raw_sealed=await self._seal.seal_raw(uow, saved, extracted.text),
+                    page_starts=extracted.page_starts,
                     extracted_at=now,
+                    lines=extracted.lines,
                 )
             )
             detail = MaskDetail(masked.spans, (), masked_page_starts)

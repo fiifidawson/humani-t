@@ -22,18 +22,23 @@ const Pill = chakra("span", {
 	},
 });
 
-/** `isInline` for text inside a sentence or a list item, where a paragraph cannot go. */
+/**
+ * `isInline` for text inside a sentence or a list item, where a paragraph cannot go.
+ * `whiteSpace` "normal" lets a PDF's printed lines flow back together.
+ */
 export function MaskedText({
 	text,
 	isInline = false,
+	whiteSpace = "pre-wrap",
 }: {
 	text: string;
 	isInline?: boolean;
+	whiteSpace?: "pre-wrap" | "pre-line" | "normal";
 }) {
 	return (
 		<Text
 			as={isInline ? "span" : "p"}
-			whiteSpace="pre-wrap"
+			whiteSpace={whiteSpace}
 			overflowWrap="anywhere"
 		>
 			{splitMasked(text).map((part, index) =>

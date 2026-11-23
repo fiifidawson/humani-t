@@ -24,6 +24,7 @@ type Failure = Schemas["DocumentFailure"];
 type EntityType = Schemas["EntityType"];
 type Span = Schemas["SpanOut"];
 type Exemption = Schemas["ExemptionOut"];
+type Line = NonNullable<Schemas["DocumentReviewOut"]["lines"]>[number];
 export type FakeMaskingRule = Schemas["MaskingRuleOut"];
 
 export const UNSUPPORTED =
@@ -42,10 +43,15 @@ export interface Found {
 	source?: string;
 }
 
-/** A document's text as read from the file, and what the detectors find in it. */
+/**
+ * A document's text as read from the file, and what the detectors find in it.
+ * A Word file also says what each line is; a PDF where each page starts.
+ */
 export interface Original {
 	text: string;
 	found: readonly Found[];
+	lines?: readonly Line[];
+	pageStarts?: readonly number[];
 }
 
 /** The text a document gets when the test does not say. */
@@ -119,6 +125,8 @@ interface Stored {
 	document: FakeDocument;
 	/** `null` until the worker has read the file. */
 	original: string | null;
+	lines: Line[] | null;
+	pageStarts: number[];
 	spans: Span[];
 	removed: Exemption[];
 }
@@ -223,6 +231,16 @@ function applySpans(raw: string, spans: readonly Span[]): Masked {
 	return { text: masked + raw.slice(cursor), items, counts };
 }
 
+/** domain/documents.py `masked_position`, for a page start: where it lands in the masked text. */
+function maskedPosition(
+	raw: string,
+	spans: readonly Span[],
+	rawPosition: number,
+): number {
+	const before = spans.filter((s) => s.end <= rawPosition);
+	return applySpans(raw.slice(0, rawPosition), before).text.length;
+}
+
 /** The API's rule (domain/documents.py `detect_document_type`), for the bytes a test sends. */
 function detectType(
 	bytes: Uint8Array,
@@ -299,6 +317,8 @@ export class FakeDocuments {
 			projectId,
 			document,
 			original: null,
+			lines: null,
+			pageStarts: [0],
 			spans: [],
 			removed: [],
 		};
@@ -364,6 +384,8 @@ export class FakeDocuments {
 
 	private read(stored: Stored, original: Original): void {
 		stored.original = original.text;
+		stored.lines = original.lines === undefined ? null : [...original.lines];
+		stored.pageStarts = [...(original.pageStarts ?? [0])];
 		stored.spans = [
 			...detect(original),
 			...ruleSpans(original.text, this.rulesIn(stored.projectId)),
@@ -435,7 +457,8 @@ export class FakeDocuments {
 			spans: [...stored.spans].sort((a, b) => a.start - b.start),
 			removed: stored.removed,
 			items: masked.items,
-			page_starts: [0],
+			page_starts: stored.pageStarts,
+			lines: stored.lines,
 			is_truncated: stored.document.is_truncated,
 			notice: REVIEW_NOTICE,
 		};
@@ -745,7 +768,14 @@ export class FakeDocuments {
 					mask_version: document.mask_version,
 					masked_text: masked.text,
 					items: masked.items,
-					page_starts: [0],
+					page_starts: stored.pageStarts.map((start) =>
+						maskedPosition(stored.original ?? "", stored.spans, start),
+					),
+					// domain/document_lines.py `lines_fit`: a mask over a line break drops them.
+					lines:
+						stored.lines?.length === masked.text.split("\n").length
+							? stored.lines
+							: null,
 					is_truncated: document.is_truncated,
 				} satisfies Schemas["MaskedDocumentOut"]);
 			}),

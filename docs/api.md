@@ -851,11 +851,11 @@ A team's own files, uploaded to a project, read in the background, masked with t
 
 ### `GET /api/v1/projects/{project_id}/documents/{document_id}/masked`
 
-What the model will see. **Response** `200`: `{"document_id", "tag", "status", "mask_version", "masked_text", "items": [{"start", "end", "placeholder": "[PERSON_1]", "entity_type", "sources": ["spacy-en_core_web_sm@3.8.0", "rule:<id>", "user:<id>"]}], "page_starts", "is_truncated"}`. Offsets are into `masked_text`. No raw text. `404` until the document has been masked.
+What the model will see. **Response** `200`: `{"document_id", "tag", "status", "mask_version", "masked_text", "items": [{"start", "end", "placeholder": "[PERSON_1]", "entity_type", "sources": ["spacy-en_core_web_sm@3.8.0", "rule:<id>", "user:<id>"]}], "page_starts", "lines", "is_truncated"}`. Offsets are into `masked_text`. No raw text. `404` until the document has been masked. `lines` says what each line of the text is, one entry per line, for a Word file read by extractor `local@2` or later: `{"kind": "paragraph"}`, `{"kind": "heading", "level": 1}` (1 to 3), `{"kind": "list_item"}` or `{"kind": "table_cell", "table": 0, "row": 0, "column": 1}` (counted from 0). It is `null` for other files, for older texts, and when a mask joined two lines so they no longer fit (ADR 0023).
 
 ### `GET /api/v1/projects/{project_id}/documents/{document_id}/review`
 
-The owner's masking review. **Response** `200`: `{"document_id", "tag", "status", "mask_version", "raw_text", "masked_text", "spans": [{"start", "end", "entity_type", "source", "can_remove"}], "removed": [{"start", "end", "entity_type", "source", "removed_by", "reason"}], "items", "page_starts", "is_truncated", "notice"}`. `spans` and `page_starts` are offsets into `raw_text`. `can_remove` is false for project rules and for detected structured identifiers. Every request writes `document.raw_text_viewed`.
+The owner's masking review. **Response** `200`: `{"document_id", "tag", "status", "mask_version", "raw_text", "masked_text", "spans": [{"start", "end", "entity_type", "source", "can_remove"}], "removed": [{"start", "end", "entity_type", "source", "removed_by", "reason"}], "items", "page_starts", "lines", "is_truncated", "notice"}`. `spans` and `page_starts` are offsets into `raw_text`; `lines` (as for `…/masked`) describes the lines of `raw_text`, and corrections return it too. `can_remove` is false for project rules and for detected structured identifiers. Every request writes `document.raw_text_viewed`.
 
 ### `POST /api/v1/projects/{project_id}/documents/{document_id}/masks`
 
