@@ -15,7 +15,9 @@ LiGHT's sub-project rule: **the project's logo on the left, the LiGHT logo on th
 
 LiGHT's wordmark is used only in its original blues, black or white. Light Blue fails contrast on Eggshell (2.35:1), so if the original-colour wordmark is ever too faint on a page, use the black version there rather than altering it.
 
-Then change the two components in `src/ui/Brand.tsx` to render an `<img>` (with `alt="humani-t"` and `alt="LiGHT"`, and the `-white` file when `isOnColour` is set or the theme is dark), keeping the text as the image's accessible name. No other file changes.
+Then change the two components in `src/ui/Brand.tsx` to render an `<img>` (with `alt="humani-t"` and `alt="LiGHT"`, and the `-white` file when `isOnColour` is set or the theme is dark), keeping the text as the image's accessible name.
+
+The link preview image, `public/og-image.png`, shows the favicon mark until then. Point `scripts/og-image.ts` at `humani-t-logo.svg`, run `node scripts/og-image.ts` from `apps/web`, then update `og:image:alt` in `index.html` to describe the new image.
 
 ## The headline font
 
