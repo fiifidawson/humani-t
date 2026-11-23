@@ -597,6 +597,8 @@ function MaskedReview({
 					<MaskedDocument
 						text={masked.data.masked_text}
 						fileType={document.file_type}
+						pageStarts={masked.data.page_starts}
+						lines={masked.data.lines}
 					/>
 					{masked.data.is_truncated ? (
 						<Text mt="3" fontSize="sm" color="fg.muted">

@@ -1,6 +1,7 @@
 /** The privacy review in a real browser: the comparison must line up, which jsdom cannot measure. */
 
 import { expect, type Locator, test } from "@playwright/test";
+import { docx, paragraph, table } from "./docx.ts";
 
 const REPORT = [
 	"Interview notes, 12 March 2024.",
@@ -242,4 +243,100 @@ test("the mask bar and a mask's card open right at the words, even after scrolli
 	expect(
 		Math.abs((cardBox?.y ?? 0) - ((markBox?.y ?? 0) + (markBox?.height ?? 0))),
 	).toBeLessThan(16);
+});
+
+test("a structured document's blocks line up across the panes, and a wide table scrolls in its own row", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1366, height: 768 });
+	const wide = Array.from(
+		{ length: 6 },
+		(_, i) => `Households_registered_in_district_${i}`,
+	);
+	const body = [
+		paragraph("Field visit", { style: "Title" }),
+		paragraph("Background", { style: "Heading1" }),
+		...REPORT.split("\n\n").map((text) => paragraph(text)),
+		paragraph("Water", { isNumbered: true }),
+		paragraph("Food", { isNumbered: true }),
+		table([wide, wide.map((_, i) => `${i * 40}`)]),
+		...Array.from({ length: 4 }, () =>
+			REPORT.split("\n\n").map((text) => paragraph(text)),
+		).flat(),
+	].join("");
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill("Structured document");
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	await page.goto(`${page.url()}/documents`);
+	await page.locator("input[type=file]").setInputFiles({
+		name: "visit.docx",
+		mimeType:
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		buffer: docx(body),
+	});
+	await page
+		.getByRole("button", { name: "Review D1 visit.docx" })
+		.click({ timeout: 60_000 });
+
+	const frame = page.getByRole("region", {
+		name: "The original and the masked text",
+	});
+	const original = frame.getByRole("region", { name: "Original text" });
+	const masked = frame.getByRole("region", { name: "What the model will see" });
+	for (const pane of [original, masked]) {
+		await expect(
+			pane.getByRole("heading", { name: "Background" }),
+		).toBeVisible();
+		await expect(pane.getByRole("table")).toBeVisible();
+	}
+	expect(await tops(masked)).toEqual(await tops(original));
+
+	// The table is wider than its pane: it scrolls sideways in its row, the frame does not.
+	const holder = original.getByRole("table").locator("xpath=..");
+	const sideways = await holder.evaluate((element) => ({
+		scrolls: element.scrollWidth > element.clientWidth + 1,
+		frameScrolls: (() => {
+			const box = element.closest<HTMLElement>(
+				'[aria-label="The original and the masked text"]',
+			);
+			return box === null ? true : box.scrollWidth > box.clientWidth + 1;
+		})(),
+	}));
+	expect(sideways).toEqual({ scrolls: true, frameScrolls: false });
+
+	// The masked table keeps the same widths: no column is squeezed into fragments.
+	const widths = (pane: typeof original) =>
+		pane
+			.getByRole("columnheader")
+			.evaluateAll((cells) => cells.map((cell) => cell.clientWidth));
+	expect(await widths(masked)).toEqual(await widths(original));
+
+	// The table's row never scrolls up and down: apart from the review's own frame
+	// (this document is longer than it), the page is the only vertical scroller.
+	const scrolling = await page.evaluate(
+		() =>
+			[...document.querySelectorAll<HTMLElement>("body, body *")].filter(
+				(element) => {
+					const overflow = getComputedStyle(element).overflowY;
+					return (
+						/(auto|scroll)/.test(overflow) &&
+						element.scrollHeight > element.clientHeight + 1 &&
+						!element.closest("nav") &&
+						element.getAttribute("aria-label") !==
+							"The original and the masked text"
+					);
+				},
+			).length,
+	);
+	expect(scrolling).toBe(1);
+
+	await page.evaluate(() => {
+		for (const element of document.querySelectorAll<HTMLElement>("main *")) {
+			if (/(auto|scroll)/.test(getComputedStyle(element).overflowY)) {
+				element.scrollTop = element.scrollHeight;
+			}
+		}
+	});
+	await expect(page.getByRole("button", { name: "Approve" })).toBeInViewport();
 });

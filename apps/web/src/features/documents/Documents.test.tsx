@@ -5,6 +5,7 @@ import { expectNoAccessibilityViolations } from "../../test/axe";
 import {
 	MASKING_CHANGED,
 	NOT_YOUR_ROLE,
+	type Original,
 	REVIEW_NOTICE,
 	UNSUPPORTED,
 } from "../../test/fakeDocuments";
@@ -56,6 +57,29 @@ function selectText(container: HTMLElement, wanted: string) {
 	}
 	throw new Error(`No text "${wanted}" to select`);
 }
+
+/** A Word file as the API reads it: its text, and what each line is. */
+const WORD_NOTES: Original = {
+	text: "Field visit\nWe met Kofi Mensah at the clinic.\nWater\nFood\nSite\nHouseholds\nKofi Mensah\n120",
+	found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+	lines: [
+		{ kind: "heading", level: 1 },
+		{ kind: "paragraph" },
+		{ kind: "list_item" },
+		{ kind: "list_item" },
+		{ kind: "table_cell", table: 0, row: 0, column: 0 },
+		{ kind: "table_cell", table: 0, row: 0, column: 1 },
+		{ kind: "table_cell", table: 0, row: 1, column: 0 },
+		{ kind: "table_cell", table: 0, row: 1, column: 1 },
+	],
+};
+
+/** Three pages of a PDF, joined by a blank line as the API joins them. */
+const PDF_PAGES: Original = {
+	text: "First page.\n\nSecond page, with Kofi Mensah.\n\nThird page.",
+	found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+	pageStarts: [0, 13, 45],
+};
 
 /** The table row of the document with this exact name. */
 const rowFor = async (name: string) =>
@@ -565,6 +589,185 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		).toHaveLength(3);
 	});
 
+	it("shows a Word file's headings, lists and tables as the file has them, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: WORD_NOTES,
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		const masked = screen.getByRole("region", {
+			name: "What the model will see",
+		});
+		for (const pane of [original, masked]) {
+			expect(
+				within(pane).getByRole("heading", { level: 5, name: "Field visit" }),
+			).toBeInTheDocument();
+			expect(
+				within(within(pane).getByRole("list")).getAllByRole("listitem"),
+			).toHaveLength(2);
+			const table = within(pane).getByRole("table");
+			expect(within(table).getAllByRole("row")).toHaveLength(2);
+			expect(
+				within(table).getByRole("columnheader", { name: "Households" }),
+			).toBeInTheDocument();
+			expect(
+				within(table).getByRole("cell", { name: "120" }),
+			).toBeInTheDocument();
+		}
+		expect(
+			within(masked).getByRole("cell", { name: "masked person 1" }),
+		).toBeInTheDocument();
+		expect(original.querySelectorAll("[data-paragraph]")).toHaveLength(4);
+		expect(masked.querySelectorAll("[data-paragraph]")).toHaveLength(4);
+	});
+
+	it("masks words selected in a table cell at their place in the plain text", async () => {
+		const { api, project } = signedInWith("owner");
+		const waiting = api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: WORD_NOTES,
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		selectText(
+			within(
+				await screen.findByRole("region", { name: "Original text" }),
+			).getByRole("table"),
+			"120",
+		);
+		await user.click(await screen.findByRole("button", { name: "Mask it" }));
+
+		const start = WORD_NOTES.text.indexOf("120");
+		await waitFor(() =>
+			expect(
+				api.requestsTo(
+					"POST",
+					`/projects/${project.id}/documents/${waiting.id}/masks`,
+				)[0]?.body,
+			).toEqual({
+				version: 1,
+				start,
+				end: start + 3,
+				entity_type: "PERSON",
+			}),
+		);
+	});
+
+	it("lets a wide table scroll inside its pane, not the frame", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: WORD_NOTES,
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		const table = within(
+			await screen.findByRole("region", { name: "Original text" }),
+		).getByRole("table");
+		const holder = table.parentElement;
+		expect(holder).not.toBeNull();
+		expect(getComputedStyle(holder as Element).overflowX).toBe("auto");
+		expect(getComputedStyle(holder as Element).overflowY).toBe("hidden");
+	});
+
+	it("falls back to paragraphs, still side by side, when a mask joins two lines", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: {
+				...WORD_NOTES,
+				found: [{ value: "visit\nWe met", type: "PERSON", source: "user:u1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+
+		const original = await screen.findByRole("region", {
+			name: "Original text",
+		});
+		const masked = screen.getByRole("region", {
+			name: "What the model will see",
+		});
+		expect(within(original).queryByRole("table")).not.toBeInTheDocument();
+		expect(within(masked).queryByRole("table")).not.toBeInTheDocument();
+		expect(
+			within(original).queryByRole("heading", { level: 5 }),
+		).not.toBeInTheDocument();
+		expect(original.querySelectorAll("[data-paragraph]")).toHaveLength(1);
+		expect(masked.querySelectorAll("[data-paragraph]")).toHaveLength(1);
+	});
+
+	it("guesses headings and lists in a file that does not say, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.txt", {
+			status: "awaiting_review",
+			original: {
+				text: "Field visit\n\nThe team met Kofi Mensah at the clinic.\n\n- Water\n- Food",
+				found: [{ value: "Kofi Mensah", type: "PERSON", source: "names@1" }],
+			},
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.txt" }),
+		);
+
+		for (const name of ["Original text", "What the model will see"]) {
+			const pane = await screen.findByRole("region", { name });
+			expect(
+				within(pane).getByRole("heading", { level: 5, name: "Field visit" }),
+			).toBeInTheDocument();
+			const items = within(within(pane).getByRole("list")).getAllByRole(
+				"listitem",
+			);
+			expect(items.map((item) => item.textContent)).toEqual([
+				"- Water",
+				"- Food",
+			]);
+		}
+	});
+
+	it("marks where each page of a PDF starts, on both sides", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.pdf", {
+			status: "awaiting_review",
+			fileType: "pdf",
+			original: PDF_PAGES,
+		});
+		const { user } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.pdf" }),
+		);
+
+		for (const name of ["Original text", "What the model will see"]) {
+			const pane = await screen.findByRole("region", { name });
+			expect(
+				within(pane)
+					.getAllByRole("separator")
+					.map((divider) => divider.getAttribute("aria-label")),
+			).toEqual(["Page 2", "Page 3"]);
+		}
+	});
+
 	it("shows both texts in one frame that scrolls them together, and can be scrolled from the keyboard", async () => {
 		const { project } = withDocumentWaiting();
 		const { user } = await openDocuments(project.id);
@@ -1010,6 +1213,62 @@ describe("the owner's privacy review (UI_UX_SPEC §6.6, §6.13)", () => {
 		});
 		expect(frame).toHaveAttribute("tabindex", "0");
 		expect(frame.querySelectorAll("[data-paragraph]")).toHaveLength(2);
+	});
+
+	it("shows an approved Word file's structure and a PDF's pages in its masked text", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "approved",
+			fileType: "docx",
+			original: WORD_NOTES,
+		});
+		api.documents.add(project.id, "notes.pdf", {
+			status: "approved",
+			fileType: "pdf",
+			original: PDF_PAGES,
+		});
+		const { user } = await openDocuments(project.id);
+
+		await user.click(
+			await screen.findByRole("button", {
+				name: "See masked text D1 notes.docx",
+			}),
+		);
+		const word = await screen.findByRole("region", { name: "The masked text" });
+		expect(
+			within(word).getByRole("heading", { level: 4, name: "Field visit" }),
+		).toBeInTheDocument();
+		expect(within(word).getByRole("table")).toBeInTheDocument();
+		expect(within(word).getAllByRole("listitem")).toHaveLength(2);
+
+		await user.click(
+			screen.getByRole("button", { name: "See masked text D2 notes.pdf" }),
+		);
+		await waitFor(() =>
+			expect(
+				within(screen.getByRole("region", { name: "The masked text" }))
+					.getAllByRole("separator")
+					.map((divider) => divider.getAttribute("aria-label")),
+			).toEqual(["Page 2", "Page 3"]),
+		);
+	});
+
+	it("has no accessibility violations with a structured document open", async () => {
+		const { api, project } = signedInWith("owner");
+		api.documents.add(project.id, "notes.docx", {
+			status: "awaiting_review",
+			fileType: "docx",
+			original: WORD_NOTES,
+		});
+		const { user, container } = await openDocuments(project.id);
+		await user.click(
+			await screen.findByRole("button", { name: "Review D1 notes.docx" }),
+		);
+		await within(
+			await screen.findByRole("region", { name: "Original text" }),
+		).findByRole("table");
+
+		await expectNoAccessibilityViolations(container);
 	});
 
 	it.each<Role>(["reviewer", "viewer"])(
