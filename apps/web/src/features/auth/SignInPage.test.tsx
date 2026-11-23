@@ -33,6 +33,15 @@ describe("signing in (UI_UX_SPEC §6.1)", () => {
 		expect(currentPath(router)).toBe("/sign-in");
 	});
 
+	it("shows LiGHT's wordmark in white on the cover", async () => {
+		renderApp("/sign-in");
+
+		expect(await screen.findByRole("img", { name: "LiGHT" })).toHaveAttribute(
+			"src",
+			expect.stringMatching(/light-logo-white\.svg$/),
+		);
+	});
+
 	it("gives one message for every wrong email or password", async () => {
 		fakeApi().addUser();
 		const { user } = renderApp("/sign-in");

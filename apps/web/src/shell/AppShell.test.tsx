@@ -42,6 +42,19 @@ describe("the app shell (UI_UX_SPEC §4)", () => {
 		await waitFor(() => expect(document.title).toMatch(/ · Humani-T$/));
 	});
 
+	it("puts LiGHT's own wordmark on the right of the header, in its original blues", async () => {
+		signedIn();
+		renderApp("/");
+
+		const header = await screen.findByRole("banner");
+
+		expect(within(header).getByRole("img", { name: "LiGHT" })).toHaveAttribute(
+			"src",
+			expect.stringMatching(/light-logo\.svg$/),
+		);
+		expect(within(header).queryByText("by")).not.toBeInTheDocument();
+	});
+
 	it("marks each recent project with a badge of its initials, which stays when the rail folds", async () => {
 		const api = signedIn();
 		api.addProject("Cash vs vouchers, Gao");

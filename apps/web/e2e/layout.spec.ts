@@ -130,3 +130,23 @@ test("a delete pop-up wraps a long name rather than letting it run out", async (
 	await expect(deleteProject).toBeVisible();
 	expect(await spillingOut(deleteProject)).toEqual([]);
 });
+
+/** The header's visible LiGHT wordmark, once the browser has drawn it. */
+async function drawnLogo(page: Page): Promise<string | null> {
+	const logo = page.getByRole("banner").getByRole("img", { name: "LiGHT" });
+	await expect
+		.poll(() => logo.evaluate((img: HTMLImageElement) => img.naturalWidth))
+		.toBeGreaterThan(0);
+	return logo.getAttribute("src");
+}
+
+test("LiGHT's wordmark is drawn in its blues, and in white on the dark theme", async ({
+	page,
+}) => {
+	await page.emulateMedia({ colorScheme: "light" });
+	await page.goto("/");
+	expect(await drawnLogo(page)).toMatch(/light-logo\.svg$/);
+
+	await page.emulateMedia({ colorScheme: "dark" });
+	expect(await drawnLogo(page)).toMatch(/light-logo-white\.svg$/);
+});
