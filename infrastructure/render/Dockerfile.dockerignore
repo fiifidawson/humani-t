@@ -1,0 +1,27 @@
+# Build context for infrastructure/render/Dockerfile, used instead of the root
+# .dockerignore. An allowlist, like that one: only what the image needs is let in.
+*
+
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!tsconfig.base.json
+!apps/web/
+!infrastructure/caddy/Caddyfile
+!infrastructure/caddy/main.go
+!infrastructure/render/
+!services/api/pyproject.toml
+!services/api/uv.lock
+!services/api/alembic.ini
+!services/api/migrations/
+!services/api/app/
+
+**/node_modules/
+**/dist/
+**/coverage/
+**/.env
+**/.env.*
+**/*.tsbuildinfo
+**/__pycache__/
+**/.venv/

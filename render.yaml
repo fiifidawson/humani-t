@@ -1,0 +1,99 @@
+# Render Blueprint: what Render creates for humani-t. Lives only on the
+# onrender-production branch; docs/deploy/render.md walks through it.
+#
+# `sync: false` values are asked for once, when the Blueprint is first applied.
+
+services:
+  - type: web
+    name: humani-t
+    runtime: docker
+    region: frankfurt
+    # 2 GB: Caddy, two API processes, the worker and the name detector share it.
+    plan: standard
+    branch: onrender-production
+    dockerfilePath: ./infrastructure/render/Dockerfile
+    dockerContext: .
+    preDeployCommand: /render/predeploy.sh
+    healthCheckPath: /api/v1/ready
+    disk:
+      name: documents
+      mountPath: /var/lib/humani-t/documents
+      sizeGB: 1
+    envVars:
+      - key: PG_HOST
+        fromDatabase: { name: humani-t-db, property: host }
+      - key: PG_PORT
+        fromDatabase: { name: humani-t-db, property: port }
+      - key: PG_DATABASE
+        fromDatabase: { name: humani-t-db, property: database }
+      - key: PG_ADMIN_USER
+        fromDatabase: { name: humani-t-db, property: user }
+      - key: PG_ADMIN_PASSWORD
+        fromDatabase: { name: humani-t-db, property: password }
+      - key: DB_APP_PASSWORD
+        generateValue: true
+      - key: DB_MIGRATOR_PASSWORD
+        generateValue: true
+      - key: DB_SEPARATE_ROLES
+        value: "true"
+      - key: HUMANI_T_VALKEY_URL
+        fromService: { type: keyvalue, name: humani-t-kv, property: connectionString }
+      # `1:` followed by the output of `python -m app.cli generate-kek`. Keep a copy
+      # somewhere safe: without it, nothing in the database can be decrypted.
+      - key: HUMANI_T_KEY_ENCRYPTION_KEYS
+        sync: false
+      - key: HUMANI_T_INFERENCE_API
+        value: openai
+      - key: HUMANI_T_INFERENCE_URL
+        value: https://api.openai.com/v1
+      - key: HUMANI_T_INFERENCE_MODEL
+        sync: false
+      - key: HUMANI_T_INFERENCE_TOKEN
+        sync: false
+      # OpenAI is a third party: text is masked before it is sent, and owners may
+      # not turn masking off (ADR 0014).
+      - key: HUMANI_T_ALLOW_HOSTED_INFERENCE
+        value: "true"
+      - key: HUMANI_T_ALLOW_UNMASKED_HOSTED_INFERENCE
+        value: "false"
+      - key: HUMANI_T_MASKING_NER
+        value: spacy
+      - key: HUMANI_T_PAPER_SOURCES
+        value: openalex,europepmc,arxiv
+      - key: HUMANI_T_OPENALEX_MAILTO
+        sync: false
+      - key: HUMANI_T_SMTP_HOST
+        sync: false
+      - key: HUMANI_T_SMTP_PORT
+        value: "587"
+      - key: HUMANI_T_SMTP_USERNAME
+        sync: false
+      - key: HUMANI_T_SMTP_PASSWORD
+        sync: false
+      - key: HUMANI_T_SMTP_SENDER
+        sync: false
+      - key: HUMANI_T_DOCUMENT_STORAGE_DIR
+        value: /var/lib/humani-t/documents
+      # No ClamAV on Render: each document says it was not scanned (ADR 0012).
+      - key: HUMANI_T_MALWARE_SCANNER
+        value: none
+      - key: HUMANI_T_TRUSTED_PROXIES
+        value: 127.0.0.1
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+  # Rate limits and wake-up signals only: a restart resets the limits and costs a
+  # moment's delay, never data.
+  - type: keyvalue
+    name: humani-t-kv
+    region: frankfurt
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: humani-t-db
+    region: frankfurt
+    plan: basic-256mb
+    postgresMajorVersion: "18"
+    databaseName: humani_t
