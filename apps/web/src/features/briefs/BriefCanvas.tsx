@@ -48,6 +48,7 @@ import {
 	Claims,
 	ClaimText,
 	EvidenceBadge,
+	ScoreBar,
 } from "./Claim";
 import { SourcePanel } from "./SourcePanel";
 import {
@@ -58,6 +59,7 @@ import {
 } from "./ViewFirst";
 import {
 	CONFLICTS,
+	SCORE_TONES,
 	SCORES,
 	STRENGTH_ORDER,
 	STRENGTHS,
@@ -455,6 +457,70 @@ function PriorityMark() {
 	);
 }
 
+/** Where a trade-off row can be linked to, as the table row or the card. */
+const rowAnchor = (criterion: string) =>
+	`trade-off-${criterion
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")}`;
+
+/**
+ * Which humanitarian principles the trade-offs weigh, each linked to its row, and
+ * which they leave out. Coverage, never a score: the API says which is which.
+ */
+function Principles({ principles }: { principles: Brief["principles"] }) {
+	const id = useId();
+	return (
+		<Box as="section" aria-labelledby={id} mb="4">
+			<Heading as="h4" id={id} fontSize="sm" fontWeight="medium" mb="2">
+				Humanitarian principles in this brief
+			</Heading>
+			<chakra.ul
+				listStyleType="none"
+				p="0"
+				display="flex"
+				flexWrap="wrap"
+				gap="2"
+			>
+				{principles.map((principle) => (
+					<Flex
+						as="li"
+						key={principle.name}
+						align="center"
+						gap="2"
+						px="2.5"
+						py="1"
+						rounded="pill"
+						borderWidth="1px"
+						borderColor={
+							principle.trade_off === null ? "border" : "brand.solid"
+						}
+						bg={principle.trade_off === null ? "transparent" : "benefit.bg"}
+						fontSize="sm"
+					>
+						<Text as="span" fontWeight="medium">
+							{principle.name}
+						</Text>
+						{principle.trade_off === null ? (
+							<Text as="span" color="fg.muted">
+								Not discussed
+							</Text>
+						) : (
+							<ChakraLink
+								href={`#${rowAnchor(principle.trade_off)}`}
+								css={linkStyle}
+								aria-label={`${principle.name}: weighed in the trade-offs`}
+							>
+								Weighed
+							</ChakraLink>
+						)}
+					</Flex>
+				))}
+			</chakra.ul>
+		</Box>
+	);
+}
+
 /** A criterion's name with its marks, as a row header or a card heading. */
 function CriterionLabel({
 	row,
@@ -570,6 +636,7 @@ function CriterionCards({
 					<Box
 						as="article"
 						key={row.criterion}
+						id={rowAnchor(row.criterion)}
 						aria-labelledby={headingId}
 						p="3"
 						rounded="card"
@@ -701,7 +768,11 @@ function TradeOffs({
 							{rows.map((row) => {
 								const isPicked = picked.includes(row.criterion);
 								return (
-									<Table.Row key={row.criterion} verticalAlign="top">
+									<Table.Row
+										key={row.criterion}
+										id={rowAnchor(row.criterion)}
+										verticalAlign="top"
+									>
 										<Table.Cell
 											as="th"
 											scope="row"
@@ -867,17 +938,30 @@ function Quality({ quality }: { quality: NonNullable<Brief["quality"]> }) {
 							The model's own review of this brief.
 						</Text>
 						<chakra.ul
+							aria-label="Quality checks"
 							listStyleType="none"
 							p="0"
-							display="flex"
-							flexWrap="wrap"
-							columnGap="5"
-							rowGap="1"
+							display="grid"
+							gridTemplateColumns="repeat(auto-fill, minmax(min(100%, 15rem), 1fr))"
+							columnGap="6"
+							rowGap="2"
 						>
 							{SCORES.map(([key, name]) => (
-								<li key={key}>
-									{`${name}: ${scoreWord(quality[key])} (${quality[key]} of 2)`}
-								</li>
+								<Flex as="li" key={key} align="center" gap="3" fontSize="sm">
+									<Text as="span" flex="1" minW="0">
+										{name}
+										<VisuallyHidden>: </VisuallyHidden>
+									</Text>
+									<ScoreBar
+										value={quality[key]}
+										max={2}
+										tone={SCORE_TONES[quality[key]] ?? "fg.muted"}
+										width="16"
+									/>
+									<Text as="span" w="12" color="fg.muted">
+										{scoreWord(quality[key])}
+									</Text>
+								</Flex>
 							))}
 						</chakra.ul>
 						<Text mt="2" fontSize="xs" color="fg.muted">
@@ -982,6 +1066,7 @@ function BriefView({
 			</Section>
 
 			<Section prefix={prefix} name="trade-offs" title="Trade-offs">
+				<Principles principles={brief.principles} />
 				<TradeOffs
 					brief={brief}
 					picked={picked}

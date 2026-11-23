@@ -2220,6 +2220,11 @@ export interface components {
             options: components["schemas"]["OptionOut"][];
             /** Trade Offs */
             trade_offs: components["schemas"]["TradeOffOut"][];
+            /**
+             * Principles
+             * @description Each humanitarian principle and whether the trade-offs weigh it.
+             */
+            principles: components["schemas"]["PrincipleOut"][];
             /** Conflicts */
             conflicts: components["schemas"]["ConflictOut"][];
             /** Considerations */
@@ -2910,11 +2915,16 @@ export interface components {
              * @description Where each page starts in `raw_text`.
              */
             page_starts: number[];
+            /**
+             * Lines
+             * @description What each line of the text is, one per line, as the Word file said; `null` for other files and for texts read before this was kept. Lines of `raw_text`.
+             */
+            lines: (components["schemas"]["ParagraphLineOut"] | components["schemas"]["HeadingLineOut"] | components["schemas"]["ListItemLineOut"] | components["schemas"]["TableCellLineOut"])[] | null;
             /** Is Truncated */
             is_truncated: boolean;
             /**
              * Notice
-             * @default You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read.
+             * @default You're seeing original text. This view is recorded.
              */
             notice: string;
         };
@@ -3278,6 +3288,19 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeadingLineOut */
+        HeadingLineOut: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "heading";
+            /**
+             * Level
+             * @description 1 for Title and Heading 1.
+             */
+            level: number;
+        };
         /** HealthOut */
         HealthOut: {
             /**
@@ -3487,6 +3510,14 @@ export interface components {
              */
             answered_at: string;
         };
+        /** ListItemLineOut */
+        ListItemLineOut: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "list_item";
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -3611,6 +3642,11 @@ export interface components {
              * @description Where each page starts in `masked_text`.
              */
             page_starts: number[];
+            /**
+             * Lines
+             * @description What each line of the text is, one per line, as the Word file said; `null` for other files and for texts read before this was kept. `null` too when a mask joined two lines.
+             */
+            lines: (components["schemas"]["ParagraphLineOut"] | components["schemas"]["HeadingLineOut"] | components["schemas"]["ListItemLineOut"] | components["schemas"]["TableCellLineOut"])[] | null;
             /** Is Truncated */
             is_truncated: boolean;
         };
@@ -4074,6 +4110,14 @@ export interface components {
             /** @description For the whole run under the labels shown; the same on every page. */
             coverage: components["schemas"]["CoverageOut"];
         };
+        /** ParagraphLineOut */
+        ParagraphLineOut: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "paragraph";
+        };
         /** PassageOut */
         PassageOut: {
             /**
@@ -4205,6 +4249,16 @@ export interface components {
             plan: components["schemas"]["VersionOut"];
             /** @description What changed from the version before. */
             diff: components["schemas"]["DiffOut"];
+        };
+        /** PrincipleOut */
+        PrincipleOut: {
+            /** Name */
+            name: string;
+            /**
+             * Trade Off
+             * @description The trade-off row that weighs it; null when the brief does not.
+             */
+            trade_off: string | null;
         };
         /**
          * Priority
@@ -5334,6 +5388,23 @@ export interface components {
             option: string;
             before: components["schemas"]["EvidenceStrength"];
             after: components["schemas"]["EvidenceStrength"];
+        };
+        /** TableCellLineOut */
+        TableCellLineOut: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "table_cell";
+            /**
+             * Table
+             * @description Counting from 0 in the document.
+             */
+            table: number;
+            /** Row */
+            row: number;
+            /** Column */
+            column: number;
         };
         /** TagProjectsIn */
         TagProjectsIn: {

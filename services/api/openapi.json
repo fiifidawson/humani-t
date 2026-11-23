@@ -6365,6 +6365,14 @@
             "type": "array",
             "title": "Trade Offs"
           },
+          "principles": {
+            "items": {
+              "$ref": "#/components/schemas/PrincipleOut"
+            },
+            "type": "array",
+            "title": "Principles",
+            "description": "Each humanitarian principle and whether the trade-offs weigh it."
+          },
           "conflicts": {
             "items": {
               "$ref": "#/components/schemas/ConflictOut"
@@ -6445,6 +6453,7 @@
           "bottom_line",
           "options",
           "trade_offs",
+          "principles",
           "conflicts",
           "considerations",
           "gaps",
@@ -7844,6 +7853,43 @@
             "title": "Page Starts",
             "description": "Where each page starts in `raw_text`."
           },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParagraphLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HeadingLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ListItemLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TableCellLineOut"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "kind",
+                    "mapping": {
+                      "heading": "#/components/schemas/HeadingLineOut",
+                      "list_item": "#/components/schemas/ListItemLineOut",
+                      "paragraph": "#/components/schemas/ParagraphLineOut",
+                      "table_cell": "#/components/schemas/TableCellLineOut"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lines",
+            "description": "What each line of the text is, one per line, as the Word file said; `null` for other files and for texts read before this was kept. Lines of `raw_text`."
+          },
           "is_truncated": {
             "type": "boolean",
             "title": "Is Truncated"
@@ -7851,7 +7897,7 @@
           "notice": {
             "type": "string",
             "title": "Notice",
-            "default": "You're seeing original text. This view is recorded. Masking is not anonymity: text that is only in images was not read."
+            "default": "You're seeing original text. This view is recorded."
           }
         },
         "type": "object",
@@ -7866,6 +7912,7 @@
           "removed",
           "items",
           "page_starts",
+          "lines",
           "is_truncated"
         ],
         "title": "DocumentReviewOut",
@@ -8625,6 +8672,28 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HeadingLineOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "heading",
+            "title": "Kind"
+          },
+          "level": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "description": "1 for Title and Heading 1."
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "level"
+        ],
+        "title": "HeadingLineOut"
+      },
       "HealthOut": {
         "properties": {
           "status": {
@@ -9056,6 +9125,20 @@
         ],
         "title": "LeaningOut"
       },
+      "ListItemLineOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "list_item",
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "ListItemLineOut"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -9334,6 +9417,43 @@
             "title": "Page Starts",
             "description": "Where each page starts in `masked_text`."
           },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParagraphLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HeadingLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ListItemLineOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TableCellLineOut"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "kind",
+                    "mapping": {
+                      "heading": "#/components/schemas/HeadingLineOut",
+                      "list_item": "#/components/schemas/ListItemLineOut",
+                      "paragraph": "#/components/schemas/ParagraphLineOut",
+                      "table_cell": "#/components/schemas/TableCellLineOut"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lines",
+            "description": "What each line of the text is, one per line, as the Word file said; `null` for other files and for texts read before this was kept. `null` too when a mask joined two lines."
+          },
           "is_truncated": {
             "type": "boolean",
             "title": "Is Truncated"
@@ -9348,6 +9468,7 @@
           "masked_text",
           "items",
           "page_starts",
+          "lines",
           "is_truncated"
         ],
         "title": "MaskedDocumentOut",
@@ -10363,6 +10484,20 @@
         ],
         "title": "PaperPageOut"
       },
+      "ParagraphLineOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "paragraph",
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "ParagraphLineOut"
+      },
       "PassageOut": {
         "properties": {
           "text": {
@@ -10690,6 +10825,32 @@
           "diff"
         ],
         "title": "PlanVersionOut"
+      },
+      "PrincipleOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trade_off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Off",
+            "description": "The trade-off row that weighs it; null when the brief does not."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "trade_off"
+        ],
+        "title": "PrincipleOut"
       },
       "Priority": {
         "type": "string",
@@ -13373,6 +13534,39 @@
           "after"
         ],
         "title": "StrengthChangeOut"
+      },
+      "TableCellLineOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "table_cell",
+            "title": "Kind"
+          },
+          "table": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Table",
+            "description": "Counting from 0 in the document."
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Row"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Column"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "table",
+          "row",
+          "column"
+        ],
+        "title": "TableCellLineOut"
       },
       "TagProjectsIn": {
         "properties": {

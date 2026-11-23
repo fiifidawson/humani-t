@@ -80,3 +80,53 @@ test("pop-ups open in the middle of the window, not the top left", async ({
 	expect(off.across).toBeLessThan(2);
 	expect(off.down).toBeLessThan(2);
 });
+
+/** Everything inside `dialog` that sticks out past its sides, by its text. */
+async function spillingOut(dialog: Locator): Promise<string[]> {
+	return dialog.evaluate((box) => {
+		const edge = box.getBoundingClientRect();
+		return [...box.querySelectorAll<HTMLElement>("*")]
+			.filter((element) => {
+				const rect = element.getBoundingClientRect();
+				return (
+					rect.width > 0 &&
+					(rect.right > edge.right + 1 || rect.left < edge.left - 1)
+				);
+			})
+			.map((element) => element.textContent?.trim() ?? element.tagName);
+	});
+}
+
+const LONG_NAME = `Field_assessment_${"x".repeat(80)}_final`;
+
+test("a delete pop-up wraps a long name rather than letting it run out", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1366, height: 768 });
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill(LONG_NAME);
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	const project = page.url();
+
+	await page.goto(`${project}/documents`);
+	await page.locator("input[type=file]").setInputFiles({
+		name: `${LONG_NAME}.txt`,
+		mimeType: "text/plain",
+		buffer: Buffer.from("Interview notes, 12 March 2024."),
+	});
+	await page
+		.getByRole("button", { name: `Delete D1 ${LONG_NAME}.txt` })
+		.click({ timeout: 60_000 });
+	const deleteDocument = page.getByRole("dialog");
+	await expect(deleteDocument).toBeVisible();
+	expect(await spillingOut(deleteDocument)).toEqual([]);
+	await page.keyboard.press("Escape");
+	await expect(deleteDocument).toBeHidden();
+
+	await page.goto(`${project}/settings`);
+	await page.getByRole("button", { name: "Delete project…" }).click();
+	const deleteProject = page.getByRole("dialog");
+	await expect(deleteProject).toBeVisible();
+	expect(await spillingOut(deleteProject)).toEqual([]);
+});

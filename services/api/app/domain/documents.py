@@ -20,6 +20,7 @@ from types import MappingProxyType
 from typing import Protocol, cast
 from uuid import UUID
 
+from app.domain.document_lines import DocumentLine, lines_fit
 from app.domain.masking import (
     PLACEHOLDER,
     STRUCTURED_ENTITY_TYPES,
@@ -471,13 +472,18 @@ class DocumentReview:
 
 @dataclass(frozen=True, slots=True)
 class DocumentText:
-    """The extracted raw text, sealed, and where each page starts in it. Never modified."""
+    """The extracted raw text, sealed, and where each page starts in it. Never modified.
+
+    `lines` says what each line of the text is, for a Word file read by `local@2` or
+    later; `None` for every other file.
+    """
 
     document_id: UUID
     project_id: UUID
     raw_sealed: bytes
     page_starts: tuple[int, ...]
     extracted_at: datetime
+    lines: tuple[DocumentLine, ...] | None = None
 
     def __post_init__(self) -> None:
         require_aware("DocumentText", extracted_at=self.extracted_at)
@@ -550,13 +556,17 @@ class ExtractionLimits:
 
 @dataclass(frozen=True, slots=True)
 class ExtractedDocument:
-    """A file's text, and where each page starts in it (`(0,)` for unpaged formats)."""
+    """A file's text, where each page starts in it, and what each line is if the file says.
+
+    `page_starts` is `(0,)` for unpaged formats; `lines` comes from Word files only.
+    """
 
     text: str
     page_starts: tuple[int, ...]
     is_truncated: bool
     extractor: str
     is_paged: bool = False
+    lines: tuple[DocumentLine, ...] | None = None
 
     def __post_init__(self) -> None:
         _require_page_starts("ExtractedDocument", self.page_starts)
@@ -566,6 +576,8 @@ class ExtractedDocument:
             raise ValueError("ExtractedDocument.page_starts must lie within the text")
         if not self.extractor.strip():
             raise ValueError("ExtractedDocument.extractor must not be blank")
+        if self.lines is not None and not lines_fit(self.lines, self.text):
+            raise ValueError("ExtractedDocument.lines must give one kind per line of the text")
 
     @property
     def page_count(self) -> int | None:

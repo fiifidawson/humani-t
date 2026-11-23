@@ -142,8 +142,17 @@ The file itself is `<HUMANI_T_DOCUMENT_STORAGE_DIR>/<project id>/<document id>.s
 - **Why:** shown exactly as extracted, a PDF ran down a half-width pane as a column of short lines, and a Word file was one block that could not pair up, so a long document made a very long page. Only the display changes: the stored text, and the offsets that selections and masks use, are untouched.
 - **Rejected:** rendering the original file itself (opening an untrusted file in the browser, which the design avoids); a panel per PDF page, which would make a long review longer again.
 - **Watch for:** the frame is a positioning container (`position: relative`), so the placeholders' screen-reader text stays inside it; without that it stretched the page below the review.
-- **Where:** [`features/documents/MaskingReview.tsx`](../../apps/web/src/features/documents/MaskingReview.tsx) (`paragraphs`, `MaskCard`, `MaskedDocument`), [`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx) (`StatusIcon`).
+- **Where:** [`features/documents/reading.ts`](../../apps/web/src/features/documents/reading.ts) (`paragraphs`), [`features/documents/MaskingReview.tsx`](../../apps/web/src/features/documents/MaskingReview.tsx) (`MaskCard`, `MaskedDocument`), [`features/documents/Documents.tsx`](../../apps/web/src/features/documents/Documents.tsx) (`StatusIcon`).
 - **Proven by:** `Documents.test.tsx` › "flows a PDF's printed lines back into paragraphs", "keeps each line of a Word document as its own paragraph", "opens a card at a masked word", "unmasks from the card at the word", "puts the mask bar right at a selection", "shows an approved document's masked text in paragraphs", "spins the icon of a document still being checked or read"; `e2e/documents.spec.ts` › "a long document stays in a frame shorter than the window", "the mask bar and a mask's card open right at the words".
+
+### D16.14 Documents read with their headings, lists, tables and pages
+
+- **Decision:** both panes, and an approved document's masked text, are laid out as the document reads: headings, paragraphs, lists, tables, and a thin "Page 2", "Page 3" divider where each PDF page starts, in slightly larger text with more open lines. A Word file says what each line is: the DOCX reader records a kind per line (heading with its level, list item, table cell with its table, row and column, or paragraph) from the paragraph's style, numbering and table, stores it beside the text in `document_texts.lines`, and the API returns it as `lines` on the review and on the masked text. For other files, and Word files read before extractor `local@2`, the browser guesses: a short line that starts a block, has no sentence in it and comes before a longer paragraph is a heading; two or more lines starting with "•", "-", "*", "1.", "a)" and similar are a list, markers kept. Both panes get the same blocks from the original's lines, so they still pair up; if a mask joined two lines, both fall back to D16.13's paragraphs. A table is a real table in each pane and scrolls sideways inside its row when it is too wide.
+- **Why:** a long report read as one run of paragraphs, so the owner could not find their place or see what a line was. Structure is metadata beside the text, never markup in it, so masks, offsets, selections and the mask bar work exactly as before.
+- **Rejected:** markup (Markdown or HTML) inside the extracted text, which would shift every offset and ask the browser to render an untrusted file's markup; sealing the structure, which holds no words (as `page_starts` holds none); guessing in the API (ADR 0023).
+- **Watch for:** a guessed heading can be wrong (a PDF's running header at each page's top). A false heading is worse than a missed one, so anything less certain stays a paragraph. Word's list numbers are not in the text, so Word lists show bullets; a Word table's first row is shown as its column headings.
+- **Where:** [`extraction/local.py`](../../services/api/app/extraction/local.py) (`_DocxStyles`, `_DocxText`), [`domain/document_lines.py`](../../services/api/app/domain/document_lines.py), [`migrations/versions/20261122_0023_document_lines.py`](../../services/api/migrations/versions/20261122_0023_document_lines.py), [`features/documents/reading.ts`](../../apps/web/src/features/documents/reading.ts), [`features/documents/MaskingReview.tsx`](../../apps/web/src/features/documents/MaskingReview.tsx) (`ShownBlock`), [ADR 0023](../adr/0023-document-structure-beside-the-text.md).
+- **Proven by:** `test_document_extraction.py` › `TestDocxStructure`; `test_documents_api.py` › `TestDocumentLines`; `test_documents_domain.py` › `TestDocumentLines`; `reading.test.ts`; `Documents.test.tsx` › "shows a Word file's headings, lists and tables as the file has them, on both sides", "falls back to paragraphs, still side by side, when a mask joins two lines", "marks where each page of a PDF starts, on both sides"; `e2e/documents.spec.ts` › "a structured document's blocks line up across the panes, and a wide table scrolls in its own row".
 
 ### Deliberately not used
 
@@ -305,6 +314,30 @@ Start with a fresh `report.txt` uploaded as Amara and waiting for review, a revi
 | T16.9.15 | Click a highlighted name in the original, then its placeholder on the right | A card opens under the word each time, naming its type and what masked it; **Not personal** asks for a reason; Esc closes it | D16.13 | nothing from a placeholder means the placeholders and masks no longer match one to one |
 | T16.9.16 | Approve it, then open **See masked text** | The masked text in paragraphs, in a frame shorter than the window | D16.13 | |
 
+### T16.10 Reading layout
+
+Start with a Word file `visit.docx` saved from Word with a Title, a Heading 1, a paragraph naming `Kofi Mensah`, a bulleted list of three items and a table of 3 rows by 6 columns with long words; a PDF of at least three pages; and a `notes.txt` like the one below. Upload all three as Amara.
+
+```text
+Field visit
+
+We met the committee at the clinic in the morning.
+
+- Water
+- Food
+```
+
+| # | Do | Expect | Proves | If it fails |
+| --- | --- | --- | --- | --- |
+| T16.10.1 | Open the review of `visit.docx` | The title and heading in bold, larger; the list with bullets; the table with ruled cells, its first row bold; the same blocks on both sides, each level with its masked version | D16.14 | a plain run of lines means the file was read before `local@2`: check `extracted_with` on its row |
+| T16.10.2 | Postman: `GET …/documents/<id>/review` | `lines` has one entry per line of `raw_text`, e.g. `{"kind": "heading", "level": 1}` first; `extracted_with` starts with `local@2+` | D16.14 | |
+| T16.10.3 | Make the window narrow enough that the table does not fit its pane, and scroll it | The table scrolls sideways in its own row; the frame still has one vertical scrollbar and no sideways scroll | D16.14 | |
+| T16.10.4 | Select a word in a table cell of the original, **Mask it** | The word is masked in both tables; the request's `start` and `end` are the word's offsets in `raw_text` | D16.14, D16.7 | |
+| T16.10.5 | Select from the end of the heading into the next paragraph and **Mask it** | Both panes fall back to plain paragraphs side by side; no heading or table; `GET …/masked` returns `"lines": null` | D16.14 | |
+| T16.10.6 | Open the PDF's review | A thin "Page 2", "Page 3" divider where each page starts, on both sides and level | D16.14 | |
+| T16.10.7 | Open `notes.txt`'s review | "Field visit" as a heading, the two lines as a list keeping their "-" markers; `lines` is `null` in the API | D16.14 | |
+| T16.10.8 | pgAdmin: `SELECT lines IS NULL, extracted_at FROM document_texts ORDER BY extracted_at DESC LIMIT 3` | `false` for the Word file only | D16.14 | |
+
 ### Results checklist
 
 | Test | Passed | Notes |
@@ -318,6 +351,7 @@ Start with a fresh `report.txt` uploaded as Amara and waiting for review, a revi
 | T16.7 | ☐ | |
 | T16.8 | ☐ | |
 | T16.9 | ☐ | |
+| T16.10 | ☐ | |
 
 Anything that does not match an **Expect** is a bug or a wrong test. Record the request, the response and the API log line (with its request id). It gets a failing test before it gets a fix.
 
@@ -326,7 +360,7 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Claim | Test |
 | --- | --- |
 | Types from bytes, safe names, quotas, the document's life, corrections, positions, passages, dates | `tests/test_documents_domain.py` |
-| Extraction within limits; XXE, entity bombs, zip bombs, encrypted and damaged files; the child killed at its timeout and refusing side effects | `tests/test_document_extraction.py` |
+| Extraction within limits; XXE, entity bombs, zip bombs, encrypted and damaged files; the child killed at its timeout and refusing side effects; a Word file's headings, lists and tables | `tests/test_document_extraction.py` |
 | File stores, the fake scanner, the ClamAV client against a loopback clamd | `tests/test_document_seams.py` |
 | Multipart parsing, CSRF on the upload, every refusal before storage | `tests/test_document_uploads.py` |
 | Processing, review, corrections, approval, evidence, deletion, sealing, audit, no connection held across slow work | `tests/test_documents_api.py` |
@@ -334,6 +368,7 @@ Anything that does not match an **Expect** is a bug or a wrong test. Record the 
 | Scanner and storage settings, and the production wiring | `tests/test_documents_settings.py` |
 | Storage behaves the same on memory and Postgres | `tests/test_documents_storage_contract.py` |
 | The web screens: upload, status, the masking review and its corrections, delete (owners only, confirmed), and no accessibility violations | `apps/web/src/features/documents/Documents.test.tsx` |
+| The reading layout: guessed headings and lists, page dividers, a Word file's own structure, pairing and its fallback | `apps/web/src/features/documents/reading.test.ts` |
 | The chat's privacy review card lists the waiting documents and links owners to each review | `apps/web/src/features/reviews/PrivacyGate.test.tsx` |
 | Project settings → Privacy: list, add and remove masking rules, owners only | `apps/web/src/features/projects/MaskingRules.test.tsx` |
 | clamd in the stack is hardened, reachable from the worker only, finds EICAR, and reaches nothing | `.github/workflows/compose.yml` (compose smoke test) |

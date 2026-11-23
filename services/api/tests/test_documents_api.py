@@ -26,6 +26,9 @@ from tests.document_support import (
     make_document_team,
     pdf,
     stored_document,
+    word_body,
+    word_paragraph,
+    word_table,
 )
 from tests.project_support import project_events, send
 
@@ -642,3 +645,97 @@ class TestMaskVersionsAreBound:
 
         assert detail["masked_page_starts"] == [0]
         assert {s["source"] for s in detail["spans"]} >= {"patterns@2", "dates@1"}
+
+
+WORD_REPORT = word_body(
+    word_paragraph("Field visit", "Heading1")
+    + word_paragraph(f"Met {STAFF} at the clinic.")
+    + word_paragraph("Water", numbered=True)
+    + word_table(("Site", "Households"), ("Gao", "120"))
+)
+WORD_LINES = [
+    {"kind": "heading", "level": 1},
+    {"kind": "paragraph"},
+    {"kind": "list_item"},
+    {"kind": "table_cell", "table": 0, "row": 0, "column": 0},
+    {"kind": "table_cell", "table": 0, "row": 0, "column": 1},
+    {"kind": "table_cell", "table": 0, "row": 1, "column": 0},
+    {"kind": "table_cell", "table": 0, "row": 1, "column": 1},
+]
+
+
+class TestDocumentLines:
+    """A Word file's structure beside its text: shown on the web, never in the text."""
+
+    def test_the_review_says_what_each_line_of_a_word_file_is(self, team: DocumentTeam):
+        document_id = team.uploaded(docx(xml=WORD_REPORT), "report.docx")
+        team.process()
+
+        review = _review(team, document_id)
+
+        assert review["raw_text"].split("\n")[0] == "Field visit"
+        assert review["lines"] == WORD_LINES
+
+    def test_any_member_gets_the_same_lines_with_the_masked_text(self, team: DocumentTeam):
+        document_id = team.uploaded(docx(xml=WORD_REPORT), "report.docx")
+        team.process()
+
+        masked = team.viewer.get(team.path(f"/{document_id}/masked")).json()
+
+        assert masked["lines"] == WORD_LINES
+        assert "raw_text" not in masked
+
+    def test_text_and_pdf_files_have_no_lines(self, team: DocumentTeam):
+        first = team.uploaded(REPORT.encode())
+        second = team.uploaded(pdf("Seen on 12 March 2024.", "Page two."), "report.pdf")
+        team.process()
+
+        for document_id in (first, second):
+            assert _review(team, document_id)["lines"] is None
+            masked = team.viewer.get(team.path(f"/{document_id}/masked")).json()
+            assert masked["lines"] is None
+
+    def test_a_correction_keeps_the_lines(self, team: DocumentTeam):
+        document_id = team.uploaded(docx(xml=WORD_REPORT), "report.docx")
+        team.process()
+        raw = _review(team, document_id)["raw_text"]
+        start = raw.index(STAFF)
+
+        corrected = send(
+            team.owner,
+            "POST",
+            team.path(f"/{document_id}/masks"),
+            {"version": 1, "start": start, "end": start + len(STAFF), "entity_type": "PERSON"},
+        ).json()
+
+        assert corrected["lines"] == WORD_LINES
+
+    def test_a_mask_across_a_line_break_leaves_the_masked_text_without_lines(
+        self, team: DocumentTeam
+    ):
+        document_id = team.uploaded(docx(xml=WORD_REPORT), "report.docx")
+        team.process()
+        raw = _review(team, document_id)["raw_text"]
+        start = raw.index("visit")
+        end = raw.index("Met") + len("Met")
+
+        corrected = send(
+            team.owner,
+            "POST",
+            team.path(f"/{document_id}/masks"),
+            {"version": 1, "start": start, "end": end, "entity_type": "PERSON"},
+        ).json()
+
+        assert corrected["masked_text"].count("\n") == raw.count("\n") - 1
+        assert corrected["lines"] == WORD_LINES
+        masked = team.viewer.get(team.path(f"/{document_id}/masked")).json()
+        assert masked["lines"] is None
+
+    def test_an_outsider_learns_nothing_of_a_documents_lines(self, team: DocumentTeam):
+        document_id = team.uploaded(docx(xml=WORD_REPORT), "report.docx")
+        team.process()
+
+        for path in (f"/{document_id}/masked", f"/{document_id}/review"):
+            response = team.outsider.get(team.path(path))
+            assert response.status_code == 404
+            assert "lines" not in response.text

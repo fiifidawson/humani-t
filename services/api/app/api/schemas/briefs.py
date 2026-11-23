@@ -28,6 +28,7 @@ from app.domain.briefs import (
     SourceKind,
     StepStatus,
     StopReason,
+    principle_coverage,
 )
 
 
@@ -71,6 +72,13 @@ class TradeOffOut(BaseModel):
     criterion: str
     is_humanitarian: bool = Field(description="One of the humanitarian principles.")
     assessments: list[AssessmentOut] = Field(description="One per option, in option order.")
+
+
+class PrincipleOut(BaseModel):
+    name: str
+    trade_off: str | None = Field(
+        description="The trade-off row that weighs it; null when the brief does not."
+    )
 
 
 class ConflictOut(BaseModel):
@@ -155,6 +163,9 @@ class BriefOut(BaseModel):
     bottom_line: list[ClaimOut]
     options: list[OptionOut] = Field(description="2 to 4, in the Writer's order. No ranking.")
     trade_offs: list[TradeOffOut]
+    principles: list[PrincipleOut] = Field(
+        description="Each humanitarian principle and whether the trade-offs weigh it."
+    )
     conflicts: list[ConflictOut]
     considerations: list[ConsiderationOut]
     gaps: list[str]
@@ -199,6 +210,10 @@ class BriefOut(BaseModel):
                     ],
                 )
                 for row in body.trade_offs
+            ],
+            principles=[
+                PrincipleOut(name=name, trade_off=criterion)
+                for name, criterion in principle_coverage(body.trade_offs)
             ],
             conflicts=[
                 ConflictOut(

@@ -38,6 +38,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.domain.document_lines import lines_from_json, lines_to_json
 from app.domain.documents import (
     PROCESSING_STATUSES,
     Document,
@@ -107,6 +108,7 @@ document_texts = Table(
     Column("raw_sealed", LargeBinary, nullable=False),
     Column("page_starts", ARRAY(Integer), nullable=False),
     Column("extracted_at", DateTime(timezone=True), nullable=False),
+    Column("lines", JSONB, nullable=True),
 )
 
 document_masks = Table(
@@ -313,6 +315,7 @@ class PostgresDocumentRepository:
                 raw_sealed=text.raw_sealed,
                 page_starts=list(text.page_starts),
                 extracted_at=text.extracted_at,
+                lines=None if text.lines is None else lines_to_json(text.lines),
             )
             .on_conflict_do_nothing(index_elements=[document_texts.c.document_id])
         )
@@ -329,6 +332,7 @@ class PostgresDocumentRepository:
             raw_sealed=row.raw_sealed,
             page_starts=tuple(row.page_starts),
             extracted_at=row.extracted_at,
+            lines=None if row.lines is None else lines_from_json(row.lines),
         )
 
     async def put_mask(self, mask: DocumentMask, /, *, replaces: int | None) -> bool:

@@ -35,13 +35,18 @@ export function Dialog({ isOpen, title, onClose, children }: DialogProps) {
 						rounded="card"
 						p="2"
 						maxW="md"
-						css={{ zoom: COMPACT_ZOOM }}
+						minW="0"
+						// Names in a title or a message (files, projects) may have no spaces.
+						css={{ zoom: COMPACT_ZOOM, overflowWrap: "anywhere" }}
 					>
 						<ChakraDialog.Header>
 							<ChakraDialog.Title
 								fontFamily="heading"
 								fontWeight="semibold"
 								fontSize="2xl"
+								// Chakra's own title style would let a long name run out.
+								minW="0"
+								overflowWrap="anywhere"
 							>
 								{title}
 							</ChakraDialog.Title>

@@ -5,7 +5,8 @@
  * the API allows it). The full list of masks stays below, for the keyboard.
  *
  * Offsets come from the API's `raw_text` and go back to it as they are; the API
- * decides what may be masked or unmasked, and this only shows its answer.
+ * decides what may be masked or unmasked, and this only shows its answer. Both
+ * texts are laid out as the document reads (`reading.ts`): display only.
  */
 
 import {
@@ -48,13 +49,15 @@ import { Reveal } from "../../ui/Reveal";
 import { EntityTypeSelect } from "../reviews/EntityTypeSelect";
 import { MaskedText } from "../reviews/MaskedText";
 import { type EntityType, entityTypeName } from "../reviews/masking";
+import {
+	type DocumentLine,
+	pairedBlocks,
+	type Range,
+	readingBlocks,
+	type Shown,
+} from "./reading";
 
 type Span = DocumentReview["spans"][number];
-
-interface Range {
-	start: number;
-	end: number;
-}
 
 /** The spans over one range of the original, shown as one mask. */
 interface Mask extends Range {
@@ -107,58 +110,6 @@ function madeBy(sources: readonly string[]): string {
 	return sources.some((s) => s.startsWith("user:"))
 		? "Masked by an owner"
 		: "Found automatically";
-}
-
-// A PDF line that ends a sentence ends its paragraph; any other line break in a
-// PDF is only where the printed page wrapped.
-const ENDS_SENTENCE = /[.!?:;]["”’')\]]?$/;
-
-/**
- * `text` in paragraphs, as the document showed them: a Word, text or Markdown
- * file has one per line; a PDF's lines flow together until a blank line or the
- * end of a sentence. Blank lines are left out.
- */
-function paragraphs(text: string, fileType: DocumentType): Range[] {
-	const found: Range[] = [];
-	let start: number | null = null;
-	let end = 0;
-	let offset = 0;
-	for (const line of text.split("\n")) {
-		if (line.trim() === "") {
-			if (start !== null) {
-				found.push({ start, end });
-			}
-			start = null;
-		} else {
-			start ??= offset;
-			end = offset + line.length;
-			if (fileType !== "pdf" || ENDS_SENTENCE.test(line.trimEnd())) {
-				found.push({ start, end });
-				start = null;
-			}
-		}
-		offset += line.length + 1;
-	}
-	if (start !== null) {
-		found.push({ start, end });
-	}
-	return found.length > 0 ? found : [{ start: 0, end: text.length }];
-}
-
-/**
- * The original's and the masked text's paragraphs, side by side. Masking keeps
- * line breaks, so they pair up; if they ever do not, each side is one block.
- */
-function pairedParagraphs(
-	raw: string,
-	masked: string,
-	fileType: DocumentType,
-): [Range[], Range[]] {
-	const left = paragraphs(raw, fileType);
-	const right = paragraphs(masked, fileType);
-	return left.length === right.length
-		? [left, right]
-		: [[{ start: 0, end: raw.length }], [{ start: 0, end: masked.length }]];
 }
 
 /** The original cut into plain and masked runs; overlapping masks join, as in the API. */
@@ -370,13 +321,177 @@ function MaskCard({
 	);
 }
 
+type WhiteSpace = "normal" | "pre-line";
+
+// In em, so a heading stays larger than the text around it at any text size.
+const HEADING_SIZES = ["1.35em", "1.2em", "1.05em"] as const;
+
+const startOf = (block: Shown): number => {
+	switch (block.kind) {
+		case "page":
+			return -block.number;
+		case "heading":
+		case "paragraph":
+			return block.range.start;
+		case "list":
+			return block.items[0]?.start ?? 0;
+		case "table":
+			return block.rows.flat().find((cell) => cell !== null)?.start ?? 0;
+	}
+};
+
+const TABLE_CELL = {
+	borderWidth: "1px",
+	borderColor: "border",
+	px: "2",
+	py: "1",
+	textAlign: "start",
+	verticalAlign: "top",
+	whiteSpace: "pre-line",
+} as const;
+
+interface BlockProps {
+	headingAs: "h4" | "h5";
+	words: (range: Range, whiteSpace: WhiteSpace) => ReactNode;
+}
+
+/**
+ * One block, a row of the frame's grid; `words` draws one range of the text, which
+ * is never read as HTML. A table scrolls sideways in its row rather than widen the pane.
+ */
+function ShownBlock({
+	block,
+	headingAs,
+	words,
+}: BlockProps & { block: Shown }) {
+	switch (block.kind) {
+		case "page":
+			return (
+				<Flex
+					role="separator"
+					aria-label={`Page ${block.number}`}
+					align="center"
+					gap="2"
+					py="2"
+					color="fg.muted"
+					fontSize="xs"
+				>
+					<Box flex="1" borderTopWidth="1px" borderColor="border" />
+					<span aria-hidden="true">{`Page ${block.number}`}</span>
+					<Box flex="1" borderTopWidth="1px" borderColor="border" />
+				</Flex>
+			);
+		case "heading":
+			return (
+				<Heading
+					as={headingAs}
+					data-paragraph=""
+					fontSize={HEADING_SIZES[block.level - 1] ?? "1em"}
+					fontWeight="semibold"
+					lineHeight="1.35"
+					overflowWrap="anywhere"
+				>
+					{words(block.range, "normal")}
+				</Heading>
+			);
+		case "paragraph":
+			return (
+				<Text data-paragraph="" whiteSpace="normal" overflowWrap="anywhere">
+					{words(block.range, "normal")}
+				</Text>
+			);
+		case "list":
+			return (
+				<chakra.ul
+					data-paragraph=""
+					// A guessed list keeps its own markers, which are part of the text.
+					ps={block.hasMarkers ? "0" : "5"}
+					listStyleType={block.hasMarkers ? "none" : "disc"}
+					overflowWrap="anywhere"
+					css={{ "& > li:not(:last-child)": { pb: "1" } }}
+				>
+					{block.items.map((item) => (
+						<li key={item.start}>{words(item, "normal")}</li>
+					))}
+				</chakra.ul>
+			);
+		case "table":
+			return (
+				<Box data-paragraph="" minW="0" overflowX="auto" overflowY="hidden">
+					<chakra.table
+						fontSize="0.9em"
+						borderCollapse="collapse"
+						css={{
+							"& th, & td": TABLE_CELL,
+							"& th": { fontWeight: "semibold" },
+							// Masked text breaks anywhere, which squeezes columns into letter
+							// fragments. A table keeps its widths and scrolls sideways instead.
+							"& th *, & td *": { overflowWrap: "normal" },
+						}}
+					>
+						<tbody>
+							{block.rows.map((row, r) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: a row has no identity but its place
+								<tr key={r}>
+									{row.map((cell, c) => {
+										const content =
+											cell === null ? null : words(cell, "pre-line");
+										// A Word table's first row is almost always its column headings.
+										return r === 0 && block.rows.length > 1 ? (
+											// biome-ignore lint/suspicious/noArrayIndexKey: a cell has no identity but its place
+											<th key={c} scope="col">
+												{content}
+											</th>
+										) : (
+											// biome-ignore lint/suspicious/noArrayIndexKey: a cell has no identity but its place
+											<td key={c}>{content}</td>
+										);
+									})}
+								</tr>
+							))}
+						</tbody>
+					</chakra.table>
+				</Box>
+			);
+	}
+}
+
+function DocumentBlocks({
+	blocks,
+	...props
+}: BlockProps & { blocks: readonly Shown[] }) {
+	return blocks.map((block) => (
+		<ShownBlock
+			key={`${block.kind}-${startOf(block)}`}
+			block={block}
+			{...props}
+		/>
+	));
+}
+
+const maskedWords =
+	(text: string) => (range: Range, whiteSpace: WhiteSpace) => (
+		<MaskedText
+			isInline
+			whiteSpace={whiteSpace}
+			text={text.slice(range.start, range.end)}
+		/>
+	);
+
+// Easier to read than the page's own text: a little larger, more open lines.
+const READING = { fontSize: "lg", lineHeight: "1.7" } as const;
+
 /** What the model reads from a document, for anyone who does not see the original. */
 export function MaskedDocument({
 	text,
 	fileType,
+	pageStarts,
+	lines,
 }: {
 	text: string;
 	fileType: DocumentType;
+	pageStarts: readonly number[];
+	lines: readonly DocumentLine[] | null;
 }) {
 	return (
 		<Box
@@ -392,16 +507,18 @@ export function MaskedDocument({
 			borderWidth="1px"
 			borderColor="border"
 			bg="bg"
+			{...READING}
 			css={{
 				"& [data-paragraph]:not(:last-child)": { pb: "4" },
-				"& [data-paragraph] > p": { whiteSpace: "normal" },
+				// A comfortable line length when the frame is wide.
+				"& > *": { maxW: "72ch" },
 			}}
 		>
-			{paragraphs(text, fileType).map((paragraph) => (
-				<Box key={paragraph.start} data-paragraph="">
-					<MaskedText text={text.slice(paragraph.start, paragraph.end)} />
-				</Box>
-			))}
+			<DocumentBlocks
+				blocks={readingBlocks(text, { fileType, lines, pageStarts })}
+				headingAs="h4"
+				words={maskedWords(text)}
+			/>
 		</Box>
 	);
 }
@@ -450,6 +567,7 @@ function Pane({
 				display={{ lg: "grid" }}
 				gridRow={{ lg: `2 / span ${rows}` }}
 				gridTemplateRows={{ lg: "subgrid" }}
+				{...READING}
 				css={{ "& [data-paragraph]:not(:last-child)": { pb: "4" } }}
 			>
 				{children}
@@ -666,20 +784,32 @@ export function MaskingCorrections({
 	};
 
 	const allRuns = runs(raw, review.spans);
-	const [rawParagraphs, maskedParagraphs] = pairedParagraphs(
-		raw,
-		review.masked_text,
+	const [rawBlocks, maskedBlocks] = pairedBlocks(raw, review.masked_text, {
 		fileType,
-	);
-	// A run that crosses a paragraph break is cut in two, one piece per paragraph.
-	const runsIn = (paragraph: Range) =>
+		lines: review.lines,
+		pageStarts: review.page_starts,
+	});
+	// A run that crosses a block's edge is cut in two, one piece per block.
+	const runsIn = (block: Range) =>
 		allRuns
-			.filter((run) => run.end > paragraph.start && run.start < paragraph.end)
+			.filter((run) => run.end > block.start && run.start < block.end)
 			.map((run) => ({
 				...run,
-				start: Math.max(run.start, paragraph.start),
-				end: Math.min(run.end, paragraph.end),
+				start: Math.max(run.start, block.start),
+				end: Math.min(run.end, block.end),
 			}));
+	const originalWords = (range: Range) =>
+		runsIn(range).map((run) =>
+			run.isMasked ? (
+				<Mark key={run.start}>
+					<span data-offset={run.start}>{quoted(run)}</span>
+				</Mark>
+			) : (
+				<span key={run.start} data-offset={run.start}>
+					{quoted(run)}
+				</span>
+			),
+		);
 
 	return (
 		<Stack gap="5">
@@ -702,7 +832,7 @@ export function MaskingCorrections({
 					columnGap="4"
 					rowGap={{ base: "4", lg: "0" }}
 				>
-					<Pane title="Original text" rows={rawParagraphs.length}>
+					<Pane title="Original text" rows={rawBlocks.length}>
 						<Box
 							ref={original}
 							display="contents"
@@ -712,49 +842,24 @@ export function MaskingCorrections({
 							}}
 							onKeyUp={readSelection}
 						>
-							{rawParagraphs.map((paragraph) => (
-								<Text
-									key={paragraph.start}
-									data-paragraph=""
-									whiteSpace="normal"
-									overflowWrap="anywhere"
-								>
-									{runsIn(paragraph).map((run) =>
-										run.isMasked ? (
-											<Mark key={run.start}>
-												<span data-offset={run.start}>{quoted(run)}</span>
-											</Mark>
-										) : (
-											<span key={run.start} data-offset={run.start}>
-												{quoted(run)}
-											</span>
-										),
-									)}
-								</Text>
-							))}
+							<DocumentBlocks
+								blocks={rawBlocks}
+								headingAs="h5"
+								words={originalWords}
+							/>
 						</Box>
 					</Pane>
-					<Pane title="What the model will see" rows={maskedParagraphs.length}>
+					<Pane title="What the model will see" rows={maskedBlocks.length}>
 						<Box
 							ref={maskedPane}
 							display="contents"
 							onMouseUp={(event) => openFromMasked(event.target)}
 						>
-							{maskedParagraphs.map((paragraph) => (
-								<Box
-									key={paragraph.start}
-									data-paragraph=""
-									// Flow like the original beside it: a PDF's line breaks are page wraps.
-									css={{ "& > p": { whiteSpace: "normal" } }}
-								>
-									<MaskedText
-										text={review.masked_text.slice(
-											paragraph.start,
-											paragraph.end,
-										)}
-									/>
-								</Box>
-							))}
+							<DocumentBlocks
+								blocks={maskedBlocks}
+								headingAs="h5"
+								words={maskedWords(review.masked_text)}
+							/>
 						</Box>
 					</Pane>
 				</Grid>

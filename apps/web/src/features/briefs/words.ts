@@ -138,6 +138,9 @@ export const SCORES: readonly [keyof Schemas["QualityOut"], string][] = [
 	["specificity", "Specificity"],
 ];
 
+/** A score's colour, by value; the word beside it carries the meaning too. */
+export const SCORE_TONES: readonly string[] = ["risk.fg", "link", "benefit.fg"];
+
 export const scoreWord = (value: number): string =>
 	value >= 2 ? "good" : value === 1 ? "partly" : "poor";
 

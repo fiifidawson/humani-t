@@ -107,6 +107,13 @@ export function exampleBrief(
 				],
 			},
 		],
+		principles: [
+			{ name: "Humanity", trade_off: null },
+			{ name: "Neutrality", trade_off: null },
+			{ name: "Independence", trade_off: null },
+			{ name: "Impartiality", trade_off: null },
+			{ name: "Do no harm", trade_off: "Do no harm" },
+		],
 		conflicts: [
 			{
 				question: "Do cash transfers raise local food prices?",

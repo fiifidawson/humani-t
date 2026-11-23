@@ -453,11 +453,38 @@ function PrismaFlow({
 			borderWidth="1px"
 			borderColor="border"
 			bg="bg.subtle"
+			// The flow follows its own width, not the window's: the canvas beside the
+			// conversation can be narrow on a wide screen. Below four columns' worth,
+			// the steps stack, each with its counts beside it.
+			css={{
+				containerType: "inline-size",
+				"@container (max-width: 40rem)": {
+					"& [data-flow]": { flexDirection: "column", gap: "1" },
+					"& [data-flow-step]": { flexDirection: "column" },
+					"& [data-flow-arrow]": {
+						h: "auto",
+						w: "9rem",
+						py: "0.5",
+						px: "0",
+						justifyContent: "center",
+					},
+					"& [data-flow-arrow] svg": { transform: "rotate(90deg)" },
+					"& [data-flow-body]": {
+						display: "flex",
+						alignItems: "flex-start",
+						gap: "3",
+						w: "full",
+					},
+					"& [data-flow-body] > :first-child": { flex: "none", w: "9rem" },
+					"& [data-flow-notes]": { mt: "0" },
+				},
+			}}
 		>
 			<Text id={id} fontSize="xs" fontWeight="semibold" color="fg.muted" mb="3">
 				PRISMA flow
 			</Text>
 			<chakra.ol
+				data-flow=""
 				aria-labelledby={id}
 				display="flex"
 				alignItems="flex-start"
@@ -468,6 +495,7 @@ function PrismaFlow({
 				{steps.map((step, index) => (
 					<chakra.li
 						key={step.name}
+						data-flow-step=""
 						display="flex"
 						alignItems="flex-start"
 						flex="1"
@@ -475,6 +503,7 @@ function PrismaFlow({
 					>
 						{index > 0 ? (
 							<Flex
+								data-flow-arrow=""
 								aria-hidden="true"
 								flex="none"
 								h="16"
@@ -485,9 +514,16 @@ function PrismaFlow({
 								<ArrowRight size={16} />
 							</Flex>
 						) : null}
-						<Box flex="1" minW="0">
+						<Box data-flow-body="" flex="1" minW="0">
 							<FlowBox step={step} onShow={onShow} />
-							<Flex direction="column" align="flex-start" gap="1" mt="2">
+							<Flex
+								data-flow-notes=""
+								direction="column"
+								align="flex-start"
+								gap="1"
+								mt="2"
+								minW="0"
+							>
 								{step.notes.map((note) => (
 									<FlowNoteItem key={note.text} note={note} onShow={onShow} />
 								))}
@@ -580,6 +616,13 @@ function FlowNoteItem({
 			variant="outline"
 			rounded="pill"
 			fontWeight="normal"
+			// Its words wrap rather than run past the step's column.
+			maxW="full"
+			h="auto"
+			minH="6"
+			py="0.5"
+			whiteSpace="normal"
+			textAlign="start"
 			onClick={() => onShow(label)}
 		>
 			{note.text}
