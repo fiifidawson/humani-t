@@ -211,6 +211,26 @@ describe("options, evidence and reasoning (UI_UX_SPEC §6.9, §8.1, §8.2)", () 
 		expect(cards[2]).toHaveTextContent("Not enough evidence");
 	});
 
+	it("draws each option's strength as a small meter beside its word", async () => {
+		const { path } = briefed();
+		const { canvas } = await openBrief(path);
+
+		// The word is what a screen reader reads; the meter only repeats it (§10.2).
+		const cash = within(canvas).getByRole("article", {
+			name: "Cash transfers",
+		});
+		const meter = cash.querySelector("[data-meter]");
+		expect(meter).toHaveAttribute("data-value", "2");
+		expect(meter).toHaveAttribute("data-max", "3");
+		expect(meter).toHaveAttribute("aria-hidden", "true");
+		expect(cash).toHaveTextContent("Moderate evidence");
+		const food = within(canvas).getByRole("article", { name: "In-kind food" });
+		expect(food.querySelector("[data-meter]")).toHaveAttribute(
+			"data-value",
+			"0",
+		);
+	});
+
 	it("reads benefits and risks out, and marks reasoning as reasoning, without chips", async () => {
 		const { path } = briefed();
 		const { canvas } = await openBrief(path);
@@ -602,10 +622,59 @@ describe("disagreements, gaps, sources and checks (UI_UX_SPEC §6.9, §8.3)", ()
 			within(canvas).getByRole("button", { name: "Show quality checks" }),
 		);
 
-		expect(canvas).toHaveTextContent("Coverage: good (2 of 2)");
-		expect(canvas).toHaveTextContent("Disagreements: partly (1 of 2)");
 		expect(canvas).toHaveTextContent("They are not a verification.");
 		expect(canvas).not.toHaveTextContent("10 of 12");
+	});
+
+	it("draws each quality check as a labelled bar out of 2, with its word", async () => {
+		const { path } = briefed();
+		const { canvas, user } = await openBrief(path);
+
+		await user.click(
+			within(canvas).getByRole("button", { name: "Show quality checks" }),
+		);
+
+		const checks = within(canvas).getByRole("list", { name: "Quality checks" });
+		const rows = within(checks).getAllByRole("listitem");
+		expect(rows.map((row) => row.textContent)).toEqual([
+			"Coverage: good",
+			"Groundedness: good",
+			"Disagreements: partly",
+			"Uncertainty: good",
+			"Humanitarian awareness: good",
+			"Specificity: partly",
+		]);
+		expect(
+			rows.map((row) =>
+				row.querySelector("[data-meter]")?.getAttribute("data-value"),
+			),
+		).toEqual(["2", "2", "1", "2", "2", "1"]);
+		expect(rows[0]?.querySelector("[data-meter]")).toHaveAttribute(
+			"data-max",
+			"2",
+		);
+	});
+
+	it("lists the humanitarian principles the trade-offs weigh, and those they do not", async () => {
+		const { path } = briefed();
+		const { canvas } = await openBrief(path);
+
+		const principles = within(canvas).getByRole("region", {
+			name: "Humanitarian principles in this brief",
+		});
+		const items = within(principles).getAllByRole("listitem");
+		expect(items.map((item) => item.textContent)).toEqual([
+			"HumanityNot discussed",
+			"NeutralityNot discussed",
+			"IndependenceNot discussed",
+			"ImpartialityNot discussed",
+			expect.stringContaining("Do no harm"),
+		]);
+		const weighed = within(items[4] as HTMLElement).getByRole("link", {
+			name: "Do no harm: weighed in the trade-offs",
+		});
+		const row = canvas.querySelector(weighed.getAttribute("href") ?? "#none");
+		expect(row).toHaveTextContent("Do no harm");
 	});
 });
 

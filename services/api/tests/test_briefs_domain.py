@@ -42,6 +42,7 @@ from app.domain.briefs import (
     body_to_dict,
     check_brief,
     check_citations,
+    principle_coverage,
 )
 from app.domain.runs import agent_step_payload
 from app.domain.screening import Passage
@@ -188,6 +189,25 @@ class TestTradeOffs:
 
     def test_other_criteria_are_not_humanitarian_principles(self):
         assert not row("Cost to deliver", "A", "B").is_humanitarian
+
+
+class TestPrincipleCoverage:
+    """Which humanitarian principles the trade-offs weigh: coverage, never a score."""
+
+    def test_names_every_principle_in_order_with_the_row_that_weighs_it_or_none(self):
+        rows = (
+            row(" do no harm ", "A", "B"),
+            row("Cost", "A", "B"),
+            row("Neutrality", "A", "B"),
+        )
+
+        assert principle_coverage(rows) == (
+            ("Humanity", None),
+            ("Neutrality", "Neutrality"),
+            ("Independence", None),
+            ("Impartiality", None),
+            ("Do no harm", " do no harm "),
+        )
 
 
 class TestConflictsAndConsiderations:

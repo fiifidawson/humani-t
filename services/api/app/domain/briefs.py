@@ -8,7 +8,7 @@ options or names a winner: the person decides.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -27,6 +27,9 @@ CAVEAT = (
 HUMANITARIAN_PRINCIPLES = frozenset(
     {"humanity", "impartiality", "neutrality", "independence", "do no harm"}
 )
+
+# The order the brief lists them in: the four principles, then do no harm.
+_PRINCIPLE_NAMES = ("Humanity", "Neutrality", "Independence", "Impartiality", "Do no harm")
 
 MIN_OPTIONS = 2
 MAX_OPTIONS = 4
@@ -160,6 +163,17 @@ class TradeOff:
     @property
     def is_humanitarian(self) -> bool:
         return self.criterion.strip().casefold() in HUMANITARIAN_PRINCIPLES
+
+
+def principle_coverage(
+    trade_offs: Sequence[TradeOff],
+) -> tuple[tuple[str, str | None], ...]:
+    """Each humanitarian principle, with the criterion of the row that weighs it, or None.
+
+    Coverage, not a score: whether the trade-offs discuss a principle at all.
+    """
+    rows = {row.criterion.strip().casefold(): row.criterion for row in trade_offs}
+    return tuple((name, rows.get(name.casefold())) for name in _PRINCIPLE_NAMES)
 
 
 @dataclass(frozen=True, slots=True)

@@ -106,6 +106,10 @@ const config = defineConfig({
 			fontFamily: "body",
 			fontSize: "md",
 			lineHeight: "1.6",
+			// A long name with no spaces (a file, a project, an email) breaks rather
+			// than running out of its box. break-word, not anywhere: it leaves the
+			// natural width of table columns alone.
+			overflowWrap: "break-word",
 		},
 		"h1, h2, h3": { textWrap: "balance" },
 		"*::selection": { bg: "brand.muted" },

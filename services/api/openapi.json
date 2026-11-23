@@ -6365,6 +6365,14 @@
             "type": "array",
             "title": "Trade Offs"
           },
+          "principles": {
+            "items": {
+              "$ref": "#/components/schemas/PrincipleOut"
+            },
+            "type": "array",
+            "title": "Principles",
+            "description": "Each humanitarian principle and whether the trade-offs weigh it."
+          },
           "conflicts": {
             "items": {
               "$ref": "#/components/schemas/ConflictOut"
@@ -6445,6 +6453,7 @@
           "bottom_line",
           "options",
           "trade_offs",
+          "principles",
           "conflicts",
           "considerations",
           "gaps",
@@ -10690,6 +10699,32 @@
           "diff"
         ],
         "title": "PlanVersionOut"
+      },
+      "PrincipleOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trade_off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Off",
+            "description": "The trade-off row that weighs it; null when the brief does not."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "trade_off"
+        ],
+        "title": "PrincipleOut"
       },
       "Priority": {
         "type": "string",
