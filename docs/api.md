@@ -1056,7 +1056,7 @@ Sessions are server-side. Signing in sets two cookies:
 
 Every state-changing request made while signed in must send the CSRF token back in an `X-CSRF-Token` header, or it is refused with `403`. Requests whose `Origin` or `Sec-Fetch-Site` show they come from another site are refused before that, as are request bodies that are not `application/json` (`415`).
 
-Sessions end after 1 hour idle or 24 hours in total. Changing the password needs a sign-in within the last 15 minutes; otherwise the response is `401` with `"reauthentication_required": true`, and `POST /auth/reauthenticate` refreshes it.
+Sessions end after 8 hours idle or 24 hours in total. Changing the password needs a sign-in within the last 15 minutes; otherwise the response is `401` with `"reauthentication_required": true`, and `POST /auth/reauthenticate` refreshes it.
 
 `POST /auth/reauthenticate` `{"password"}` answers `204` with **new** `__Host-session` and `__Host-csrf` cookies: the token from before stops working at once. The session keeps its assurance level and its 24-hour limit, counted from the original sign-in; a wrong password is `403` and changes nothing. Each attempt counts against the account's sign-in limit (10 per 15 minutes, shared with `POST /auth/login` and `POST /account/password`); past it the answer is `429` with `Retry-After`, even for the right password. A confirmed password clears the count.
 

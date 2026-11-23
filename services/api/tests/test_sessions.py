@@ -1,7 +1,8 @@
 """Requirements for sessions as domain objects, and for the rate limiter.
 
-Source: NIST SP 800-63B rev 4 (reauthentication at AAL2: 1 hour idle, 24 hours
-absolute); OWASP ASVS 5.0 V7 (Session Management) and V6 (throttling).
+Source: NIST SP 800-63B rev 4 (reauthentication at AAL2: 24 hours absolute; its
+1 hour idle is raised to 8 by choice, see docs/security/controls.md); OWASP ASVS 5.0
+V7 (Session Management) and V6 (throttling).
 """
 
 from __future__ import annotations
@@ -49,8 +50,8 @@ class TestTokens:
 
 
 class TestSessionPolicy:
-    def test_defaults_follow_nist_aal2(self):
-        assert POLICY.idle_timeout == timedelta(hours=1)
+    def test_defaults_allow_a_working_day_idle_within_one_day_in_total(self):
+        assert POLICY.idle_timeout == timedelta(hours=8)
         assert POLICY.absolute_timeout == timedelta(hours=24)
         assert POLICY.reauthentication_window == timedelta(minutes=15)
 
@@ -59,16 +60,16 @@ class TestSessionLifetime:
     def test_a_fresh_session_is_active(self):
         assert _session().is_active(START, POLICY)
 
-    def test_an_idle_session_expires_after_one_hour(self):
+    def test_an_idle_session_expires_after_eight_hours(self):
         session = _session()
 
-        assert session.is_active(START + timedelta(minutes=59), POLICY)
-        assert not session.is_active(START + timedelta(minutes=61), POLICY)
+        assert session.is_active(START + timedelta(hours=7, minutes=59), POLICY)
+        assert not session.is_active(START + timedelta(hours=8, minutes=1), POLICY)
 
     def test_activity_extends_the_idle_window(self):
-        session = _session().touched(START + timedelta(minutes=50))
+        session = _session().touched(START + timedelta(hours=7))
 
-        assert session.is_active(START + timedelta(minutes=100), POLICY)
+        assert session.is_active(START + timedelta(hours=14), POLICY)
 
     def test_no_amount_of_activity_extends_past_24_hours(self):
         session = _session().touched(START + timedelta(hours=23, minutes=59))

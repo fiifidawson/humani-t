@@ -588,7 +588,7 @@ Each screen lists its purpose, how people reach it, its layout, its states, and 
 - **Second factor:** the passkey prompt starts by itself. Links below it: "Use an authenticator code instead" and "Use a recovery code". No SMS.
 - **First sign-in from an invitation:** set a password (15 characters or more, shown with a strength hint and the blocklist message if it fails), then add a passkey (recommended) or TOTP, then save recovery codes. The recovery-code step shows the codes once, with "Download" and "I've saved them" (required to continue).
 - **Re-authentication:** a modal over the current screen, not a page change, when the API returns 401 `reauthentication_required` for a sensitive action (delete a project, change members or credentials). After success the original action is retried once. The modal says why: "Deleting a project needs you to sign in again."
-- **Session expired** (idle 1 hour): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
+- **Session expired** (idle 8 hours): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
 
 Source: [api.md](api.md) auth endpoints; [architecture.md](architecture.md) §5.1–5.2.
 
