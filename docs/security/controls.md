@@ -54,7 +54,7 @@ Test paths are relative to `services/api/tests/`.
 | `__Host-` cookies: Secure, HttpOnly (session), SameSite | `api/session.py` | `test_auth_api.py::TestSessionCookie` |
 | New token at every sign-in (no fixation) | `application/accounts.py` | `TestSessionCookie::test_signing_in_always_issues_a_new_token` |
 | New token at step-up (re-authentication); the old one stops working; level and 24 h limit carry over | `application/accounts.py` (`reauthenticate`) | `test_auth_api.py::TestReauthentication`, `test_mfa_api.py::TestTotpEnrolment::test_the_rotated_session_keeps_its_second_factor_level` |
-| 1 h idle, 24 h absolute | `domain/sessions.py` | `test_sessions.py::TestSessionLifetime`, `test_auth_api.py::TestCurrentSession` |
+| 8 h idle, 24 h absolute. NIST AAL2 suggests 1 h idle; 8 h is a deliberate choice so a working day of reading does not sign people out, and the 24 h limit still holds | `domain/sessions.py` | `test_sessions.py::TestSessionLifetime`, `test_auth_api.py::TestCurrentSession` |
 | Logout ends the session on the server | `application/accounts.py` | `TestLogout::test_logout_ends_the_session_on_the_server_not_just_in_the_browser` |
 | Users can list and revoke their sessions | `routes/account.py` | `test_auth_api.py::TestSessionManagement` |
 | Revocation cannot be undone by a racing request | `storage/` (`touch`, `revoke` conditional) | `test_concurrency_and_resources.py::TestNoLostUpdates` |
@@ -325,5 +325,5 @@ Proven by CI jobs rather than pytest: each job fails if the control is removed. 
 | Valkey uses one shared password, not per-client ACLs | With the job queue's final command set |
 | No independent security review | Before any real data |
 | A stage that never calls `raise_if_cancelled` is cancelled only when it finishes; cancellation is cooperative | With the real stages, which check between items |
-| Watching a stream is not activity: a member who only watches a long run is signed out after an hour idle, and the stream ends | Revisit with the web app if it proves annoying (UI_UX_SPEC §11.4) |
+| Watching a stream is not activity: a member who only watches a long run is signed out after 8 hours idle, and the stream ends | Revisit with the web app if it proves annoying (UI_UX_SPEC §11.4) |
 | Screening reads abstracts only; open-access full text with PDF extraction is not built | Not yet planned; a team's own PDFs can be uploaded as documents instead |

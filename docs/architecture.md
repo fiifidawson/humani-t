@@ -601,7 +601,7 @@ The brief's security rules (`WEB_APP_BRIEF.md`, rules 1–18) are the requiremen
 - **The token.** An opaque 256-bit random token. Only its SHA-256 is stored, in Postgres, so sessions can be listed, revoked and audited. There are no JWTs: a JWT cannot be revoked before it expires.
 - **The cookie.** `__Host-session`, with `Secure; HttpOnly; Path=/; SameSite=Lax`.
 - **Rotation.** The token is rotated on login and on step-up (re-authentication). A rotated session keeps its assurance level and its creation time, so a password alone neither raises the level nor restarts the 24-hour limit.
-- **Expiry.** 1 hour idle, 24 hours absolute; 5 minutes absolute for a session pending its second factor.
+- **Expiry.** 8 hours idle, 24 hours absolute; 5 minutes absolute for a session pending its second factor.
 - **Assurance level.** Each session has one (aal 1 or 2) and a pending flag. A session that has passed the password but not MFA can reach only the MFA endpoints. Changing the password rotates the session and keeps its level.
 - **Recent sign-in for sensitive actions.** Changing a password or an authenticator, deleting a project, changing members, or turning a project's masking off requires a sign-in within the last 15 minutes.
 - **Password reset.** A reset changes the password only. MFA is still required, every session is revoked, and the user is emailed.

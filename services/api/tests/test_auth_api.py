@@ -148,11 +148,19 @@ class TestCurrentSession:
 
         assert browser.get("/api/v1/auth/session").status_code == 401
 
-    def test_a_session_idle_for_over_an_hour_has_ended(self, harness):
+    def test_a_session_idle_for_two_hours_is_still_signed_in(self, harness):
         browser = harness.browser()
         login(browser, USER_EMAIL, USER_PASSWORD)
 
-        harness.clock.advance(minutes=61)
+        harness.clock.advance(hours=2)
+
+        assert browser.get("/api/v1/auth/session").status_code == 200
+
+    def test_a_session_idle_for_over_eight_hours_has_ended(self, harness):
+        browser = harness.browser()
+        login(browser, USER_EMAIL, USER_PASSWORD)
+
+        harness.clock.advance(hours=8, minutes=1)
 
         assert browser.get("/api/v1/auth/session").status_code == 401
 
