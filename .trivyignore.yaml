@@ -1,0 +1,10 @@
+# Findings accepted on purpose, each scoped to one file with the reason.
+# Read by the "trivy (Dockerfiles)" job through TRIVY_IGNOREFILE.
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - infrastructure/render/Dockerfile
+    statement: >-
+      The container starts as root only to hand Render's disk to uid 10001, which
+      Render mounts after the image is built; start.sh then runs every process as
+      that user.
