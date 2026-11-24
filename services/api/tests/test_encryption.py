@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import traceback
 import uuid
 from datetime import UTC, datetime
 
@@ -131,6 +132,19 @@ class TestLocalKeyProvider:
     def test_rejects_malformed_config(self):
         with pytest.raises(ValueError, match="version:base64"):
             LocalKeyProvider.from_config("one:not-base64!")
+
+    @pytest.mark.parametrize("shape", ["{key}", "1:{key}!", "{key}:{key}"])
+    def test_a_malformed_config_never_repeats_the_key(self, shape: str):
+        key = generate_kek()
+
+        with pytest.raises(ValueError, match="key_encryption_keys") as caught:
+            LocalKeyProvider.from_config(shape.format(key=key))
+
+        assert key not in "".join(traceback.format_exception(caught.value))
+
+    def test_a_key_without_its_version_says_what_is_missing(self):
+        with pytest.raises(ValueError, match="1:"):
+            LocalKeyProvider.from_config(generate_kek())
 
     def test_rejects_short_keys(self):
         short = base64.b64encode(b"too short").decode()

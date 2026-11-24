@@ -67,8 +67,8 @@ export function PrivacyGateCard({
 	return (
 		<ChatCard title="Needs you · Privacy review" tone="warning">
 			<Text>
-				Uploaded documents need a masking check before any model reads them. The
-				run continues when an owner approves.
+				An owner must check the documents' masking. The run continues once they
+				approve.
 			</Text>
 			{waiting.length === 0 ? null : (
 				<Stack as="ul" gap="1" listStyle="none">

@@ -54,6 +54,42 @@ describe("reading an event off the stream", () => {
 	])("refuses %s", (_, type, id, data) => {
 		expect(parseRunEvent(type, id, data)).toBeNull();
 	});
+
+	it("keeps what an agent step reports, for the loop to show live", () => {
+		const reported = {
+			round: 1,
+			role: "checks",
+			status: "ok",
+			seconds: 0.2,
+			tokens: { prompt: 900, completion: 300 },
+			model_id: "qwen3.5:9b",
+			prompt_version: "brief.critic@1",
+			output: { verdict: "revise" },
+			queries: ["cash prices"],
+			passages_found: 6,
+			passages_new: 4,
+			passages_total: 9,
+			problems: [{ code: "c", message: "No sourced benefit.", where: null }],
+		};
+
+		expect(event("agent.step", 3, reported).data).toEqual(reported);
+	});
+
+	it("drops an agent step's fields that are not what they should be", () => {
+		const parsed = event("agent.step", 3, {
+			round: 1,
+			role: "writer",
+			status: "error",
+			seconds: "slow",
+			error: 42,
+			queries: "cash",
+			output: ["not", "a", "record"],
+			tokens: { prompt: "many" },
+			problems: [{ message: 1 }],
+		});
+
+		expect(parsed.data).toEqual({ round: 1, role: "writer", status: "error" });
+	});
 });
 
 describe("applying events (UI_UX_SPEC §11.2)", () => {

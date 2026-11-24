@@ -36,8 +36,12 @@ class LocalKeyProvider:
             version, _, encoded = entry.strip().partition(":")
             try:
                 keys[int(version)] = base64.b64decode(encoded, validate=True)
-            except (ValueError, binascii.Error) as exc:
-                raise ValueError("key_encryption_keys must be `version:base64,…`") from exc
+            except (ValueError, binascii.Error):
+                # `from None`: the parser's own error quotes its input, which is the key.
+                raise ValueError(
+                    "key_encryption_keys must be `version:base64,…`, e.g. `1:` followed "
+                    "by the output of generate-kek"
+                ) from None
         return cls(keys)
 
     @property

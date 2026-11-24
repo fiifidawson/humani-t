@@ -431,8 +431,8 @@ A gate pauses the job until a person acts. It appears as a chat card, in the run
 
 ```text
 L1  ┌ ⏸ Needs you · Privacy review ────────────────────────────────┐
-    │ 2 uploaded documents need a masking check before any model   │
-    │ reads them. The run continues when you approve.              │
+    │ An owner must check the documents' masking. The run          │
+    │ continues once they approve.                                 │
     │                                                              │
     │ field_report_march.docx   14 masked · 3 to check             │
     │ meeting_minutes.txt        6 masked · 0 to check             │
@@ -588,7 +588,7 @@ Each screen lists its purpose, how people reach it, its layout, its states, and 
 - **Second factor:** the passkey prompt starts by itself. Links below it: "Use an authenticator code instead" and "Use a recovery code". No SMS.
 - **First sign-in from an invitation:** set a password (15 characters or more, shown with a strength hint and the blocklist message if it fails), then add a passkey (recommended) or TOTP, then save recovery codes. The recovery-code step shows the codes once, with "Download" and "I've saved them" (required to continue).
 - **Re-authentication:** a modal over the current screen, not a page change, when the API returns 401 `reauthentication_required` for a sensitive action (delete a project, change members or credentials). After success the original action is retried once. The modal says why: "Deleting a project needs you to sign in again."
-- **Session expired** (idle 1 hour): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
+- **Session expired** (idle 8 hours): a banner "You've been signed out. Sign in again to continue." Unsent text in the composer is kept in memory and restored after sign-in.
 
 Source: [api.md](api.md) auth endpoints; [architecture.md](architecture.md) §5.1–5.2.
 
@@ -690,9 +690,7 @@ Source: `SearchPlan`, notes from `plan_problems`, `normalize_plan`, `fit_to_limi
 
 ```text
 ┌ Masking review · field_report_march.docx ─────────────── 1 of 2 ─────┐
-│ ⚠ Masking is not anonymity. Codes, numbers and rare details can     │
-│   identify people. Text that is only in images is masked only if it │
-│   was read by OCR.                                                   │
+│ You're seeing original text. This view is recorded.                  │
 │                                                                      │
 │ To check first (3)                │ Text                              │
 │ ┌──────────────────────────────┐  │ … the team met ⟦PERSON⟧ at the    │
@@ -741,7 +739,7 @@ The run strip (L0 and L1) is in [5.3.5](#535-run-strip). The canvas (L2) shows:
 
 - **Stage row:** each stage with its state icon (✓ done, ◐ running, ○ waiting, ✗ failed, ⏸ waiting for a gate, ■ cancelled) and its duration once done. Clicking a finished stage shows its summary box (the same facts as the terminal's summary boxes).
 - **Live list:** during Screen, one row per paper as it finishes, newest at the top, with its label and the one-line reason. It holds the last 200 rows; "Open papers" shows the rest.
-- **Brief stage:** the live list becomes the agent timeline (section [6.11](#611-how-this-was-made)), filling in as steps finish.
+- **Brief stage:** the live list becomes the agent loop (section [6.11](#611-how-this-was-made)), following the round being written, the running agent marked.
 - **Cancel** asks once: "Stop this run? Finished stages are kept, and you can run the rest later." Then the strip shows ■.
 - **Failure:** the stage turns ✗ with the plain message and the actions "Try again from this stage" and "Details".
 - **Connection lost:** a thin banner "Reconnecting…", then the strip catches up from the last event id (section [11.2](#112-live-events)). Never a blank screen.
@@ -920,8 +918,7 @@ Collapsed by default, at the end.
 ▸ Quality checks · the model's own review of this brief
   Coverage        ▬▬  good      Groundedness ▬▬  good    Disagreements ▬▭ partly
   Uncertainty     ▬▬  good      Humanitarian awareness ▬▬ good  Specificity ▬▭ partly
-  These scores come from the same model that wrote the brief. They catch
-  gaps and weak citations, not every error. They are not a verification.
+  Scored by the model that wrote the brief: a check for gaps, not a verification.
 ```
 
 - Each score is 0, 1 or 2, shown as a two-step bar with its word (poor, partly, good), coloured by value but never by colour alone. No total is shown, so it can't become a trust badge.
@@ -985,37 +982,40 @@ Source: `GET /projects/{id}/brief`, `…/brief/evidence/{tag}`, `…/brief/trace
 
 ### 6.11 How this was made
 
-**Purpose.** Show the agent loop as a short story, for people who want to know how the brief was built.
+**Purpose.** Show the agent loop as a picture of the loop, one round at a time, with every step's detail beneath it, for people who want to know how the brief was built.
 
 ```text
-┌ How this brief was made ──────────────────────────────────────────────┐
-│ Stopped because: accepted by the Critic · kept round 2 of 3           │
-│                                                                       │
-│ ● Planner          1 call · 41 s                                      │
-│   Decision: choose between cash, vouchers or in-kind food in camps    │
-│   Options: Cash transfers · Vouchers · In-kind food                    │
-│   Criteria: do no harm, food security, cost, impartiality, …          │
-│   6 sub-questions ▸                                                   │
-│ ● Retriever        7 searches · 31 passages                           │
-│ ─ Round 1 ────────────────────────────────────────────────────────── │
-│ ● Writer           draft 1 · 3 options · 2 min                        │
-│ ● Checks           1 problem: an option has no sourced benefit        │
-│ ● Critic           revise · 8 of 12 ▸                                  │
-│   Asked for: "price effects of cash in small markets", +2 more         │
-│ ● Retriever        3 searches · 9 new passages (40 in all)            │
-│ ─ Round 2 ────────────────────────────────────────────────────────── │
-│ ● Writer           draft 2 · 3 options · 2 min                        │
-│ ● Checks           no problems                                         │
-│ ● Critic           accept · 10 of 12 ▸                                 │
-│                                                                       │
-│ Model: qwen3.5:9b · 9 calls · 61,200 tokens in, 8,900 out             │
-└───────────────────────────────────────────────────────────────────────┘
+How this brief was made
+
+Stopped because: accepted by the Critic · kept round 2 of 3
+( Before the first draft ) ( Round 1 ) [ Round 2 ]
+
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐ Checks ┌─────────────┐
+│ ☰ Planner   │ → │ ⌕ Retriever │ → │ ✎ Writer    │ no     │ ⚖ Critic    │
+│ ✓ done      │   │ ◌ not run   │   │ ✓ done      │ probl. │ ✓ done      │
+│ 1 call·41 s │   │             │   │ 3 options · │   →    │ accept      │
+│             │   │             │   │ 2 min       │        │             │
+└─────────────┘   └──────┬──────┘   └─────────────┘        └──────┬──────┘
+                         ↑                                        │
+                         └────────────── ↺ accepted ✓ ────────────┘
+
+Round 2
+✗ Writer · unusable answer · The model's answer did not match …   ▸
+✓ Writer · 3 options · 16 claims · 2 min                           ▸
+✓ Checks · no problems                                             ▸
+✓ Critic · accept                                                  ▸
+
+Model: qwen3.5:9b · 9 calls · 61,200 tokens in, 8,900 out
 ```
 
-- A vertical timeline, one row per `agent.step`. Each row opens to its detail: the plan, the queries, the Critic's issues and fixes, the checks' problems.
-- Steps that failed (`refused`, `invalid`, `error`) show ✗ and the short error, and the stop reason explains what was kept.
+- The loop: the Planner leads into Retriever → Writer → Critic, and an arrow runs from the Critic back to the Retriever. Each agent has its icon (Planner `ListTree`, Retriever `Search`, Writer `PenLine`, Critic `Scale`); the checks are code, not an agent, so they are a badge (`ShieldCheck`) on the way from the Writer to the Critic, saying "no problems" or how many.
+- One round at a time. The round picker (Before the first draft, Round 1, Round 2, …) opens on the latest round, or on the round being written while the run is live. Each agent shows that round's one-line result; the Planner, which runs once, shows its own. The Retriever's step in a round is the search the Critic asked for, so it runs last.
+- The way back is labelled with the Critic's outcome: "revise", "asked for 2 searches" or "accepted ✓", and "overruled by the checks" when the checks found problems in an accepted draft.
+- Each agent's state is an icon and a word, never colour alone: done, failed (or refused, unusable answer) with its short error, running (a spinner, which stops under reduced motion and in low data mode), or not reached yet / not run (muted, dashed).
+- Under the picture, the round's steps, one row per `agent.step`. Each row opens to its detail: the plan, the queries, the Critic's scores, issues and requests, the checks' problems, the model, prompt version, tokens and time. While live, the step being run is the last row.
+- The picture is hidden from screen readers: the picker and the step list say the same in text. It follows the canvas's own width, not the window's: in a narrow canvas the agents stack and the way back is a line beneath them.
 - Totals at the bottom. Tokens are shown here only, never in the chat.
-- Linear timelines can overwhelm when agents run in parallel; this loop is sequential, so a single column is enough. If parallel agents come later, group them in lanes.
+- The loop is sequential, so one row of agents is enough. If parallel agents come later, group them in lanes.
 
 Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
@@ -1457,7 +1457,7 @@ Risk is yellow, not purple, so "a risk of this option" never looks like "somethi
 
 Both fonts are self-hosted from Fontsource packages and bundled with the app, so the CSP's `font-src 'self'` holds and nothing loads from Adobe or a font service. Variable fonts, split by `unicode-range`, so a page in English downloads only the Latin files.
 
-- **Titles:** Ivy Presto Headline, semibold, sentence case, behind the single family name **`"Brand Headline"`** ([`src/theme/fonts.css`](../apps/web/src/theme/fonts.css)). Until the lab's licensed `.woff2` files are dropped in, that name points at **Playfair Display** (SIL Open Font Licence), the closest open high-contrast editorial serif. Switching is a change to that one file ([`public/brand/README.md`](../apps/web/public/brand/README.md)).
+- **Titles:** Ivy Presto Headline, semibold, sentence case, behind the single family name **`"Brand Headline"`** ([`src/theme/fonts.css`](../apps/web/src/theme/fonts.css)). Until the lab's licensed `.woff2` files are dropped in, that name points at **Playfair Display** (SIL Open Font Licence), the closest open high-contrast editorial serif. Switching is a change to that one file ([`src/assets/brand/README.md`](../apps/web/src/assets/brand/README.md)).
 - **Everything else:** **Manrope** (`@fontsource-variable/manrope`, SIL OFL), replacing Inter. Regular for body, Medium for subtitles, labels and buttons, Regular in all caps for small labels.
 
 | Use | Family | Size / line height | Weight |
@@ -1527,7 +1527,7 @@ Few charts, all simple, all with a text or table version:
 
 ### 9.8 Logos and the sub-project rule
 
-humani-t's logo sits on the **left** and LiGHT's on the **right**: in the app header, on the sign-in cover, and in the footer. The LiGHT wordmark is used only as supplied (original dark and light blue, black or white) with its safe area, and is never redrawn. Until the official SVGs are in [`apps/web/public/brand/`](../apps/web/public/brand/README.md), [`Brand.tsx`](../apps/web/src/ui/Brand.tsx) renders "humani-t" and "by LiGHT" as Manrope text in those slots.
+humani-t's logo sits on the **left** and LiGHT's on the **right**: in the app header, on the sign-in cover, and in the footer. The LiGHT wordmark is the lab's own file ([`apps/web/src/assets/brand/`](../apps/web/src/assets/brand/README.md)), never redrawn: original dark and light blue in the light theme, white on the sign-in cover and in the dark theme. Beside humani-t it is secondary, so it is drawn smaller than the project's name, with its safe area. It links to [light-laboratory.org](https://www.light-laboratory.org/) in a new tab. humani-t has no logo yet, so [`Brand.tsx`](../apps/web/src/ui/Brand.tsx) shows its name in Manrope in the left slot. The browser tab icon and the link preview image are LiGHT's light beam (`tab.svg`).
 
 The guidelines let a sub-project have its own colour pair, generated from one hue: light at 55% saturation and 91% brightness, dark at 93% saturation and 63% brightness. humani-t has none yet; if the lab assigns one, it becomes a palette next to `brand` and its pairs are measured into 9.2.2 before use.
 

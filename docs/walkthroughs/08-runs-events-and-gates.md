@@ -439,7 +439,7 @@ The test database must be migrated to `0007` first ([S0.6](00-setup.md#s06-migra
 | --- | --- | --- | --- |
 | G8.1 | Every stage is a fake | Runs produce no real results in any environment | Closed: phases 09–12 replaced every stage but `index`, which was removed because BM25 indexes per search (ADR-0007) |
 | G8.2 | Cancellation is cooperative | A stage that never calls `raise_if_cancelled` stops only when it finishes | Real stages check between items |
-| G8.3 | Watching a stream is not activity | A member who only watches a long run is signed out after an hour idle | Revisit with the web app (phase 13) |
+| G8.3 | Watching a stream is not activity | A member who only watches a long run is signed out after 8 hours idle | Revisit with the web app (phase 13) |
 | G8.4 | Deleting a project does not cancel its runs at once | A running stage continues until its next write, then ends without output | Acceptable: nothing it writes is readable; revisit if stages grow long silent stretches |
 | G8.5 | `run_events` grows forever | Disk use grows with every screened paper | A retention or compaction rule, with the deployment guide (phase 14) |
 | G8.6 | ~~No `RunManifest` yet~~ | Closed: `GET /runs/{run_id}/manifest` and the `manifest.json` export | Done |

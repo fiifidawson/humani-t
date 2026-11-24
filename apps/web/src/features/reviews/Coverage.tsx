@@ -66,13 +66,11 @@ function Meaning({
 							</Text>
 						)}
 						<Text>
-							It isn't a count of everything published. It leaves out papers no
-							source indexes, papers the search words don't match, and papers
-							that weren't screened.
+							Not a count of everything published: only what the sources index
+							and the search matched.
 						</Text>
 						<Text>
-							Sources that index the same journals share more papers than chance
-							would, so the top of the range is likely too high.
+							Overlapping sources make the top of the range likely too high.
 						</Text>
 						<Text>
 							{coverage.rules_version === null

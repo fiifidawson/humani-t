@@ -336,6 +336,7 @@ All run from `services\api`; all need shell access to the deployment, which is t
 | `uv run --env-file .env python -m app.cli verify-audit` | Check the audit hash chain; exit 1 if tampered | [04](04-audit-log.md) |
 | `… \| uv run --env-file .env python -m app.cli create-admin --email … --password-stdin` | Create an administrator; password from standard input only | [05](05-accounts-and-sessions.md) |
 | `uv run --env-file .env python -m app.cli purge-expired` | Delete ended sessions and spent links | [05](05-accounts-and-sessions.md) |
+| `uv run --env-file .env python -m app.cli reset-mfa --email …` | Remove someone's passkeys, authenticator app and recovery codes after a lockout; their password stays | [06](06-mfa.md) |
 
 ### S0.13a Without Docker: in-memory storage and the demo stand-ins
 

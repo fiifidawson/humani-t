@@ -17,6 +17,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { WifiOff } from "lucide-react";
 import { useId, useState } from "react";
 import { linkStyle } from "../../ui/LinkButton";
+import { AgentLoop } from "../briefs/AgentLoop";
 import { RunComparePicker } from "../runs/RunComparePicker";
 import { StageList } from "../runs/StageList";
 import { stageName } from "../runs/stages";
@@ -40,21 +41,6 @@ const FILTERS: readonly {
 	{ name: "Excluded", tiers: ["excluded"] },
 	{ name: "Failed", tiers: ["uncertain", null] },
 ];
-
-const ROLES = {
-	planner: "Planner",
-	retriever: "Retriever",
-	writer: "Writer",
-	checks: "Checks",
-	critic: "Critic",
-} as const;
-
-const STEP_STATUS = {
-	ok: "done",
-	refused: "refused",
-	invalid: "unusable answer",
-	error: "error",
-} as const;
 
 const Progress = chakra("progress", {
 	base: {
@@ -141,6 +127,7 @@ function RunView({ live }: { live: LiveRun }) {
 	const progress = state.stages.find((s) => s.stage === state.currentStage);
 	const isFinished = state.isFinished || run.outcome !== null;
 	const hasScreened = state.items.some((item) => item.stage === "screen");
+	const isWriting = !isFinished && state.currentStage === "answer";
 
 	return (
 		<Canvas title={`Run ${number}`}>
@@ -218,18 +205,10 @@ function RunView({ live }: { live: LiveRun }) {
 				</ChakraLink>
 			)}
 
-			{state.agentSteps.length === 0 ? null : (
+			{state.agentSteps.length === 0 && !isWriting ? null : (
 				<>
-					<CanvasHeading id={`${id}-steps`}>Writing the brief</CanvasHeading>
-					<chakra.ol aria-labelledby={`${id}-steps`} pl="5">
-						{state.agentSteps.map((step, index) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: steps arrive in order and never move
-							<li key={index}>
-								{ROLES[step.role]} · round {step.round} ·{" "}
-								{STEP_STATUS[step.status]}
-							</li>
-						))}
-					</chakra.ol>
+					<CanvasHeading>Writing the brief</CanvasHeading>
+					<AgentLoop steps={state.agentSteps} isLive={isWriting} />
 				</>
 			)}
 

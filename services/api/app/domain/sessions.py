@@ -33,7 +33,8 @@ def tokens_match(token: str, expected_hash: bytes) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class SessionPolicy:
-    idle_timeout: timedelta = timedelta(hours=1)
+    # NIST AAL2 suggests 1 hour; 8 lets a working day of reading pass (controls.md).
+    idle_timeout: timedelta = timedelta(hours=8)
     absolute_timeout: timedelta = timedelta(hours=24)
     reauthentication_window: timedelta = timedelta(minutes=15)
     # Long enough to find a phone, short enough that a stolen password alone

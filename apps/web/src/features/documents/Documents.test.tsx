@@ -356,7 +356,7 @@ describe("documents while the project's masking is off (ADR 0014)", () => {
 
 		expect(
 			screen.getByText(
-				"Masking is off for this project, so the model reads each ready document as written. The project's masking rules still apply.",
+				"Masking is off for this project. Only its masking rules apply.",
 			),
 		).toBeInTheDocument();
 	});
@@ -374,7 +374,7 @@ describe("documents while the project's masking is off (ADR 0014)", () => {
 		});
 		expect(
 			within(review).getByText(
-				"Masking is off, so the model reads this document as written. Your decision applies if masking is turned back on.",
+				"Masking is off, so the model reads this as written. Your decision counts if it's turned back on.",
 			),
 		).toBeInTheDocument();
 	});
