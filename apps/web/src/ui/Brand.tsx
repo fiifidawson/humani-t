@@ -5,7 +5,7 @@
  * until it has a logo of its own.
  */
 
-import { Image, type ImageProps, Text } from "@chakra-ui/react";
+import { Image, type ImageProps, Link, Text } from "@chakra-ui/react";
 import lightLogo from "../assets/brand/light-logo.svg";
 import lightLogoWhite from "../assets/brand/light-logo-white.svg";
 
@@ -56,19 +56,31 @@ function Wordmark({
 	);
 }
 
-/** LiGHT's logo slot: its wordmark in the original blues, or white on colour and in the dark theme. */
+/**
+ * LiGHT's logo slot: its wordmark in the original blues, or white on colour and
+ * in the dark theme, linking to the lab's site.
+ */
 export function LabMark({ isOnColour = false }: MarkProps) {
-	if (isOnColour) {
-		return <Wordmark src={lightLogoWhite} />;
-	}
 	return (
-		<>
-			<Wordmark src={lightLogo} _dark={{ display: "none" }} />
-			<Wordmark
-				src={lightLogoWhite}
-				display="none"
-				_dark={{ display: "block" }}
-			/>
-		</>
+		<Link
+			href="https://www.light-laboratory.org/"
+			target="_blank"
+			rel="noopener noreferrer"
+			flex="none"
+			rounded="sm"
+		>
+			{isOnColour ? (
+				<Wordmark src={lightLogoWhite} />
+			) : (
+				<>
+					<Wordmark src={lightLogo} _dark={{ display: "none" }} />
+					<Wordmark
+						src={lightLogoWhite}
+						display="none"
+						_dark={{ display: "block" }}
+					/>
+				</>
+			)}
+		</Link>
 	);
 }

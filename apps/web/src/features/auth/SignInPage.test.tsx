@@ -40,6 +40,10 @@ describe("signing in (UI_UX_SPEC §6.1)", () => {
 			"src",
 			expect.stringMatching(/light-logo-white\.svg$/),
 		);
+		expect(screen.getByRole("link", { name: "LiGHT" })).toHaveAttribute(
+			"href",
+			"https://www.light-laboratory.org/",
+		);
 	});
 
 	it("gives one message for every wrong email or password", async () => {

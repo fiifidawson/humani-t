@@ -76,9 +76,11 @@ describe("nothing a strict CSP would block", () => {
 	});
 
 	it("loads nothing from another origin", () => {
+		// The lab's site is a link behind LiGHT's wordmark: opened only when
+		// clicked, never fetched by the page.
 		expect(
 			filesMatching(
-				/https?:\/\/(?!localhost|127\.0\.0\.1|www\.w3\.org\/2000\/svg)/,
+				/https?:\/\/(?!localhost|127\.0\.0\.1|www\.w3\.org\/2000\/svg|www\.light-laboratory\.org\/")/,
 			),
 		).toEqual([]);
 	});
