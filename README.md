@@ -1,6 +1,45 @@
-# humani-t
+<div align="center">
 
-Privacy-preserving evidence synthesis for humanitarian decisions.
+<h1>Humani-T</h1>
+
+<p><strong>Privacy-preserving evidence synthesis for humanitarian decisions.</strong></p>
+
+<p>
+<a href="CHANGELOG.md"><img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-0C43A0"></a>
+<a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache--2.0-0C43A0"></a>
+<a href="docs/deploy/self-hosting.md"><img alt="Self-hosted with Docker Compose" src="https://img.shields.io/badge/deploy-self--hosted-0C43A0?logo=docker&amp;logoColor=white"></a>
+<img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-0C43A0?logo=python&amp;logoColor=white">
+<img alt="TypeScript, strict" src="https://img.shields.io/badge/typescript-strict-0C43A0?logo=typescript&amp;logoColor=white">
+</p>
+
+<p>
+<a href="https://github.com/fiifidawson/humani-t/actions/workflows/api.yml"><img alt="api checks" src="https://github.com/fiifidawson/humani-t/actions/workflows/api.yml/badge.svg?branch=main"></a>
+<a href="https://github.com/fiifidawson/humani-t/actions/workflows/web.yml"><img alt="web checks" src="https://github.com/fiifidawson/humani-t/actions/workflows/web.yml/badge.svg?branch=main"></a>
+<a href="https://github.com/fiifidawson/humani-t/actions/workflows/security.yml"><img alt="security checks" src="https://github.com/fiifidawson/humani-t/actions/workflows/security.yml/badge.svg?branch=main"></a>
+<a href="https://github.com/fiifidawson/humani-t/actions/workflows/codeql.yml"><img alt="codeql checks" src="https://github.com/fiifidawson/humani-t/actions/workflows/codeql.yml/badge.svg?branch=main"></a>
+</p>
+
+<p>
+<a href="#self-hosting-quick-start">Quick start</a> ·
+<a href="#documentation">Documentation</a> ·
+<a href="CONTRIBUTING.md">Contributing</a> ·
+<a href="SECURITY.md">Security</a> ·
+<a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p>
+A project of<br>
+<a href="https://www.light-laboratory.org/">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="apps/web/src/assets/brand/light-logo-white.svg">
+<img alt="LiGHT, Laboratory for intelligent Global Health and Humanitarian Response Technologies" src="apps/web/src/assets/brand/light-logo.svg" height="28">
+</picture>
+</a>
+</p>
+
+</div>
+
+---
 
 A reviewer states a research question. humani-t searches academic repositories, screens the results against review criteria, and synthesises them with citations. It does this reproducibly, and without sending sensitive material anywhere it should not go.
 
@@ -73,6 +112,7 @@ The API docs are at http://127.0.0.1:8731/docs. [`CONTRIBUTING.md`](CONTRIBUTING
 | Document | What it covers |
 | --- | --- |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setting up, working tests-first, commits and pull requests |
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |
 | [`CLAUDE.md`](CLAUDE.md) | Code standards and the working agreement, for people and coding agents |
 | [`docs/deploy/`](docs/deploy/) | Self-hosting, backups, key custody, upgrades; a model on another machine |
 | [`docs/architecture.md`](docs/architecture.md) | Layers, provider seams, domain model, security model |
@@ -82,6 +122,10 @@ The API docs are at http://127.0.0.1:8731/docs. [`CONTRIBUTING.md`](CONTRIBUTING
 | [`docs/walkthroughs/`](docs/walkthroughs/) | A guided tour of each phase, with manual tests |
 | [`docs/standards.md`](docs/standards.md) | Commit messages and git workflow |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
+
+## Versioning
+
+humani-t has one version for the whole repository, following [Semantic Versioning](https://semver.org/). Each release is a `vX.Y.Z` tag on `main`, with its changes in [`CHANGELOG.md`](CHANGELOG.md). Until 1.0.0, a minor version may need the upgrade steps in [`docs/deploy/self-hosting.md`](docs/deploy/self-hosting.md). How to cut a release is in [`docs/standards.md`](docs/standards.md#releases).
 
 ## Security
 
