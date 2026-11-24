@@ -3,7 +3,7 @@
  * system.ts). LiGHT's titles are Ivy Presto Headline Semibold, licensed through
  * Adobe; until its self-hostable files arrive this is Playfair Display (SIL Open
  * Font Licence), a close high-contrast serif. To switch, replace the two `src`
- * lines with the licensed .woff2 files (apps/web/public/brand/README.md).
+ * lines with the licensed .woff2 files (apps/web/src/assets/brand/README.md).
  *
  * Bundled from node_modules, never fetched from a font service: the CSP allows
  * fonts from this origin only.

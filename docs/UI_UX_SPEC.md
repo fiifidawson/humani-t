@@ -1457,7 +1457,7 @@ Risk is yellow, not purple, so "a risk of this option" never looks like "somethi
 
 Both fonts are self-hosted from Fontsource packages and bundled with the app, so the CSP's `font-src 'self'` holds and nothing loads from Adobe or a font service. Variable fonts, split by `unicode-range`, so a page in English downloads only the Latin files.
 
-- **Titles:** Ivy Presto Headline, semibold, sentence case, behind the single family name **`"Brand Headline"`** ([`src/theme/fonts.css`](../apps/web/src/theme/fonts.css)). Until the lab's licensed `.woff2` files are dropped in, that name points at **Playfair Display** (SIL Open Font Licence), the closest open high-contrast editorial serif. Switching is a change to that one file ([`public/brand/README.md`](../apps/web/public/brand/README.md)).
+- **Titles:** Ivy Presto Headline, semibold, sentence case, behind the single family name **`"Brand Headline"`** ([`src/theme/fonts.css`](../apps/web/src/theme/fonts.css)). Until the lab's licensed `.woff2` files are dropped in, that name points at **Playfair Display** (SIL Open Font Licence), the closest open high-contrast editorial serif. Switching is a change to that one file ([`src/assets/brand/README.md`](../apps/web/src/assets/brand/README.md)).
 - **Everything else:** **Manrope** (`@fontsource-variable/manrope`, SIL OFL), replacing Inter. Regular for body, Medium for subtitles, labels and buttons, Regular in all caps for small labels.
 
 | Use | Family | Size / line height | Weight |
@@ -1527,7 +1527,7 @@ Few charts, all simple, all with a text or table version:
 
 ### 9.8 Logos and the sub-project rule
 
-humani-t's logo sits on the **left** and LiGHT's on the **right**: in the app header, on the sign-in cover, and in the footer. The LiGHT wordmark is used only as supplied (original dark and light blue, black or white) with its safe area, and is never redrawn. Until the official SVGs are in [`apps/web/public/brand/`](../apps/web/public/brand/README.md), [`Brand.tsx`](../apps/web/src/ui/Brand.tsx) renders "humani-t" and "by LiGHT" as Manrope text in those slots.
+humani-t's logo sits on the **left** and LiGHT's on the **right**: in the app header, on the sign-in cover, and in the footer. The LiGHT wordmark is the lab's own file ([`apps/web/src/assets/brand/`](../apps/web/src/assets/brand/README.md)), never redrawn: original dark and light blue in the light theme, white on the sign-in cover and in the dark theme. Beside humani-t it is secondary, so it is drawn smaller than the project's name, with its safe area. It links to [light-laboratory.org](https://www.light-laboratory.org/) in a new tab. humani-t has no logo yet, so [`Brand.tsx`](../apps/web/src/ui/Brand.tsx) shows its name in Manrope in the left slot. The browser tab icon and the link preview image are LiGHT's light beam (`tab.svg`).
 
 The guidelines let a sub-project have its own colour pair, generated from one hue: light at 55% saturation and 91% brightness, dark at 93% saturation and 63% brightness. humani-t has none yet; if the lab assigns one, it becomes a palette next to `brand` and its pairs are measured into 9.2.2 before use.
 
