@@ -10,6 +10,8 @@ import pytest
 from app import cli
 from app.application.audit import AuditLog
 from app.domain.audit import ChainReport
+from tests.mfa_support import user_with_totp
+from tests.support import USER_EMAIL, USER_PASSWORD, make_harness
 
 
 def test_generate_kek_prints_a_32_byte_key(capsys: pytest.CaptureFixture[str]):
@@ -83,4 +85,28 @@ class TestCreateAdmin:
         monkeypatch.setattr("sys.stdin", io.StringIO("violet-harbour-quietly-41-lanterns\n"))
 
         assert cli.main(["create-admin", "--email", email, "--password-stdin"]) == 1
+        assert "email" in capsys.readouterr().err
+
+
+class TestResetMfa:
+    """Clearing someone's second factors happens inside the deployment, never over HTTP."""
+
+    def test_the_named_persons_sign_in_methods_are_reset(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        harness = make_harness()
+        user_with_totp(harness, USER_EMAIL, USER_PASSWORD)
+        monkeypatch.setattr(cli, "build_providers", lambda _settings: harness.providers)
+
+        assert cli.main(["reset-mfa", "--email", USER_EMAIL]) == 0
+        assert USER_EMAIL in capsys.readouterr().out
+
+    def test_an_unknown_email_fails_loudly(self, capsys: pytest.CaptureFixture[str]):
+        assert cli.main(["reset-mfa", "--email", "nobody@example.org"]) == 1
+        assert "no account" in capsys.readouterr().err
+
+    def test_an_email_the_api_would_refuse_is_refused_here_too(
+        self, capsys: pytest.CaptureFixture[str]
+    ):
+        assert cli.main(["reset-mfa", "--email", "not-an-email"]) == 1
         assert "email" in capsys.readouterr().err
