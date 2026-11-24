@@ -19,10 +19,15 @@ from uuid import UUID
 import structlog
 
 from app.application.accounts import Current, SignedIn, new_session
-from app.application.audit import Actor, AuditLog
+from app.application.audit import SYSTEM, Actor, AuditLog
 from app.application.encryption import ScopeEncryption
 from app.auth.base import PasskeyVerifier
-from app.domain.accounts import NotFoundError, ReauthenticationRequiredError, ThrottledError
+from app.domain.accounts import (
+    NotFoundError,
+    ReauthenticationRequiredError,
+    ThrottledError,
+    normalize_email,
+)
 from app.domain.encryption import EncryptionContext, KeyDestroyedError, UnknownScopeError
 from app.domain.errors import RateLimiterUnavailableError
 from app.domain.mfa import (
@@ -104,6 +109,14 @@ class Enrolled:
 class PasskeyAdded:
     passkey: Passkey
     enrolled: Enrolled
+
+
+@dataclass(frozen=True, slots=True)
+class MfaReset:
+    """What an operator's reset removed from an account."""
+
+    passkeys: int
+    had_totp: bool
 
 
 class MfaService:
@@ -308,6 +321,31 @@ class MfaService:
             )
             await uow.commit()
         await self._send_quietly(_removed_message(current.user.email, "A passkey"))
+
+    async def reset(self, email: str, actor: Actor = SYSTEM) -> MfaReset:
+        """Remove every second factor and session of an account; the password stays.
+
+        For an operator helping someone locked out (`cli reset-mfa`). The person sets
+        up a new authenticator at their next sign-in, as on their first.
+        """
+        async with self._storage.unit_of_work() as uow:
+            user = await uow.users.get_by_email(normalize_email(email))
+            if user is None:
+                raise NotFoundError("No account has this email.")
+            await self._lock_enrolment(uow, user.id)
+            totp = await uow.totp_credentials.get_for_user(user.id)
+            if totp is not None:
+                await uow.totp_credentials.delete(totp.id)
+            passkeys = await uow.passkeys.list_for_user(user.id)
+            for passkey in passkeys:
+                await uow.passkeys.delete(passkey.id)
+            await uow.recovery_codes.replace_for_user(user.id, [])
+            # Sessions opened with the removed factors must not outlive them.
+            await uow.sessions.revoke_all_for_user(user.id, self._clock())
+            await self._audit.record(uow, actor, "account.mfa_reset", "user", str(user.id))
+            await uow.commit()
+        await self._send_quietly(_reset_message(user.email))
+        return MfaReset(passkeys=len(passkeys), had_totp=totp is not None)
 
     async def regenerate_recovery_codes(
         self, current: Current, request_id: str | None
@@ -645,5 +683,19 @@ def _removed_message(to: str, what: str) -> EmailMessage:
             f"{what} was just removed from the sign-in methods of your Humani-T "
             "account.\n\nIf this was not you, sign in, review your sign-in methods, "
             "change your password, and tell your administrator.\n"
+        ),
+    )
+
+
+def _reset_message(to: str) -> EmailMessage:
+    return EmailMessage(
+        to=to,
+        subject="Your Humani-T sign-in methods were reset",
+        body=(
+            "An administrator removed the passkeys, authenticator app and recovery codes "
+            "from your Humani-T account, and signed you out everywhere. Your password is "
+            "unchanged.\n\nNext time you sign in, you will be asked to set up a passkey or "
+            "an authenticator app again.\n\nIf you did not ask for this, tell your "
+            "administrator.\n"
         ),
     )

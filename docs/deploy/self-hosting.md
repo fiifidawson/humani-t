@@ -344,6 +344,7 @@ docker compose ps
 | Is the API up, can it reach the database | `curl -s https://<domain>/api/v1/health`, `…/api/v1/ready` |
 | Check the audit log has not been tampered with | `docker compose exec api python -m app.cli verify-audit` (weekly, from cron) |
 | Delete expired sessions and links now | `docker compose exec api python -m app.cli purge-expired` (the worker also schedules this) |
+| Let someone who lost every passkey, authenticator app and recovery code set up new ones | `docker compose exec api python -m app.cli reset-mfa --email <their email>`. Check who is asking first: this removes their second factor. Their password stays; they are signed out and emailed |
 | Restart after changing `.env` or a secret file | `docker compose up -d --force-recreate api worker` |
 
 **Client addresses.** Per-address throttling relies on Caddy passing the client's IP to the API. On Linux, Docker preserves it. On Docker Desktop (Windows and macOS) every request appears to come from Docker's gateway address, so per-address limits apply to all clients together; per-account limits are unaffected. Production belongs on Linux.
