@@ -47,6 +47,7 @@ deploy       Docker, Compose, Caddy
 ci           GitHub Actions
 docs         documentation
 deps         dependency updates
+release      version numbers and the changelog
 adr          architecture decision records
 ```
 
@@ -122,6 +123,27 @@ git add -p
 git commit -m "feat(api): add health endpoint"
 git push -u origin feat/my-change   # then open a pull request into staging
 ```
+
+## Releases
+
+The repository has one version, following [Semantic Versioning](https://semver.org/): a patch (`0.1.1`) for fixes only, a minor (`0.2.0`) for new features or anything an operator must act on when upgrading, a major (`1.0.0`) for the first release cleared for real data and, after that, for breaking changes. `services/api/tests/test_release.py` fails unless every place that states it agrees: `services/api/pyproject.toml`, `API_VERSION` in `app/api/routes/system.py`, both `package.json` files, the README's version badge and a dated `CHANGELOG.md` heading.
+
+Every pull request with a visible change adds a line under `## [Unreleased]` in [`CHANGELOG.md`](../CHANGELOG.md): `Added`, `Changed`, `Fixed`, `Removed` or `Security`.
+
+To cut a release:
+
+1. On a `chore/release-X.Y.Z` branch from `staging`, set the new version in the five places above, rename `## [Unreleased]` to `## [X.Y.Z] - <today>`, add a fresh empty `## [Unreleased]` above it and update the two links at the bottom. Commit as `chore(release): X.Y.Z` and merge into `staging`, then promote `staging` to `main` as usual.
+2. Tag the merge commit on `main` and publish the release:
+
+   ```
+   git switch main
+   git pull
+   git tag -a vX.Y.Z -m "humani-t X.Y.Z"
+   git push origin vX.Y.Z
+   gh release create vX.Y.Z --title "humani-t X.Y.Z" --notes-from-tag
+   ```
+
+   Paste the version's changelog section into the release notes on GitHub if `--notes-from-tag` gives only the tag message.
 
 ## Library
 
