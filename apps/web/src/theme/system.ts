@@ -275,6 +275,17 @@ const config = defineConfig({
 					emphasized: ["#E8BDCB", "#521B33"],
 					focusRing: [BRAND.lightPurple, "#F08BA8"],
 				}),
+				// Ink and Eggshell for quiet labels (status tags). Chakra's own gray is
+				// not LiGHT's: its dark-theme text is ash.
+				neutral: palette({
+					solid: ["#0A1633", BRAND.eggshell],
+					contrast: [BRAND.eggshell, "#06102A"],
+					fg: ["#0A1633", BRAND.eggshell],
+					subtle: ["#E6EAF5", "#1A2B5C"],
+					muted: ["#D9DEEA", "#24325A"],
+					emphasized: ["#7A8499", "#6A79A3"],
+					focusRing: [BRAND.darkBlue, BRAND.lightBlue],
+				}),
 				// Yellow marks a caution with an icon or a bar, never the words: ink
 				// text reads better, and yellow text fails contrast on white.
 				caveat: palette({

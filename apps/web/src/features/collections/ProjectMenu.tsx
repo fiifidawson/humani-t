@@ -114,7 +114,13 @@ export function CollectionBadge({
 	const collections = useQuery(collectionsQuery(api));
 	const name = collections.data?.find((c) => c.id === collectionId)?.name;
 	return name === undefined ? null : (
-		<Badge variant="subtle" colorPalette="gray" flex="none" maxW="48" truncate>
+		<Badge
+			variant="subtle"
+			colorPalette="neutral"
+			flex="none"
+			maxW="48"
+			truncate
+		>
 			<FolderClosed />
 			{name}
 		</Badge>
