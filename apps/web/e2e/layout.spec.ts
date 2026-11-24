@@ -131,12 +131,44 @@ test("a delete pop-up wraps a long name rather than letting it run out", async (
 	expect(await spillingOut(deleteProject)).toEqual([]);
 });
 
-/** The header's visible LiGHT wordmark, once the browser has drawn it. */
+/** How many of the element's pixels differ clearly from its top-left one. */
+async function inkedPixels(page: Page, element: Locator): Promise<number> {
+	const shot = (await element.screenshot()).toString("base64");
+	// A blank page: the app's CSP refuses the data: URL the screenshot comes in.
+	const blank = await page.context().newPage();
+	const count = await blank.evaluate(async (src) => {
+		const image = new Image();
+		image.src = src;
+		await image.decode();
+		const canvas = document.createElement("canvas");
+		canvas.width = image.width;
+		canvas.height = image.height;
+		const context = canvas.getContext("2d");
+		if (context === null) {
+			return 0;
+		}
+		context.drawImage(image, 0, 0);
+		const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+		let count = 0;
+		for (let i = 0; i < data.length; i += 4) {
+			const difference =
+				Math.abs((data[i] ?? 0) - (data[0] ?? 0)) +
+				Math.abs((data[i + 1] ?? 0) - (data[1] ?? 0)) +
+				Math.abs((data[i + 2] ?? 0) - (data[2] ?? 0));
+			if (difference > 90) {
+				count += 1;
+			}
+		}
+		return count;
+	}, `data:image/png;base64,${shot}`);
+	await blank.close();
+	return count;
+}
+
+/** The header's visible LiGHT wordmark, once the browser has drawn it: loaded is not enough. */
 async function drawnLogo(page: Page): Promise<string | null> {
 	const logo = page.getByRole("banner").getByRole("img", { name: "LiGHT" });
-	await expect
-		.poll(() => logo.evaluate((img: HTMLImageElement) => img.naturalWidth))
-		.toBeGreaterThan(0);
+	await expect.poll(() => inkedPixels(page, logo)).toBeGreaterThan(100);
 	return logo.getAttribute("src");
 }
 

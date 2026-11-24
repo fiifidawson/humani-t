@@ -12,7 +12,12 @@ LiGHT's sub-project rule: **the project's logo on the left, the LiGHT logo on th
 | `light-logo-white.svg` | The LiGHT wordmark in white (`LIGHT-LIGHT.svg`) | `LabMark` on the sign-in cover (Dark Blue) and in the dark theme |
 | `tab.svg` | LiGHT's light beam, square | The browser tab icon and the link preview image |
 
-The two wordmark files are the Drive's files with one change: the `viewBox`, `width` and `height` on the `<svg>` element are trimmed from the 1500×1500 canvas to the wordmark's edges, so the app can size it. The artwork inside is untouched. To update one, copy the new file in and trim it the same way.
+The two wordmark files are the Drive's files with two changes, so the app can size them:
+
+- the `viewBox`, `width` and `height` on the `<svg>` element are trimmed from the 1500×1500 canvas to the wordmark's edges;
+- the `<mask>` gets `x="0" y="0" width="1500" height="1500"`. Without it the mask's area is measured from the trimmed frame, misses the wordmark, and the logo draws blank.
+
+The artwork inside is untouched. To update one, copy the new file in and make the same two changes; `e2e/layout.spec.ts` fails if the logo draws blank.
 
 The wordmark is used only in its original blues, black or white. Beside humani-t it is secondary, so it is drawn smaller than the project's name (16 px high), with at least its own height clear above and below and an "L" clear to each side.
 
