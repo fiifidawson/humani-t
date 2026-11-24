@@ -73,6 +73,15 @@ describe("the link preview card", () => {
 	});
 });
 
+describe("the browser tab icon", () => {
+	it("is LiGHT's tab mark, bundled so it is cached like the app's other files", () => {
+		const icon = page.querySelector('link[rel="icon"]');
+
+		expect(icon?.getAttribute("href")).toBe("/src/assets/brand/tab.svg");
+		expect(icon?.getAttribute("type")).toBe("image/svg+xml");
+	});
+});
+
 describe("the address in the card", () => {
 	it("comes from the domain the operator set, the one Caddy serves", () => {
 		const caddyfile = readFileSync(

@@ -11,6 +11,7 @@
 			"*.json",
 			"apps/**",
 			"!apps/web/src/api/schema.gen.ts",
+			"!apps/web/src/assets/brand/*.svg",
 			"!services/api/openapi.json"
 		]
 	},

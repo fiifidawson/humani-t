@@ -1,7 +1,7 @@
 /**
- * Draw public/og-image.png, the 1200×630 link preview image: the favicon mark,
- * centred on the light theme's page colour. Run it again once the official logo
- * is in public/brand/.
+ * Draw public/og-image.png, the 1200×630 link preview image: the tab icon,
+ * centred on the light theme's page colour. Run it again once humani-t has a
+ * logo (src/assets/brand/README.md).
  *
  *   node scripts/og-image.ts
  */
@@ -14,7 +14,10 @@ import { chromium } from "@playwright/test";
 const PAGE_BACKGROUND = "#FFFFFF";
 
 const webRoot = join(import.meta.dirname, "..");
-const mark = readFileSync(join(webRoot, "public", "favicon.svg"), "utf8");
+const mark = readFileSync(
+	join(webRoot, "src", "assets", "brand", "tab.svg"),
+	"utf8",
+);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
