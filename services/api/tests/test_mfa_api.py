@@ -19,6 +19,7 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.accounts import NotFoundError
 from tests.mfa_support import (
     RP_ID,
     SwitchableRateLimiter,
@@ -1380,6 +1381,90 @@ class TestMfaAuditTrail:
         assert code not in events
         assert not any(c in events or c.replace("-", "") in events for c in codes)
         assert "example.org" not in events
+
+
+class TestOperatorReset:
+    """An operator clears a locked-out person's second factors (`cli reset-mfa`).
+
+    The password stays; the person sets up a new authenticator at their next sign-in,
+    exactly as on their first.
+    """
+
+    @pytest.fixture
+    def locked_out(self, harness: AuthHarness) -> TestClient:
+        """A person with an authenticator app, recovery codes and a passkey, signed in."""
+        secret, _ = user_with_totp(harness, USER_EMAIL, USER_PASSWORD)
+        browser = sign_in_with_totp(harness, USER_EMAIL, USER_PASSWORD, secret)
+        assert register_passkey(harness, browser, SoftwareAuthenticator()).status_code == 201
+        return browser
+
+    def test_a_reset_leaves_the_password_and_asks_for_a_new_authenticator(
+        self, harness, locked_out
+    ):
+        asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+
+        response = login(harness.browser(), USER_EMAIL, USER_PASSWORD)
+
+        assert response.json()["status"] == "mfa_enrolment_required"
+
+    def test_a_reset_removes_every_passkey_app_and_recovery_code(self, harness, locked_out):
+        report = asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+
+        state = harness.storage.state
+        user_id = _user_id(harness, USER_EMAIL)
+        assert (report.passkeys, report.had_totp) == (1, True)
+        assert not [p for p in state.passkeys.values() if p.user_id == user_id]
+        assert not [t for t in state.totp_credentials.values() if t.user_id == user_id]
+        assert not [c for c in state.recovery_codes.values() if c.user_id == user_id]
+
+    def test_a_reset_signs_the_person_out_everywhere(self, harness, locked_out):
+        asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+
+        assert locked_out.get("/api/v1/auth/session").status_code == 401
+
+    def test_the_person_can_set_up_a_new_authenticator_afterwards(self, harness, locked_out):
+        asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+        browser = _signed_in_without_mfa(harness, USER_EMAIL, USER_PASSWORD)
+
+        _, codes = enrol_totp(harness, browser)
+
+        assert len(codes) > 0
+        assert _session_aal(browser) == 2
+
+    def test_a_reset_tells_the_person_by_email(self, harness, locked_out):
+        asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+
+        message = harness.outbox[-1]
+        assert message.to == USER_EMAIL  # type: ignore[attr-defined]
+        assert "reset" in message.subject.lower()  # type: ignore[attr-defined]
+
+    def test_a_reset_is_recorded_against_the_account_without_its_email(
+        self, harness, locked_out
+    ):
+        asyncio.run(harness.providers.mfa.reset(USER_EMAIL))
+
+        event = harness.storage.state.audit_events[-1].entry
+        assert (event.action, event.target_type, event.target_id) == (
+            "account.mfa_reset",
+            "user",
+            str(_user_id(harness, USER_EMAIL)),
+        )
+        assert event.actor_id is None
+        assert "example.org" not in repr(event)
+
+    def test_the_email_is_matched_whatever_its_case(self, harness, locked_out):
+        report = asyncio.run(harness.providers.mfa.reset(USER_EMAIL.upper()))
+
+        assert report.passkeys == 1
+
+    def test_an_unknown_email_is_refused_and_nothing_is_recorded(self, harness):
+        before = len(harness.storage.state.audit_events)
+
+        with pytest.raises(NotFoundError):
+            asyncio.run(harness.providers.mfa.reset("nobody@example.org"))
+
+        assert len(harness.storage.state.audit_events) == before
+        assert harness.outbox == []
 
 
 class TestRateLimiterOutage:

@@ -2,8 +2,8 @@
 
 These are the actions that must never be reachable over HTTP — creating key
 material, re-encrypting it, checking the audit log, creating the first
-administrator — so they run inside the deployment, by someone with shell
-access to it.
+administrator, resetting a locked-out person's second factors — so they run
+inside the deployment, by someone with shell access to it.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from email_validator import EmailNotValidError, validate_email
 from app.api.dependencies import Providers, build_providers
 from app.application.audit import SYSTEM
 from app.crypto.local_key import generate_kek
-from app.domain.accounts import EmailTakenError, PasswordRejectedError
+from app.domain.accounts import EmailTakenError, NotFoundError, PasswordRejectedError
 from app.settings import get_settings
 
 
@@ -105,6 +105,29 @@ def _create_admin(args: argparse.Namespace) -> int:
     return _run(create)
 
 
+def _reset_mfa(args: argparse.Namespace) -> int:
+    try:
+        email = validate_email(args.email, check_deliverability=False).normalized
+    except EmailNotValidError as exc:
+        print(f"email refused: {exc}", file=sys.stderr)
+        return 1
+
+    async def reset(providers: Providers) -> int:
+        try:
+            report = await providers.mfa.reset(email)
+        except NotFoundError:
+            print("no account has this email", file=sys.stderr)
+            return 1
+        app = " and the authenticator app" if report.had_totp else ""
+        print(
+            f"reset {email}: removed {report.passkeys} passkey(s){app} and the recovery "
+            "codes, and signed them out. They set up a new one at their next sign-in."
+        )
+        return 0
+
+    return _run(reset)
+
+
 def main(argv: list[str] | None = None) -> int:
     # allow_abbrev=False: otherwise `--password` would silently match `--password-stdin`.
     parser = argparse.ArgumentParser(
@@ -136,6 +159,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Read the password from standard input (the only way to supply it).",
     )
     create_admin.set_defaults(handler=_create_admin)
+    reset_mfa = commands.add_parser(
+        "reset-mfa",
+        help="Remove someone's passkeys, authenticator app and recovery codes, for a lockout.",
+        allow_abbrev=False,
+    )
+    reset_mfa.add_argument("--email", required=True)
+    reset_mfa.set_defaults(handler=_reset_mfa)
 
     args = parser.parse_args(argv)
     return args.handler(args)
