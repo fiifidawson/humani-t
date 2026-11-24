@@ -142,7 +142,7 @@ export function MembersSection({
 										{member.display_name}
 									</Text>
 									{isYou ? (
-										<Badge variant="outline" colorPalette="gray">
+										<Badge variant="outline" colorPalette="neutral">
 											You
 										</Badge>
 									) : null}

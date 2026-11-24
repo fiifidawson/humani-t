@@ -1364,6 +1364,7 @@ The brand defines no dark theme. The dark one here is derived: deep blue-black s
 | `focusRing`, `link`, `brand.solid` | `#0C43A0` Dark Blue | `#68AFE7` Light Blue | Focus outline, links, primary buttons |
 | `brand.contrast` | `#FEFFF7` | `#06102A` derived | Text on a primary button |
 | `marker` | `#000000` | `#FEFFF7` | The section dot |
+| `neutral.fg` / `neutral.muted` / `neutral.subtle` | `#0A1633` / `#D9DEEA` / `#E6EAF5` | `#FEFFF7` / `#24325A` / `#1A2B5C` | Quiet tags (a project's status, "This device", a role): the same text as `fg`, never Chakra's own gray, whose dark text is ash |
 | `fg.error`, `danger.solid` | `#AE3156` Light Purple | `#F08BA8` derived | Error text and icons, destructive actions |
 | `danger.subtle` | `#F8E9EE` derived | `#2A0E1A` derived | Error notice background |
 | `caveat.fg` | `#5C3D00` derived | `#F6D54D` Light Yellow | Caveat and "not available yet" text |

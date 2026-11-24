@@ -38,4 +38,16 @@ describe("colours come from the theme's tokens", () => {
 
 		expect(offenders).toEqual([]);
 	});
+
+	it("no component uses Chakra's own gray, whose dark-theme text is ash, not Eggshell", () => {
+		const offenders = componentFiles(sourceRoot)
+			.map((path) => relative(sourceRoot, path).replaceAll("\\", "/"))
+			.filter((path) =>
+				/colorPalette[=:][^\n]*["']gray["']/.test(
+					readFileSync(join(sourceRoot, path), "utf8"),
+				),
+			);
+
+		expect(offenders).toEqual([]);
+	});
 });
