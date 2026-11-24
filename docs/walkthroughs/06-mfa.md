@@ -373,7 +373,7 @@ SELECT sequence, action, target_type, actor_id, occurred_at FROM audit_events
 WHERE action LIKE 'auth.mfa%' OR action LIKE 'auth.login%' OR action LIKE 'account.%' ORDER BY sequence DESC LIMIT 30;
 ```
 
-- **Expect:** `auth.login_pending_mfa`, `auth.mfa_failed`, `auth.mfa_totp_succeeded`, `auth.mfa_recovery_code_succeeded`, `auth.mfa_passkey_succeeded`, `account.totp_added`, `account.passkey_added`, `account.recovery_codes_generated`, `account.totp_removed`. No secret, code or email address in any column.
+- **Expect:** `auth.login_pending_mfa`, `auth.mfa_failed`, `auth.mfa_totp_succeeded`, `auth.mfa_recovery_code_succeeded`, `auth.mfa_passkey_succeeded`, `account.totp_added`, `account.passkey_added`, `account.recovery_codes_generated`, `account.totp_removed`, and `account.mfa_reset` after an operator's `reset-mfa`. No secret, code or email address in any column.
 - **Proves:** D6.11 audit, and that provenance is captured when the decision is made.
 
 ### Results checklist

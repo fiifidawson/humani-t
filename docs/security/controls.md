@@ -45,6 +45,7 @@ Test paths are relative to `services/api/tests/`.
 | The last authenticator cannot be removed, also when two removals race | `application/mfa.py` (`_lock_enrolment`) | `test_mfa_api.py::TestRemovingAuthenticators` |
 | Adding or removing a factor needs a recent sign-in, is emailed and audited without secrets | `application/mfa.py` | `test_mfa_api.py::TestTotpEnrolment`, `test_mfa_api.py::TestRemovingAuthenticators`, `test_mfa_api.py::TestMfaAuditTrail` |
 | A password reset does not bypass MFA | `application/accounts.py` | `test_mfa_api.py::TestPasswordResetDoesNotBypassMfa` |
+| A person who loses every factor is reset only from a shell on the deployment: factors and sessions removed, password kept, emailed and audited | `application/mfa.py` (`reset`), `cli reset-mfa` | `test_mfa_api.py::TestOperatorReset`, `test_cli.py::TestResetMfa` |
 
 ## Sessions (NIST AAL2; ASVS V7)
 
@@ -310,7 +311,6 @@ Proven by CI jobs rather than pytest: each job fails if the control is removed. 
 | No real-browser test of cookies and CSRF | M13 (Playwright) |
 | Passkeys are tested with a software authenticator only, not a browser's | M13 (Playwright with a virtual WebAuthn authenticator) |
 | Passkey attestation is not checked (`attestation: "none"`): any authenticator model is accepted | Revisit if an operator must restrict authenticator models |
-| An account that loses every factor and every recovery code has no self-service way back | Later, with an audited operator command |
 | No load test across several API workers (the stack runs two by default) | Open: a load test against the compose stack |
 | No mutation testing or API fuzzing in CI (SAST is closed by CodeQL) | Open: mutmut, Schemathesis against the compose stack |
 | SSE through Caddy (`flush_interval -1`) is configured but not tested end to end | The compose smoke test, once `GET /api/v1/runs/{id}/events` exists |
