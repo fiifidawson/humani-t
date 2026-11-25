@@ -739,7 +739,7 @@ The run strip (L0 and L1) is in [5.3.5](#535-run-strip). The canvas (L2) shows:
 
 - **Stage row:** each stage with its state icon (✓ done, ◐ running, ○ waiting, ✗ failed, ⏸ waiting for a gate, ■ cancelled) and its duration once done. Clicking a finished stage shows its summary box (the same facts as the terminal's summary boxes).
 - **Live list:** during Screen, one row per paper as it finishes, newest at the top, with its label and the one-line reason. It holds the last 200 rows; "Open papers" shows the rest.
-- **Brief stage:** the live list becomes the agent loop (section [6.11](#611-how-this-was-made)), following the round being written, the running agent marked.
+- **Brief stage:** the live list becomes the agents' timeline (section [6.11](#611-how-this-was-made)), the step being run last.
 - **Cancel** asks once: "Stop this run? Finished stages are kept, and you can run the rest later." Then the strip shows ■.
 - **Failure:** the stage turns ✗ with the plain message and the actions "Try again from this stage" and "Details".
 - **Connection lost:** a thin banner "Reconnecting…", then the strip catches up from the last event id (section [11.2](#112-live-events)). Never a blank screen.
@@ -982,40 +982,44 @@ Source: `GET /projects/{id}/brief`, `…/brief/evidence/{tag}`, `…/brief/trace
 
 ### 6.11 How this was made
 
-**Purpose.** Show the agent loop as a picture of the loop, one round at a time, with every step's detail beneath it, for people who want to know how the brief was built.
+**Purpose.** Show how the brief was built as a record of what each agent did and decided, for people who want to check it. A timeline, as the DWP and Primer design systems draw a record of past events: plain sentences, the detail on demand, nothing said twice.
 
 ```text
 How this brief was made
 
 Stopped because: accepted by the Critic · kept round 2 of 3
-( Before the first draft ) ( Round 1 ) [ Round 2 ]
 
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐ Checks ┌─────────────┐
-│ ☰ Planner   │ → │ ⌕ Retriever │ → │ ✎ Writer    │ no     │ ⚖ Critic    │
-│ ✓ done      │   │ ◌ not run   │   │ ✓ done      │ probl. │ ✓ done      │
-│ 1 call·41 s │   │             │   │ 3 options · │   →    │ accept      │
-│             │   │             │   │ 2 min       │        │             │
-└─────────────┘   └──────┬──────┘   └─────────────┘        └──────┬──────┘
-                         ↑                                        │
-                         └────────────── ↺ accepted ✓ ────────────┘
-
+Steps
+Before the first draft
+ ☰  Planner set the plan                         41 s  Details ⌄
+ │  3 options · 2 criteria · 2 sub-questions
+ ⌕  Retriever searched the papers                 1 s  Details ⌄
+    2 searches · 5 new passages (5 in all)
+Round 1
+ ✎  Writer drafted the brief                    2 min  Details ⌄
+ │  3 options · 14 claims, 10 from sources
+ ⛨  Checks found 1 problem                             Details ⌄
+ │  In-kind food has no sourced benefit.
+ ⚖  Critic asked for a revision and 1 more search 30 s Details ⌄
+    Price effects in small markets are thin.
 Round 2
-✗ Writer · unusable answer · The model's answer did not match …   ▸
-✓ Writer · 3 options · 16 claims · 2 min                           ▸
-✓ Checks · no problems                                             ▸
-✓ Critic · accept                                                  ▸
+ ✕  Writer failed                                 5 s
+ │  The model server isn't answering.
+ ⚖  Critic accepted the draft                    28 s  Details ⌄
 
+Totals
 Model: qwen3.5:9b · 9 calls · 61,200 tokens in, 8,900 out
 ```
 
-- The loop: the Planner leads into Retriever → Writer → Critic, and an arrow runs from the Critic back to the Retriever. Each agent has its icon (Planner `ListTree`, Retriever `Search`, Writer `PenLine`, Critic `Scale`); the checks are code, not an agent, so they are a badge (`ShieldCheck`) on the way from the Writer to the Critic, saying "no problems" or how many.
-- One round at a time. The round picker (Before the first draft, Round 1, Round 2, …) opens on the latest round, or on the round being written while the run is live. Each agent shows that round's one-line result; the Planner, which runs once, shows its own. The Retriever's step in a round is the search the Critic asked for, so it runs last.
-- The way back is labelled with the Critic's outcome: "revise", "asked for 2 searches" or "accepted ✓", and "overruled by the checks" when the checks found problems in an accepted draft.
-- Each agent's state is an icon and a word, never colour alone: done, failed (or refused, unusable answer) with its short error, running (a spinner, which stops under reduced motion and in low data mode), or not reached yet / not run (muted, dashed).
-- Under the picture, the round's steps, one row per `agent.step`. Each row opens to its detail: the plan, the queries, the Critic's scores, issues and requests, the checks' problems, the model, prompt version, tokens and time. While live, the step being run is the last row.
-- The picture is hidden from screen readers: the picker and the step list say the same in text. It follows the canvas's own width, not the window's: in a narrow canvas the agents stack and the way back is a line beneath them.
+- Under a "Steps" heading, every round, oldest first, under its own heading: "Before the first draft", then "Round 1", "Round 2"… Each round is an ordered list named by its heading. The loop shows itself: the Critic's request ends one round and the Writer's revision opens the next. No picture of the loop, no round picker.
+- Each step is a sentence that says what the agent did or decided: "Planner set the plan", "Retriever searched the papers" (before the first draft) or "Retriever ran the Critic's searches", "Writer drafted the brief" (round 1) or "Writer revised the brief", "Checks found no problems" or "found 2 problems", "Critic accepted the draft", "Critic asked for a revision and 2 more searches", "Critic accepted the draft, but the checks overruled it". A failure says so in words: "Writer failed", "Writer's model refused", "Writer's answer could not be used", with the short error beneath.
+- Beneath the sentence, one line of what it produced or found: the plan's size; the searches and passages; the options and claims, and how many came from sources; the first problem the checks found; the Critic's first issue. Its time sits on the right when it took a second or more.
+- **Details**, beside the time, opens the step in place beneath it: the plan, the queries, the Critic's scores, issues and requests, the checks' problems, the model, prompt version, tokens and time. It is hidden when there is nothing more to show.
+- A marker on a thin line holds each agent's icon (Planner `ListTree`, Retriever `Search`, Writer `PenLine`, Checks `ShieldCheck`, Critic `Scale`); a failed step's marker is a cross. The line and markers are decoration: the sentence carries the state, never colour or icon alone.
+- While the brief is written, the step being run is the last entry, a spinner in its marker (it stops turning under reduced motion and in low data mode) and a sentence such as "Critic is reviewing the draft". Steps not reached yet are not listed: the timeline is a record, not a plan.
+- It reflows to any width: the sentence and its time wrap, nothing scrolls sideways.
 - Totals at the bottom. Tokens are shown here only, never in the chat.
-- The loop is sequential, so one row of agents is enough. If parallel agents come later, group them in lanes.
+- The loop is sequential, so one line of steps is enough. If parallel agents come later, a round lists them side by side under one marker.
 
 Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
