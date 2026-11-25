@@ -17,7 +17,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { WifiOff } from "lucide-react";
 import { useId, useState } from "react";
 import { linkStyle } from "../../ui/LinkButton";
-import { AgentLoop } from "../briefs/AgentLoop";
+import { AgentTimeline } from "../briefs/AgentTimeline";
 import { RunComparePicker } from "../runs/RunComparePicker";
 import { StageList } from "../runs/StageList";
 import { stageName } from "../runs/stages";
@@ -208,7 +208,7 @@ function RunView({ live }: { live: LiveRun }) {
 			{state.agentSteps.length === 0 && !isWriting ? null : (
 				<>
 					<CanvasHeading>Writing the brief</CanvasHeading>
-					<AgentLoop steps={state.agentSteps} isLive={isWriting} />
+					<AgentTimeline steps={state.agentSteps} isLive={isWriting} />
 				</>
 			)}
 

@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loopAgent, loopDiagram } from "../../test/agentLoop";
+import { roundEntries } from "../../test/agentTimeline";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import { FakeEventSource } from "../../test/fakeEventSource";
 import { currentPath, renderApp } from "../../test/render";
@@ -469,30 +469,31 @@ describe("the run canvas (UI_UX_SPEC §6.7)", () => {
 		await expectNoAccessibilityViolations(container);
 	});
 
-	it("draws the brief's agent loop as the run writes it, running agent included", async () => {
+	it("lists the brief's agents as the run writes them, the one being run last", async () => {
 		const { path, run } = runningReview();
 		const { user } = renderApp(`${path}/run/${run.id}`);
 		const source = await stream(run.id);
 		send(source, started("answer", 8), planned);
 		const canvas = await screen.findByRole("region", { name: "Run 1" });
 
-		expect(
-			await within(canvas).findByRole("button", {
-				name: "Before the first draft",
-			}),
-		).toHaveAttribute("aria-pressed", "true");
-		expect(loopAgent(canvas, "Planner")).toHaveTextContent("1 call · 41 s");
-		expect(loopAgent(canvas, "Retriever")).toHaveTextContent("running");
-		const rows = within(
-			within(canvas).getByRole("list", { name: "Before the first draft" }),
-		).getAllByRole("listitem");
-		expect(rows.map((row) => row.textContent)).toEqual([
-			expect.stringContaining("Planner · 1 call · 41 s"),
-			expect.stringContaining("Retriever · running"),
-		]);
+		await waitFor(() =>
+			expect(
+				roundEntries(canvas, "Before the first draft").map(
+					(entry) => entry.textContent,
+				),
+			).toEqual([
+				expect.stringContaining("Planner set the plan"),
+				expect.stringContaining("Retriever is searching the papers"),
+			]),
+		);
+		expect(roundEntries(canvas, "Before the first draft")[0]).toHaveTextContent(
+			"41 s",
+		);
 
 		await user.click(
-			within(canvas).getByRole("button", { name: "Planner · 1 call · 41 s" }),
+			within(canvas).getByRole("button", {
+				name: "Details: Planner set the plan",
+			}),
 		);
 		expect(canvas).toHaveTextContent(
 			"Decision: Choose between cash and vouchers",
@@ -515,13 +516,10 @@ describe("the run canvas (UI_UX_SPEC §6.7)", () => {
 		]);
 		const canvas = await screen.findByRole("region", { name: "Run 1" });
 
-		const writer = await waitFor(() => loopAgent(canvas, "Writer"));
-		expect(writer).toHaveTextContent("failed");
-		expect(writer).toHaveTextContent("The model server isn't answering.");
-		expect(loopDiagram(canvas)).not.toHaveTextContent("running");
-		expect(
-			within(canvas).getByRole("button", { name: "Round 1" }),
-		).toHaveAttribute("aria-pressed", "true");
+		const entries = await waitFor(() => roundEntries(canvas, "Round 1"));
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toHaveTextContent("Writer failed");
+		expect(entries[0]).toHaveTextContent("The model server isn't answering.");
 	});
 
 	it("has no accessibility violations while the brief is written", async () => {
@@ -530,7 +528,7 @@ describe("the run canvas (UI_UX_SPEC §6.7)", () => {
 		const source = await stream(run.id);
 		send(source, started("answer", 8), planned);
 		const canvas = await screen.findByRole("region", { name: "Run 1" });
-		await waitFor(() => loopAgent(canvas, "Retriever"));
+		await waitFor(() => roundEntries(canvas, "Before the first draft"));
 
 		await expectNoAccessibilityViolations(container);
 	});
