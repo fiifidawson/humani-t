@@ -17,7 +17,7 @@ import pytest
 
 from app.domain.encryption import EncryptionContext, KeyDestroyedError
 from app.domain.inference import ChatRequest, ChatResult, InferenceUnavailableError
-from app.domain.questions import INTERRUPTED, NOTHING_FOUND
+from app.domain.questions import CHANGE_THE_SEARCH, INTERRUPTED, NOTHING_FOUND
 from tests.brief_support import MASKED_PLACE, SENSITIVE_PLACE, claim, critic_answer
 from tests.project_support import PROJECTS, project_events, send
 from tests.question_support import (
@@ -101,6 +101,7 @@ class TestAnswering:
 
         assert [(s["round"], s["role"]) for s in steps] == [
             (0, "retriever"),
+            (0, "planner"),
             (1, "writer"),
             (1, "checks"),
             (1, "critic"),
@@ -164,6 +165,72 @@ class TestAnswering:
         assert body["status"] == "failed"
         assert "model server" in body["error"]
         assert "10.0.0.9" not in json.dumps(body)
+
+
+class TestRequestsToChangeTheSearch:
+    """A message asking for more or different papers goes to Change the search, unanswered."""
+
+    def test_a_request_to_change_the_search_is_recognised_and_not_answered(self):
+        team = make_ask_team(AnswerScript(planner=[{"intent": "change_search"}]))
+        question_id = team.ask("Can we update the booleans to find more papers on cash?")
+        team.answer_all()
+
+        body = team.question(question_id.json()["id"])
+        assert body["status"] == "answered"
+        answer_body = body["answer"]
+        assert answer_body["asks_to_change_search"] is True
+        assert answer_body["nothing_found"] is False
+        assert answer_body["message"] == CHANGE_THE_SEARCH
+        assert answer_body["claims"] == []
+
+    def test_the_decision_is_kept_as_a_step_and_no_answer_is_written(self):
+        team = make_ask_team(AnswerScript(planner=[{"intent": "change_search"}]))
+        question_id = team.ask().json()["id"]
+        team.answer_all()
+
+        steps = team.question(question_id)["answer"]["steps"]
+        assert [(s["round"], s["role"]) for s in steps] == [(0, "retriever"), (0, "planner")]
+        assert steps[1]["output"] == {"intent": "change_search"}
+        assert steps[1]["prompt_version"] == "answer-planner/1"
+
+    def test_a_question_about_the_evidence_is_answered_as_before(self):
+        team = make_ask_team(
+            AnswerScript(
+                planner=[{"intent": "evidence"}],
+                writer=[good_answer()],
+                critic=[critic_answer()],
+            )
+        )
+        question_id = team.ask().json()["id"]
+        team.answer_all()
+
+        answer_body = team.question(question_id)["answer"]
+        assert answer_body["asks_to_change_search"] is False
+        assert answer_body["claims"][0]["citations"][0]["tag"] == "P0001"
+
+    def test_an_unreadable_decision_is_answered_as_a_question(self):
+        team = make_ask_team(
+            AnswerScript(
+                planner=[{"intent": "maybe"}, {"intent": "maybe"}],
+                writer=[good_answer()],
+                critic=[critic_answer()],
+            )
+        )
+        question_id = team.ask().json()["id"]
+        team.answer_all()
+
+        answer_body = team.question(question_id)["answer"]
+        assert answer_body["asks_to_change_search"] is False
+        assert answer_body["claims"]
+
+    def test_the_decision_sees_only_the_masked_message(self):
+        team = make_ask_team(AnswerScript(planner=[{"intent": "change_search"}]))
+        team.ask()
+        team.answer_all()
+
+        (request,) = team.provider.requests
+        assert SENSITIVE_PLACE not in sent_text(request)
+        assert MASKED_PLACE in sent_text(request)
 
 
 class TestThreads:

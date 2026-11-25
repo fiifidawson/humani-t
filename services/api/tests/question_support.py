@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from app.application.answer_loop import ANSWER_SCHEMA
+from app.application.answer_loop import ANSWER_SCHEMA, INTENT_SCHEMA
 from app.application.brief_loop import CRITIC_SCHEMA
 from app.application.inference import GuardedInference
 from app.application.questions import QuestionService, QuestionWorker
@@ -56,14 +56,23 @@ class AnswerScript:
         *,
         writer: Sequence[Mapping[str, Any]] = (),
         critic: Sequence[Mapping[str, Any]] = (),
+        planner: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         self.queues: dict[str, list[Mapping[str, Any]]] = {
             "writer": list(writer),
             "critic": list(critic),
         }
+        if planner is not None:
+            self.queues["planner"] = list(planner)
+        # Unscripted, the Planner reads every message as a question about the evidence.
+        self._is_planner_scripted = planner is not None
 
     def __call__(self, request: ChatRequest) -> Mapping[str, Any]:
-        if _same(request.output_schema, ANSWER_SCHEMA):
+        if _same(request.output_schema, INTENT_SCHEMA):
+            if not self._is_planner_scripted:
+                return {"intent": "evidence"}
+            role = "planner"
+        elif _same(request.output_schema, ANSWER_SCHEMA):
             role = "writer"
         elif _same(request.output_schema, CRITIC_SCHEMA):
             role = "critic"

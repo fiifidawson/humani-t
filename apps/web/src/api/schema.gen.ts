@@ -5830,8 +5830,13 @@ export interface components {
             /** Nothing Found */
             nothing_found: boolean;
             /**
+             * Asks To Change Search
+             * @description The message asked for more or different papers, so it was not answered.
+             */
+            asks_to_change_search: boolean;
+            /**
              * Message
-             * @description "Nothing in this project answers that." when nothing answers it.
+             * @description "Nothing in this project answers that." when nothing answers it; "That asks to change the search, not about the papers found so far. Change the search to look for more or different papers." when it asks to change the search.
              */
             message: string | null;
             /**

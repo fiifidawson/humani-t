@@ -23,6 +23,8 @@ type Claim = Schemas["ClaimOut"];
 type AnswerSource = Schemas["AnswerSourceOut"];
 
 export const NOTHING_FOUND = "Nothing in this project answers that.";
+export const CHANGE_THE_SEARCH =
+	"That asks to change the search, not about the papers found so far. Change the search to look for more or different papers.";
 const MAX_QUESTION_LENGTH = 2000;
 const MODEL_ID = "llama3.1:8b";
 
@@ -30,6 +32,7 @@ const MODEL_ID = "llama3.1:8b";
 export type FakeOutcome =
 	| { kind: "answer"; claims: Claim[]; sources: AnswerSource[] }
 	| { kind: "nothing" }
+	| { kind: "change" }
 	| { kind: "failed"; error: string };
 
 export const EXAMPLE_ANSWER: FakeOutcome = {
@@ -172,19 +175,21 @@ export class FakeQuestions {
 			return;
 		}
 		const isNothing = outcome.kind === "nothing";
+		const isChange = outcome.kind === "change";
 		question.status = "answered";
 		question.answered_at = answeredAt;
 		question.model_id = isNothing ? null : MODEL_ID;
 		question.answer = {
-			claims: isNothing ? [] : outcome.claims,
+			claims: outcome.kind === "answer" ? outcome.claims : [],
 			nothing_found: isNothing,
-			message: isNothing ? NOTHING_FOUND : null,
+			asks_to_change_search: isChange,
+			message: isNothing ? NOTHING_FOUND : isChange ? CHANGE_THE_SEARCH : null,
 			run_id: this.access.latestRunId(question.review_id),
-			sources: isNothing ? [] : outcome.sources,
+			sources: outcome.kind === "answer" ? outcome.sources : [],
 			steps: [],
-			rounds: isNothing ? 0 : 1,
-			kept_round: isNothing ? 0 : 1,
-			stopped_because: isNothing ? null : "accepted",
+			rounds: outcome.kind === "answer" ? 1 : 0,
+			kept_round: outcome.kind === "answer" ? 1 : 0,
+			stopped_because: outcome.kind === "answer" ? "accepted" : null,
 			warnings: [],
 		};
 	}

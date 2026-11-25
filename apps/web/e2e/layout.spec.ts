@@ -210,3 +210,36 @@ test("LiGHT's wordmark is drawn in its blues, and in white on the dark theme", a
 	expect(await drawnLogo(page, blank)).toMatch(/light-logo-white\.svg$/);
 	await blank.close();
 });
+
+test("your own words stand out from the chat column in both themes", async ({
+	page,
+}) => {
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill("Your words");
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	await page
+		.getByRole("textbox", { name: "Start a review" })
+		.fill("Do cash transfers improve food security?");
+	await page.keyboard.press("Enter");
+	const yours = page.locator("[data-role='person']").first();
+	await expect(yours).toBeVisible({ timeout: 30_000 });
+
+	for (const scheme of ["light", "dark"] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		const colours = await yours.evaluate((card) => {
+			let column = card.parentElement;
+			while (
+				column !== null &&
+				getComputedStyle(column).backgroundColor === "rgba(0, 0, 0, 0)"
+			) {
+				column = column.parentElement;
+			}
+			return {
+				card: getComputedStyle(card).backgroundColor,
+				column: column === null ? "" : getComputedStyle(column).backgroundColor,
+			};
+		});
+		expect(colours.card, `${scheme} theme`).not.toBe(colours.column);
+	}
+});
