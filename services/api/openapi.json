@@ -14532,6 +14532,11 @@
             "type": "boolean",
             "title": "Nothing Found"
           },
+          "asks_to_change_search": {
+            "type": "boolean",
+            "title": "Asks To Change Search",
+            "description": "The message asked for more or different papers, so it was not answered."
+          },
           "message": {
             "anyOf": [
               {
@@ -14542,7 +14547,7 @@
               }
             ],
             "title": "Message",
-            "description": "\"Nothing in this project answers that.\" when nothing answers it."
+            "description": "\"Nothing in this project answers that.\" when nothing answers it; \"That asks to change the search, not about the papers found so far. Change the search to look for more or different papers.\" when it asks to change the search."
           },
           "run_id": {
             "anyOf": [
@@ -14605,6 +14610,7 @@
         "required": [
           "claims",
           "nothing_found",
+          "asks_to_change_search",
           "message",
           "run_id",
           "sources",

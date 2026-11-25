@@ -127,6 +127,18 @@ class TestAnswers:
         assert check_answer(Answer((evidence("Prices rose", "P1"),)), {"P1"}) == ()
 
 
+class TestSearchChangeRequests:
+    def test_a_request_to_change_the_search_holds_no_claims(self):
+        with pytest.raises(ValueError, match="asks_to_change_search"):
+            Answer((evidence("Prices rose", "P1"),), asks_to_change_search=True)
+
+    def test_a_request_to_change_the_search_is_not_a_question_nothing_answers(self):
+        answer = Answer((), asks_to_change_search=True)
+
+        assert answer.asks_to_change_search
+        assert not answer.nothing_found
+
+
 class TestThread:
     def test_a_thread_belongs_to_one_review_and_project(self):
         thread = Thread(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), NOW, uuid.uuid4())

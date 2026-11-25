@@ -27,6 +27,10 @@ MAX_ATTEMPTS = 2
 CONTEXT_TURNS = 3
 
 NOTHING_FOUND = "Nothing in this project answers that."
+CHANGE_THE_SEARCH = (
+    "That asks to change the search, not about the papers found so far. "
+    "Change the search to look for more or different papers."
+)
 INTERRUPTED = "The answer was interrupted twice, so it was given up. Ask again."
 
 
@@ -164,17 +168,24 @@ class QuestionRecord:
 
 @dataclass(frozen=True, slots=True)
 class Answer:
-    """Claims answering a question, in reading order. None means nothing answers it."""
+    """Claims answering a question, in reading order. None means nothing answers it.
+
+    `asks_to_change_search` marks a message that asked for more or different papers
+    rather than about the evidence: it is not answered, and holds no claims.
+    """
 
     claims: tuple[Claim, ...]
+    asks_to_change_search: bool = False
 
     def __post_init__(self) -> None:
         if len(self.claims) > MAX_ANSWER_CLAIMS:
             raise ValueError(f"Answer.claims must hold at most {MAX_ANSWER_CLAIMS} claims")
+        if self.asks_to_change_search and self.claims:
+            raise ValueError("Answer.claims must be empty when asks_to_change_search is set")
 
     @property
     def nothing_found(self) -> bool:
-        return not self.claims
+        return not self.claims and not self.asks_to_change_search
 
     def placed_claims(self) -> tuple[tuple[str, Claim], ...]:
         return tuple((f"claims/{i}", claim) for i, claim in enumerate(self.claims))
