@@ -1,5 +1,5 @@
 /**
- * How the brief was made: the agent loop round by round (AgentLoop), the
+ * How the brief was made: the agents' steps round by round (AgentTimeline), the
  * totals, the instructions the Writer had and what the run used.
  *
  * While the Brief stage runs there is no trace yet, so steps come from the run's stream.
@@ -20,7 +20,7 @@ import { plural } from "../reviews/format";
 import { useLiveRun } from "../reviews/liveRun";
 import { MaskedText } from "../reviews/MaskedText";
 import { useReview } from "../reviews/reviewContext";
-import { AgentLoop } from "./AgentLoop";
+import { AgentTimeline } from "./AgentTimeline";
 import { ROLES, stoppedBecause } from "./words";
 
 type Schemas = components["schemas"];
@@ -108,7 +108,8 @@ function TraceView({ trace }: { trace: Trace }) {
 				{stoppedBecause(trace.stopped_because, trace.max_rounds)} · kept round{" "}
 				{trace.kept_round} of {trace.rounds}
 			</Text>
-			<AgentLoop steps={trace.steps} isLive={false} />
+			<CanvasHeading>Steps</CanvasHeading>
+			<AgentTimeline steps={trace.steps} isLive={false} />
 			<CanvasHeading>Totals</CanvasHeading>
 			<Text>
 				Model: {trace.model_id} · {plural(trace.totals.calls, "call")} ·{" "}
@@ -157,7 +158,8 @@ function LiveSteps() {
 			<Text role="status" mb="3">
 				Still writing. Steps appear as they finish.
 			</Text>
-			<AgentLoop steps={live?.state.agentSteps ?? []} isLive />
+			<CanvasHeading>Steps</CanvasHeading>
+			<AgentTimeline steps={live?.state.agentSteps ?? []} isLive />
 		</Canvas>
 	);
 }

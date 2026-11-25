@@ -4,6 +4,10 @@ All notable changes to humani-t are recorded here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **How this brief was made** shows the agents as a timeline: every round in order, each step a sentence saying what the agent did, what it found and how long it took, with its details on demand. It replaces the loop diagram and round picker.
+
 ## [0.1.0] - 2026-11-24
 
 The first tagged release: the whole review workflow, from question to decision brief, on a self-hosted security core. It has not yet had an independent security review.
