@@ -4,6 +4,14 @@ All notable changes to humani-t are recorded here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Follow-ups recognise a request to change the search.** "Get more papers" or "update the booleans" asked under Ask about the evidence is no longer answered from the papers: the answer says it asks to change the search and offers Change the search with the words carried over.
+
+### Fixed
+
+- Your own messages in the chat stand out from the chat column in the dark theme.
+
 ### Changed
 
 - **How this brief was made** shows the agents as a timeline: every round in order, each step a sentence saying what the agent did, what it found and how long it took, with its details on demand. It replaces the loop diagram and round picker.

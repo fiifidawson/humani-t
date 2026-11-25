@@ -651,7 +651,7 @@ function AnswerCard({
 	words,
 }: {
 	question: FollowUp;
-	/** What "Change the search" starts from when nothing answers. */
+	/** What "Change the search" starts from when nothing answers, or the message asked for it. */
 	words: string;
 }) {
 	const openSource = useContext(AnswerSourceContext);
@@ -671,7 +671,9 @@ function AnswerCard({
 		[sources],
 	);
 	const masked = totalMasked(question.masked);
-	const isNothing = answer === null || answer.nothing_found;
+	// Not answered: nothing in the project answers it, or it asked to change the search.
+	const isNothing =
+		answer === null || answer.nothing_found || answer.asks_to_change_search;
 	const facts = [
 		isNothing ? null : plural(sources.length, "source"),
 		masked > 0 ? `${plural(masked, "item")} masked` : "nothing to mask",

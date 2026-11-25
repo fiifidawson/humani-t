@@ -27,10 +27,11 @@ interface ChatCardProps {
 
 const TONES = {
 	plain: { role: "humani-t", bg: "bg.panel", borderColor: "border" },
+	// Raised, not benefit's fill: in the dark theme that is the chat column's own colour.
 	person: {
 		role: "person",
-		bg: "benefit.bg",
-		borderColor: "transparent",
+		bg: "bg.muted",
+		borderColor: "border",
 		ms: "auto",
 		maxW: "85%",
 	},

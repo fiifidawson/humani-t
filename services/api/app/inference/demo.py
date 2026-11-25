@@ -81,8 +81,19 @@ def _answer(schema: Mapping[str, Any], text: str) -> dict[str, Any]:
         return _brief(schema, text)
     if "verdict" in properties:
         return _review()
+    if "intent" in properties:
+        return _intent(text)
     value = _minimal(schema)
     return value if isinstance(value, dict) else {}
+
+
+_SEARCH_CHANGE = re.compile(
+    r"\b(more papers|other papers|boolean|search terms|search again|change the search)", re.I
+)
+
+
+def _intent(text: str) -> dict[str, Any]:
+    return {"intent": "change_search" if _SEARCH_CHANGE.search(text) else "evidence"}
 
 
 def _words(text: str, limit: int) -> list[str]:

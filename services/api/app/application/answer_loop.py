@@ -1,9 +1,10 @@
 """The loop that answers a follow-up question from a review's evidence.
 
 It reuses the brief's `LoopRunner` and `revise_until_done`; only the prompts differ, and
-the answer is up to six claims, or none when nothing retrieved answers it. There is no
-Planner: the question is the search. Only masked text goes in, and only the Writer gets
-the project's writing instructions.
+the answer is up to six claims, or none when nothing retrieved answers it. The question is
+the search; the Planner only decides whether the message asks about the evidence at all,
+or asks to change the search, which is not answered here. Only masked text goes in, and
+only the Writer gets the project's writing instructions.
 """
 
 from __future__ import annotations
@@ -46,12 +47,22 @@ from app.domain.questions import MAX_ANSWER_CLAIMS, Answer, check_answer
 from app.domain.runs import JsonValue
 from app.domain.screening import Passage
 
+PLANNER_PROMPT_VERSION = "answer-planner/1"
 WRITER_PROMPT_VERSION = "answer-writer/1"
 CRITIC_PROMPT_VERSION = "answer-critic/1"
 # An answer is shorter than a brief: two rounds at most, so four model calls.
 DEFAULT_MAX_ROUNDS = 2
 
 ANSWER_SCHEMA = object_schema(claims=array_schema(CLAIM_SCHEMA, 0, MAX_ANSWER_CLAIMS))
+INTENT_SCHEMA = object_schema(intent={"enum": ["evidence", "change_search"]})
+
+_PLANNER_PROMPT = """\
+You sort a message sent to the follow-up box of a humanitarian evidence review. Answer \
+"evidence" if it asks about what the papers and documents already found say, or about \
+the decision brief. Answer "change_search" if it asks to find more or different papers: \
+to change the search terms or booleans, the sources, years, places or languages, the \
+inclusion criteria, or to search again. When unsure, answer "evidence". Placeholders \
+such as [PERSON_1] replace personal details. Answer with JSON only."""
 
 _WRITER_PROMPT = """\
 You answer a humanitarian team's follow-up question from the passages given, and from \
@@ -72,6 +83,7 @@ found by the automatic checks are listed; a draft with problems must be revised.
 "revise", with the issues to fix and up to 6 short search phrases for missing evidence. \
 Answer with JSON only."""
 
+_PLANNER = LoopPrompt(AgentRole.PLANNER, PLANNER_PROMPT_VERSION, _PLANNER_PROMPT, INTENT_SCHEMA)
 _WRITER = LoopPrompt(AgentRole.WRITER, WRITER_PROMPT_VERSION, _WRITER_PROMPT, ANSWER_SCHEMA)
 _CRITIC = LoopPrompt(AgentRole.CRITIC, CRITIC_PROMPT_VERSION, _CRITIC_PROMPT, CRITIC_SCHEMA)
 
@@ -139,6 +151,7 @@ class AnswerLoop:
         )
         manifest: dict[str, JsonValue] = {
             "prompt_versions": {
+                "planner": PLANNER_PROMPT_VERSION,
                 "writer": WRITER_PROMPT_VERSION,
                 "critic": CRITIC_PROMPT_VERSION,
             },
@@ -151,6 +164,18 @@ class AnswerLoop:
             return AnswerResult(
                 Answer(()),
                 self._inference.model_id,
+                0,
+                0,
+                None,
+                (),
+                (),
+                tuple(runner.steps),
+                manifest,
+            )
+        if await self._asks_to_change_search(runner, question):
+            return AnswerResult(
+                Answer((), asks_to_change_search=True),
+                runner.model_id,
                 0,
                 0,
                 None,
@@ -212,6 +237,20 @@ class AnswerLoop:
             manifest=manifest,
             instructions=instructions,
         )
+
+    @staticmethod
+    async def _asks_to_change_search(runner: LoopRunner, question: str) -> bool:
+        # Asked only once something was retrieved: with nothing found, the answer already
+        # offers Change the search, and no model call is spent on it.
+        intent = await runner.ask(
+            _PLANNER,
+            0,
+            {"message": question},
+            lambda output: str(output["intent"]),
+            lambda value: {"intent": value},
+        )
+        # Unreadable twice: answered as a question, as before this step existed.
+        return intent == "change_search"
 
 
 def _parse_answer(answer: Mapping[str, Any], kinds: Mapping[str, SourceKind]) -> Answer:

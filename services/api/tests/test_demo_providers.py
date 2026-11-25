@@ -14,6 +14,7 @@ from uuid import UUID
 
 import pytest
 
+from app.application.answer_loop import INTENT_SCHEMA
 from app.application.brief_loop import CRITIC_SCHEMA, PLANNER_SCHEMA, WRITER_SCHEMA
 from app.application.planning import CLARIFY_SCHEMA, DRAFT_SCHEMA
 from app.application.screening import screening_request
@@ -103,6 +104,20 @@ class TestDemoModel:
         assert cited == {"P3"}
         assert [o["name"] for o in answer["options"]] == ["Cash", "Food"]
         assert "do no harm" in [row["criterion"] for row in answer["trade_offs"]]
+
+    @pytest.mark.parametrize(
+        ("message", "intent"),
+        [
+            ("Can we update the booleans to get more papers?", "change_search"),
+            ("Do cash transfers raise prices?", "evidence"),
+        ],
+    )
+    async def test_it_reads_a_request_for_more_papers_as_a_change_to_the_search(
+        self, message: str, intent: str
+    ):
+        answer = await _answer(_request(INTENT_SCHEMA, json.dumps({"message": message})))
+
+        assert answer == {"intent": intent}
 
     async def test_any_other_schema_gets_the_smallest_answer_that_matches_it(self):
         schema = {
