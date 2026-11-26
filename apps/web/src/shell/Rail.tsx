@@ -6,15 +6,7 @@
 import { Box, chakra, Flex, IconButton, Text } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-	House,
-	LayoutGrid,
-	LogOut,
-	PanelLeft,
-	Plus,
-	Scale,
-	Star,
-} from "lucide-react";
+import { House, LayoutGrid, LogOut, PanelLeft, Plus, Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { unwrapEmpty } from "../api/client";
 import { useApi } from "../app/api-context";
@@ -138,16 +130,6 @@ export function Rail({
 						</Link>
 					</RailLink>
 				</li>
-				{session.data?.can_evaluate ? (
-					<li>
-						<RailLink>
-							<Link to="/admin/evaluations" onClick={onNavigate}>
-								<Scale size={18} />
-								<span className="rail-label">Evaluations</span>
-							</Link>
-						</RailLink>
-					</li>
-				) : null}
 			</chakra.ul>
 			{recent.length === 0 ? null : (
 				<>

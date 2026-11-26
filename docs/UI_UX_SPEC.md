@@ -132,7 +132,6 @@ Organisation (one deployment)
 /search?q=…                     Search across projects
 /settings                       Account: sessions, password, MFA
 /admin/users                    Admin: invitations, users
-/admin/evaluations              Admin: evaluations
 /sign-in, /mfa, /reset          Sign-in flow
 ```
 
@@ -1078,12 +1077,6 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 ### 6.15 Admin
 
 - **Users and invitations:** invite (email, instance role), resend, revoke; list users with status, last sign-in, MFA set up or not; disable a user.
-- **Evaluations** (CHITCHAT reference §7):
-  - "New evaluation": pick a project (its index), upload a question file, optionally upload other systems' answers (one file per question), pick the judge model.
-  - Results: a table per system pair with the six metrics (mean, difference), and wins, ties and losses.
-  - Each judgement: the question, the two answers side by side as A and B in the order the judge saw them, the scores and the reason, then a "Reveal systems" toggle.
-  - A note on fairness: "The judge should be from a different model family than the writer."
-  - **Built (P4, ADR 0022):** `/admin/evaluations` lists the evaluations of projects the administrator belongs to; **New evaluation** takes a project, a question file (plain text, one question per line), up to 2 other systems' answers (one JSON Lines file per system, `{"answer": "…"}` per question, in order) and a judge from the models the operator configured. Each evaluation page has a table per pair, the judgements as A and B with **Reveal systems**, and the line "Made by … Judged by …". The rail shows **Evaluations** to administrators only; the API refuses everyone else.
 
 ### 6.16 Account
 
@@ -1311,7 +1304,7 @@ The legend sits at the top of the options section: "+ benefit · − risk · [P0
 
 ### 8.6 Model disclosure
 
-- Every brief, run and evaluation names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b"
+- Every brief and run names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b"
 - If a deployment uses a hosted provider, the line says so: "Made by … at Infomaniak (no training, no retention)".
 
 ### 8.7 The caveat
@@ -1753,7 +1746,7 @@ Budgets are checked in CI with Lighthouse on a throttled profile.
 ### 13.2 How
 
 - **Text first.** The brief endpoint returns the whole brief as JSON; the screen renders the header and bottom line first, then the rest. Passages load when a chip is opened, not before.
-- **Split code by route.** The masking review, evaluation, compare and PRISMA code load only when used.
+- **Split code by route.** The masking review, compare and PRISMA code load only when used.
 - **SSE, not polling.** One small event at a time.
 - **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event. Built in P4: kept per browser; the offer appears once, at the top of the signed-in app, when `navigator.connection` reports `saveData` or an `effectiveType` of `slow-2g`, `2g` or `3g`, and either answer ends it. Avatars and abstracts in paper rows do not exist in the app yet, so there is nothing to hide. Gates and the end of a run still show at once.
 - **Resume after a drop.** Unsent composer text is kept in memory (and in `sessionStorage` if the user allows it, never question text in `localStorage` for privacy). The event stream resumes from the last id.
@@ -1815,7 +1808,7 @@ Each phase is usable on its own. Endpoints marked **new** are not in the API yet
 | **P1: read a brief** | App shell, sign-in and MFA, re-auth, Home (pinned, recent), project list (no grouping), workspace with chat (question, receipt, draft, run strip, screening, brief cards), brief canvas read-only, source panel, how this was made, light and dark | Auth endpoints; `POST /projects`; `…/plan`, `/plan/answers`, `/plan/changes`, `/plan/accept`; runs and their events (`POST /reviews/{id}/runs`, `GET /runs/{run_id}/events`, `POST /runs/{run_id}/cancel`); `…/brief`, `/brief/evidence/{tag}`, `/brief/trace`; `…/status` |
 | **P2: run a review well** | Search draft canvas with diff and origin, gates (vocabulary, privacy review), documents, screening table with expanded rows, rules editor, PRISMA, downloads, ask with threads, project settings and members | `…/documents`; `…/papers`; `PUT …/rules`; `…/exports/{name}`; `…/questions` (+ **new** thread id); `gate.*` events and `POST /gates/{gate_id}`; members endpoints |
 | **P3: find and compare** | Needs you, collections and tags, grouping and filters, project timeline, compare runs, search and command palette, seen and saved marks, trade-off priorities, brief versions and compare, your view first | **new**: collections, tags, pins, seen and saved, `GET /search`, run manifests endpoint, brief versions, "your view" storage |
-| **P4: field and admin** | Low data mode, offline brief download, evaluation admin, retention notices, coverage estimate | `/admin/evaluations`; **new**: retention settings, coverage estimate |
+| **P4: field and admin** | Low data mode, offline brief download, retention notices, coverage estimate | **new**: retention settings, coverage estimate |
 
 ---
 

@@ -117,9 +117,6 @@ class CurrentSessionOut(BaseModel):
     user: UserOut
     session: SessionOut
     mfa_enrolment_required: bool
-    can_evaluate: bool = Field(
-        description="An instance admin on a deployment with evaluations turned on (ADR 0022)."
-    )
 
 
 class InvitationOut(BaseModel):

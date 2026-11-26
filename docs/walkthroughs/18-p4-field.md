@@ -1,6 +1,6 @@
 # 18 — P4: low data mode and the brief as a PDF
 
-> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [18 — P4: evaluations](18-p4-evaluations.md) · **Next:** none yet
+> **Milestones:** P4 (UI_UX_SPEC §15) · **Status:** done · **Previous:** [18 — P4: coverage estimate](18-p4-coverage.md) · **Next:** none yet
 
 Someone on a slow or costly connection can now turn on low data mode, or accept it when the app offers it: the app then uses the device's own fonts, stops animating, and redraws a live run every 10 seconds instead of on every event. Anyone can now open the decision brief as a print page and save it as a PDF to read offline, with the caveat on every page and the sources at the end. It serves [UI_UX_SPEC §13](../UI_UX_SPEC.md#13-low-bandwidth-and-field-use), [§6.16](../UI_UX_SPEC.md#616-account) and [§6.9](../UI_UX_SPEC.md#69-decision-brief) "Downloads and sharing".
 

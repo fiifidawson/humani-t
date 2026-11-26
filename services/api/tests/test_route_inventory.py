@@ -122,18 +122,6 @@ RETENTION_ROUTES = frozenset(
 # membership walks below cannot reach them: each filters by membership itself.
 CROSS_PROJECT_ROUTES = frozenset({("GET", "/api/v1/search")})
 
-# Evaluations (walkthrough 18, evaluations): instance administrators only, and inside a
-# project the administrator must be a member of, checked by the use case.
-_EVALUATIONS = "/api/v1/admin/evaluations"
-EVALUATION_ROUTES = frozenset(
-    {
-        ("GET", _EVALUATIONS),
-        ("POST", _EVALUATIONS),
-        ("GET", f"{_EVALUATIONS}/judges"),
-        ("GET", f"{_EVALUATIONS}/{{evaluation_id}}"),
-    }
-)
-
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
@@ -227,11 +215,6 @@ class TestInventory:
 
         assert sorted(CROSS_PROJECT_ROUTES - registered_routes(app)) == []
 
-    def test_every_evaluation_route_in_the_contract_is_registered(self):
-        app = make_project_harness().app
-
-        assert sorted(EVALUATION_ROUTES - registered_routes(app)) == []
-
     def test_every_route_inside_a_project_names_the_project_in_its_path(self):
         """Membership is checked against the path, never a body or query field."""
         app = make_project_harness().app
@@ -263,20 +246,6 @@ class TestSignInIsRequired:
             if method not in _UNSAFE_METHODS:
                 continue
             response = browser.request(method, fill_path(template), json=_body_for(method))
-            if response.status_code != 403:
-                failures.append((method, template, response.status_code))
-
-        assert failures == []
-
-
-class TestAdministratorsOnly:
-    def test_every_evaluation_route_refuses_a_member_who_is_not_an_administrator(self):
-        """Before the body is read, so the answer cannot depend on it."""
-        team = make_team()
-
-        failures = []
-        for method, template in sorted(EVALUATION_ROUTES):
-            response = send(team.owner, method, _filled(team, template), _body_for(method))
             if response.status_code != 403:
                 failures.append((method, template, response.status_code))
 
