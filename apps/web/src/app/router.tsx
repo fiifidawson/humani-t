@@ -424,34 +424,6 @@ const savedRoute = createRoute({
 	),
 });
 
-// The admin area: the API refuses anyone who is not an administrator.
-const evaluationsRoute = createRoute({
-	getParentRoute: () => signedInRoute,
-	path: "admin/evaluations",
-	component: lazyRouteComponent(
-		() => import("../features/admin/EvaluationsPage"),
-		"EvaluationsPage",
-	),
-});
-
-const newEvaluationRoute = createRoute({
-	getParentRoute: () => signedInRoute,
-	path: "admin/evaluations/new",
-	component: lazyRouteComponent(
-		() => import("../features/admin/NewEvaluationPage"),
-		"NewEvaluationPage",
-	),
-});
-
-const evaluationRoute = createRoute({
-	getParentRoute: () => signedInRoute,
-	path: "admin/evaluations/$evaluationId",
-	component: lazyRouteComponent(
-		() => import("../features/admin/EvaluationPage"),
-		"EvaluationPage",
-	),
-});
-
 const routeTree = rootRoute.addChildren([
 	signInRoute,
 	enrolRoute,
@@ -480,9 +452,6 @@ const routeTree = rootRoute.addChildren([
 		]),
 		accountRoute,
 		savedRoute,
-		evaluationsRoute,
-		newEvaluationRoute,
-		evaluationRoute,
 	]),
 ]);
 

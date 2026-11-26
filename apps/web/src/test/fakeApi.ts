@@ -10,7 +10,6 @@ import { HttpResponse, http } from "msw";
 import type { components } from "../api/schema.gen";
 import { FakeCollections } from "./fakeCollections";
 import { FakeDocuments } from "./fakeDocuments";
-import { FakeEvaluations } from "./fakeEvaluations";
 import { FakeHistory } from "./fakeHistory";
 import {
 	jsonBody,
@@ -246,15 +245,6 @@ export class FakeApi {
 	readonly search = new FakeSearch({
 		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
 		projects: () => this.projects,
-	});
-	/** The operator's HUMANI_T_EVALUATIONS_ENABLED; off, as on a new deployment. */
-	isEvaluationsOn = false;
-	/** The admin area's evaluations (fakeEvaluations.ts). */
-	readonly evaluations = new FakeEvaluations({
-		refuseUnlessSignedIn: () => this.refuseUnlessSignedIn(),
-		isAdmin: () => this.currentUser()?.is_admin ?? false,
-		roleIn: (projectId) =>
-			this.projects.find((p) => p.id === projectId)?.role ?? null,
 	});
 	/** Invitation and reset tokens as the emailed links carry them. */
 	readonly invitations = new Map<string, string>();
@@ -654,7 +644,6 @@ export class FakeApi {
 						aal: this.session.stage === "full" ? 2 : 1,
 					},
 					mfa_enrolment_required: this.session.stage === "enrolment",
-					can_evaluate: user.is_admin && this.isEvaluationsOn,
 				});
 			}),
 
@@ -1268,7 +1257,6 @@ export class FakeApi {
 			...this.history.handlers(),
 			...this.search.handlers(),
 			...this.retention.handlers(),
-			...this.evaluations.handlers(),
 		];
 	}
 }
