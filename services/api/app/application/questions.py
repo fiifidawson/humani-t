@@ -461,27 +461,6 @@ class QuestionWorker:
         result = await self._run_loop(work, privacy, in_force, keep_lease)
         await self._finish(record, result=result, run_id=work.run_id)
 
-    async def answer_alone(
-        self,
-        project_id: UUID,
-        review_id: UUID,
-        question: str,
-        *,
-        asked_at: datetime,
-        on_step: StepSink,
-    ) -> AnswerResult:
-        """Answer one stored question outside any thread, as an evaluation asks it.
-
-        The same corpus, instructions and loop as a thread's question, with no earlier
-        turns. The caller checks the question was stored as the project's masking needs.
-        """
-        async with self._storage.unit_of_work() as uow:
-            privacy = await self._rules.privacy_for(uow, project_id)
-            run_id, corpus = await self._corpus(uow, review_id, is_masked=privacy.is_masked)
-            in_force = await self._instructions.in_force(uow, project_id, asked_at)
-        work = _Work(question, (), run_id, corpus)
-        return await self._run_loop(work, privacy, in_force, on_step)
-
     async def _run_loop(
         self,
         work: _Work,

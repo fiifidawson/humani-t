@@ -299,10 +299,6 @@ What crypto-shredding does not cover:
 - **Container logs.** Application logs carry identifiers, not content, and are rotated by Docker (`max-size` 10 MB, 5 files per container).
 - **The disk space of uploaded files.** A deleted project's files stay in the `documents` volume, unreadable without the destroyed key, until they are swept away. No sweep exists yet. Deleting a single document deletes its file at once.
 
-### Evaluations (off by default)
-
-Evaluation admin compares humani-t's answers with other systems' ([ADR 0022](../adr/0022-evaluations-are-judged-blind-inside-their-project.md)). It is **off** until you set `HUMANI_T_EVALUATIONS_ENABLED=true` in `.env` and restart the API and the worker. While it is off, its pages and routes answer "not found" to everyone, administrators included, the Evaluations link is hidden, and the worker judges nothing.
-
 ### Deleting projects for age (retention period)
 
 A deployment can delete projects that nobody has worked on for a while. It is **off** unless you set `HUMANI_T_RETENTION_DAYS` in `.env` (30 to 3650 days), and then restart the stack. With it set:

@@ -520,33 +520,3 @@ def test_env_example_documents_every_setting():
     }
 
     assert documented == set(Settings.model_fields)
-
-
-class TestJudgeModels:
-    def test_the_deployments_own_model_judges_first_and_others_follow_once(self):
-        settings = Settings(
-            environment=Environment.TEST,
-            inference_model="qwen3.5:9b",
-            judge_models=" mistral-small:24b, qwen3.5:9b ,gemma3:12b,",
-        )
-
-        assert settings.judge_model_ids == ("qwen3.5:9b", "mistral-small:24b", "gemma3:12b")
-
-    def test_none_configured_means_the_deployments_own_model_only(self):
-        settings = Settings(environment=Environment.TEST, inference_model="qwen3.5:9b")
-
-        assert settings.judge_model_ids == ("qwen3.5:9b",)
-
-    def test_a_cloud_judge_is_refused_unless_hosted_models_are_allowed(self):
-        with pytest.raises(ValidationError, match="judge_models"):
-            Settings(environment=Environment.TEST, judge_models="gpt-oss:120b-cloud")
-
-    def test_a_cloud_judge_makes_the_model_hosted(self):
-        settings = Settings(
-            environment=Environment.TEST,
-            inference_url="http://127.0.0.1:11434",
-            judge_models="gpt-oss:120b-cloud",
-            allow_hosted_inference=True,
-        )
-
-        assert settings.is_inference_hosted

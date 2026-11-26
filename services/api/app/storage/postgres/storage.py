@@ -37,7 +37,6 @@ from app.storage.postgres.collections import (
     PostgresProjectTagsRepository,
 )
 from app.storage.postgres.documents import PostgresDocumentRepository
-from app.storage.postgres.evaluations import PostgresEvaluationRepository
 from app.storage.postgres.label_rules import PostgresLabelRulesRepository
 from app.storage.postgres.leanings import PostgresLeaningRepository
 from app.storage.postgres.marks import PostgresDismissalRepository, PostgresMarkRepository
@@ -666,7 +665,6 @@ class PostgresUnitOfWork:
         self.plans = PostgresPlanRepository(connection)
         self.briefs = PostgresDecisionBriefRepository(connection)
         self.questions = PostgresQuestionRepository(connection)
-        self.evaluations = PostgresEvaluationRepository(connection)
         self.masking_rules = PostgresMaskingRuleRepository(connection)
         self.paper_masks = PostgresPaperMaskRepository(connection)
         self.documents = PostgresDocumentRepository(connection)

@@ -63,7 +63,6 @@ Conventions used throughout:
 | 17 | [P3: find](17-p3-find.md) | UI_UX_SPEC §15 P3 | ✅ done | Search across a person's projects without an index (ADR-0018), the Ctrl K search and command palette, and the rest of the §11.5 keyboard, with single-key shortcuts that can be turned off. |
 | 18 | [P4: retention](18-p4-retention.md) | UI_UX_SPEC §15 P4 | ✅ done | An operator's retention period, off by default; "Deleted in N days unless kept" in Needs you, the date in Project settings, Keep, and deletion when due through the normal delete (ADR-0020). |
 | 18 | [P4: coverage](18-p4-coverage.md) | UI_UX_SPEC §15 P4 | ✅ done | The coverage estimate on the screening results: a capture-recapture range across paper sources, always called an estimate, or no estimate and why (ADR-0021); recorded in the run's manifest. |
-| 18 | [P4: evaluations](18-p4-evaluations.md) | UI_UX_SPEC §15 P4 | ✅ done | The admin area's evaluations: humani-t's answers against other systems', judged blind by a model the operator configured, inside a project the administrator belongs to (ADR-0022). |
 | 18 | [P4: field](18-p4-field.md) | UI_UX_SPEC §15 P4 | ✅ done | Low data mode (system fonts, no motion, run progress every 10 s, offered once on a slow connection) and the brief as a PDF from the browser's print page (ADR-0019). |
 
 Planned phases get their file, from [`TEMPLATE.md`](TEMPLATE.md), when their work starts. M12 (optional OIDC single sign-on) is in the plan but has no phase assigned yet.
@@ -74,7 +73,7 @@ As of 21 November 2026, everything in the plan is built, tested and merged to `m
 
 - **Checked on every change:** the API suite against Postgres and Valkey (about 3,500 tests), ruff, pyright, the layering rules, the web lint and type check, about 640 vitest tests, the Playwright browser tests, the image and dependency scans, CodeQL, and a smoke test of the whole Compose stack on x86 and Arm.
 - **Seen end to end:** a real review with a hosted model (gpt-5-mini) from question to brief, document upload and its masking review, and the P3 and P4 screens in a browser.
-- **Off until the operator turns them on:** sending unmasked text to a hosted model (ADR 0014), the retention period (ADR 0020) and evaluation admin (ADR 0022).
+- **Off until the operator turns them on:** sending unmasked text to a hosted model (ADR 0014) and the retention period (ADR 0020).
 
 Nothing here has had an independent security review. Until it has, use fictional or already-public data only.
 
@@ -102,13 +101,13 @@ The brief's 18 rules are the requirements; [`security/controls.md`](../security/
 | A request to an internal address (SSRF) | One guarded fetcher with an allow list, checked again at connect time and on every redirect | [09](09-plan-and-discover.md) |
 | Personal data reaching a hosted model | Masking before anything is sent, project rules, the owner's review of each document, a last check on every call | [10](10-masking.md), [16](16-documents.md) |
 | A malicious upload | Type and size checks before storage, malware scanning, text read in an isolated child process within limits | [16](16-documents.md) |
-| Uploaded text giving the model instructions | Passed only as data in structured requests, with output limited to a schema | [16](16-documents.md), [18 — evaluations](18-p4-evaluations.md) |
+| Uploaded text giving the model instructions | Passed only as data in structured requests, with output limited to a schema | [16](16-documents.md) |
 | Learning that someone else's project exists | The same `404` as for a missing project, in every list, count, search and activity line | [07](07-projects-and-roles.md), [17 — find](17-p3-find.md) |
 
 ## What comes next
 
 1. **An independent security review** of everything built, then a professional assessment, before any real data goes in.
 2. **Hosting:** try one of the deployment guides on a real server ([Oracle](../deploy/oracle-cloud.md) or another host); none has been run end to end yet.
-3. **Gaps found in P4:** the first screen's JavaScript is about 44 KB over its 170 KB budget, and Lighthouse does not check it in CI ([18 — field](18-p4-field.md)); evaluations cannot be deleted or rerun, and the admin screens for users and invitations are not built ([18 — evaluations](18-p4-evaluations.md)); printing the brief in Safari is not checked.
+3. **Gaps found in P4:** the first screen's JavaScript is about 44 KB over its 170 KB budget, and Lighthouse does not check it in CI ([18 — field](18-p4-field.md)); the admin screens for users and invitations are not built; printing the brief in Safari is not checked.
 4. **The spec's open questions** that are still open ([UI_UX_SPEC §16](../UI_UX_SPEC.md#16-open-questions)): phones, languages (French and Arabic), notifications, sharing, and who sees raw-text views in the audit log.
 5. **Masking quality:** a larger name model would catch names the small one misses ([10 — masking](10-masking.md)).
