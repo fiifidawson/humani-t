@@ -13,7 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.briefs import AgentStepOut, ClaimOut, PassageOut, ProblemOut
 from app.application.questions import AnswerView, QuestionView, ThreadView
 from app.domain.briefs import SourceKind
-from app.domain.questions import MAX_QUESTION_LENGTH, NOTHING_FOUND, QuestionStatus
+from app.domain.questions import (
+    CHANGE_THE_SEARCH,
+    MAX_QUESTION_LENGTH,
+    NOTHING_FOUND,
+    QuestionStatus,
+)
 
 
 class QuestionIn(BaseModel):
@@ -35,7 +40,13 @@ class AnswerSourceOut(BaseModel):
 class AnswerOut(BaseModel):
     claims: list[ClaimOut] = Field(description="Up to 6; empty when nothing answers it.")
     nothing_found: bool
-    message: str | None = Field(description=f'"{NOTHING_FOUND}" when nothing answers it.')
+    asks_to_change_search: bool = Field(
+        description="The message asked for more or different papers, so it was not answered."
+    )
+    message: str | None = Field(
+        description=f'"{NOTHING_FOUND}" when nothing answers it; "{CHANGE_THE_SEARCH}" '
+        "when it asks to change the search."
+    )
     run_id: UUID | None = Field(description="The run whose evidence was searched.")
     sources: list[AnswerSourceOut] = Field(description="Every cited tag, by first appearance.")
     steps: list[AgentStepOut] = Field(description="How the answer was made, in order.")
@@ -65,10 +76,12 @@ class AnswerOut(BaseModel):
                 )
             )
         nothing = view.answer.nothing_found
+        is_change = view.answer.asks_to_change_search
         return cls(
             claims=[ClaimOut.from_domain(c) for c in view.answer.claims],
             nothing_found=nothing,
-            message=NOTHING_FOUND if nothing else None,
+            asks_to_change_search=is_change,
+            message=NOTHING_FOUND if nothing else CHANGE_THE_SEARCH if is_change else None,
             run_id=view.run_id,
             sources=sources,
             steps=[AgentStepOut.from_domain(s) for s in view.steps],

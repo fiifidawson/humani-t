@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import {
 	answerCiting,
+	CHANGE_THE_SEARCH,
 	EXAMPLE_ANSWER,
 	type FakeOutcome,
 	MODEL_DOWN_ANSWER,
@@ -687,6 +688,29 @@ function answerOf(evidence: number, reasoning: number): FakeOutcome {
 		],
 	};
 }
+
+describe("when a follow-up asks to change the search (UI_UX_SPEC §6.12)", () => {
+	it("says it was not answered and offers Change the search, starting from the message", async () => {
+		const { path, review, questions } = reviewed();
+		questions.addAnswered(
+			review,
+			"Can we update the booleans to get more papers?",
+			{
+				kind: "change",
+			},
+		);
+		const { user } = renderApp(path);
+
+		const answer = await screen.findByRole("article", { name: "Answer" });
+		expect(answer).toHaveTextContent(CHANGE_THE_SEARCH);
+		expect(answer).not.toHaveTextContent("0 sources");
+		await user.click(within(answer).getByRole("button", { name: CHANGE }));
+
+		expect(screen.getByRole("textbox", { name: CHANGE })).toHaveValue(
+			"Can we update the booleans to get more papers?",
+		);
+	});
+});
 
 describe("a long answer (UI_UX_SPEC §5.3.9)", () => {
 	it("shows the first 60 words, and Read all shows the rest in place", async () => {

@@ -4,6 +4,22 @@ All notable changes to humani-t are recorded here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Follow-ups recognise a request to change the search.** "Get more papers" or "update the booleans" asked under Ask about the evidence is no longer answered from the papers: the answer says it asks to change the search and offers Change the search with the words carried over.
+
+### Removed
+
+- **Evaluation admin** and its settings, `HUMANI_T_EVALUATIONS_ENABLED` and `HUMANI_T_JUDGE_MODELS`. The session no longer carries `can_evaluate`. Migration 0024 drops the `evaluations` table and every evaluation in it.
+
+### Fixed
+
+- Your own messages in the chat stand out from the chat column in the dark theme.
+
+### Changed
+
+- **How this brief was made** shows the agents as a timeline: every round in order, each step a sentence saying what the agent did, what it found and how long it took, with its details on demand. It replaces the loop diagram and round picker.
+
 ## [0.1.0] - 2026-11-24
 
 The first tagged release: the whole review workflow, from question to decision brief, on a self-hosted security core. It has not yet had an independent security review.

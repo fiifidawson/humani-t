@@ -178,6 +178,7 @@ class _QuestionSeal:
 def _answer_to_dict(result: AnswerResult, run_id: UUID | None) -> dict[str, Any]:
     return {
         "claims": [claim_to_dict(c) for c in result.answer.claims],
+        "asks_to_change_search": result.answer.asks_to_change_search,
         "run_id": None if run_id is None else str(run_id),
         "evidence": [passage_to_dict(p) for p in result.evidence],
         "steps": [s.to_payload() for s in result.steps],
@@ -195,7 +196,11 @@ def _answer_to_dict(result: AnswerResult, run_id: UUID | None) -> dict[str, Any]
 def _answer_from_dict(data: Mapping[str, Any]) -> AnswerView:
     run_id = data["run_id"]
     return AnswerView(
-        answer=Answer(tuple(claim_from_dict(c) for c in data["claims"])),
+        answer=Answer(
+            tuple(claim_from_dict(c) for c in data["claims"]),
+            # Answers stored before the Planner's check have no such key: all were answers.
+            asks_to_change_search=bool(data.get("asks_to_change_search", False)),
+        ),
         run_id=None if run_id is None else UUID(run_id),
         evidence=tuple(passage_from_dict(p) for p in data["evidence"]),
         steps=tuple(AgentStep.from_payload(s) for s in data["steps"]),
@@ -455,27 +460,6 @@ class QuestionWorker:
 
         result = await self._run_loop(work, privacy, in_force, keep_lease)
         await self._finish(record, result=result, run_id=work.run_id)
-
-    async def answer_alone(
-        self,
-        project_id: UUID,
-        review_id: UUID,
-        question: str,
-        *,
-        asked_at: datetime,
-        on_step: StepSink,
-    ) -> AnswerResult:
-        """Answer one stored question outside any thread, as an evaluation asks it.
-
-        The same corpus, instructions and loop as a thread's question, with no earlier
-        turns. The caller checks the question was stored as the project's masking needs.
-        """
-        async with self._storage.unit_of_work() as uow:
-            privacy = await self._rules.privacy_for(uow, project_id)
-            run_id, corpus = await self._corpus(uow, review_id, is_masked=privacy.is_masked)
-            in_force = await self._instructions.in_force(uow, project_id, asked_at)
-        work = _Work(question, (), run_id, corpus)
-        return await self._run_loop(work, privacy, in_force, on_step)
 
     async def _run_loop(
         self,

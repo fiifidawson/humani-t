@@ -132,7 +132,6 @@ Organisation (one deployment)
 /search?q=…                     Search across projects
 /settings                       Account: sessions, password, MFA
 /admin/users                    Admin: invitations, users
-/admin/evaluations              Admin: evaluations
 /sign-in, /mfa, /reset          Sign-in flow
 ```
 
@@ -206,7 +205,7 @@ Inside the canvas, a **source panel** can slide over from the right edge (400 px
 
 **Chat roles.** Readers tell the speakers apart at a glance, and colour is never the only sign:
 
-- **The person's own words** (the question, change requests) sit on the right as a tinted bubble marked "You".
+- **The person's own words** (the question, change requests) sit on the right as a raised bubble (`bg.muted` with a hairline) marked "You", distinct from the chat column in both themes.
 - **Humani-T's cards** sit on the left, plain.
 - **What needs the person** has a blue bar on the left and a hand icon.
 - **A problem** has a purple bar, an alert icon and the word "Problem".
@@ -739,7 +738,7 @@ The run strip (L0 and L1) is in [5.3.5](#535-run-strip). The canvas (L2) shows:
 
 - **Stage row:** each stage with its state icon (✓ done, ◐ running, ○ waiting, ✗ failed, ⏸ waiting for a gate, ■ cancelled) and its duration once done. Clicking a finished stage shows its summary box (the same facts as the terminal's summary boxes).
 - **Live list:** during Screen, one row per paper as it finishes, newest at the top, with its label and the one-line reason. It holds the last 200 rows; "Open papers" shows the rest.
-- **Brief stage:** the live list becomes the agent loop (section [6.11](#611-how-this-was-made)), following the round being written, the running agent marked.
+- **Brief stage:** the live list becomes the agents' timeline (section [6.11](#611-how-this-was-made)), the step being run last.
 - **Cancel** asks once: "Stop this run? Finished stages are kept, and you can run the rest later." Then the strip shows ■.
 - **Failure:** the stage turns ✗ with the plain message and the actions "Try again from this stage" and "Details".
 - **Connection lost:** a thin banner "Reconnecting…", then the strip catches up from the last event id (section [11.2](#112-live-events)). Never a blank screen.
@@ -982,40 +981,44 @@ Source: `GET /projects/{id}/brief`, `…/brief/evidence/{tag}`, `…/brief/trace
 
 ### 6.11 How this was made
 
-**Purpose.** Show the agent loop as a picture of the loop, one round at a time, with every step's detail beneath it, for people who want to know how the brief was built.
+**Purpose.** Show how the brief was built as a record of what each agent did and decided, for people who want to check it. A timeline, as the DWP and Primer design systems draw a record of past events: plain sentences, the detail on demand, nothing said twice.
 
 ```text
 How this brief was made
 
 Stopped because: accepted by the Critic · kept round 2 of 3
-( Before the first draft ) ( Round 1 ) [ Round 2 ]
 
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐ Checks ┌─────────────┐
-│ ☰ Planner   │ → │ ⌕ Retriever │ → │ ✎ Writer    │ no     │ ⚖ Critic    │
-│ ✓ done      │   │ ◌ not run   │   │ ✓ done      │ probl. │ ✓ done      │
-│ 1 call·41 s │   │             │   │ 3 options · │   →    │ accept      │
-│             │   │             │   │ 2 min       │        │             │
-└─────────────┘   └──────┬──────┘   └─────────────┘        └──────┬──────┘
-                         ↑                                        │
-                         └────────────── ↺ accepted ✓ ────────────┘
-
+Steps
+Before the first draft
+ ☰  Planner set the plan                         41 s  Details ⌄
+ │  3 options · 2 criteria · 2 sub-questions
+ ⌕  Retriever searched the papers                 1 s  Details ⌄
+    2 searches · 5 new passages (5 in all)
+Round 1
+ ✎  Writer drafted the brief                    2 min  Details ⌄
+ │  3 options · 14 claims, 10 from sources
+ ⛨  Checks found 1 problem                             Details ⌄
+ │  In-kind food has no sourced benefit.
+ ⚖  Critic asked for a revision and 1 more search 30 s Details ⌄
+    Price effects in small markets are thin.
 Round 2
-✗ Writer · unusable answer · The model's answer did not match …   ▸
-✓ Writer · 3 options · 16 claims · 2 min                           ▸
-✓ Checks · no problems                                             ▸
-✓ Critic · accept                                                  ▸
+ ✕  Writer failed                                 5 s
+ │  The model server isn't answering.
+ ⚖  Critic accepted the draft                    28 s  Details ⌄
 
+Totals
 Model: qwen3.5:9b · 9 calls · 61,200 tokens in, 8,900 out
 ```
 
-- The loop: the Planner leads into Retriever → Writer → Critic, and an arrow runs from the Critic back to the Retriever. Each agent has its icon (Planner `ListTree`, Retriever `Search`, Writer `PenLine`, Critic `Scale`); the checks are code, not an agent, so they are a badge (`ShieldCheck`) on the way from the Writer to the Critic, saying "no problems" or how many.
-- One round at a time. The round picker (Before the first draft, Round 1, Round 2, …) opens on the latest round, or on the round being written while the run is live. Each agent shows that round's one-line result; the Planner, which runs once, shows its own. The Retriever's step in a round is the search the Critic asked for, so it runs last.
-- The way back is labelled with the Critic's outcome: "revise", "asked for 2 searches" or "accepted ✓", and "overruled by the checks" when the checks found problems in an accepted draft.
-- Each agent's state is an icon and a word, never colour alone: done, failed (or refused, unusable answer) with its short error, running (a spinner, which stops under reduced motion and in low data mode), or not reached yet / not run (muted, dashed).
-- Under the picture, the round's steps, one row per `agent.step`. Each row opens to its detail: the plan, the queries, the Critic's scores, issues and requests, the checks' problems, the model, prompt version, tokens and time. While live, the step being run is the last row.
-- The picture is hidden from screen readers: the picker and the step list say the same in text. It follows the canvas's own width, not the window's: in a narrow canvas the agents stack and the way back is a line beneath them.
+- Under a "Steps" heading, every round, oldest first, under its own heading: "Before the first draft", then "Round 1", "Round 2"… Each round is an ordered list named by its heading. The loop shows itself: the Critic's request ends one round and the Writer's revision opens the next. No picture of the loop, no round picker.
+- Each step is a sentence that says what the agent did or decided: "Planner set the plan", "Retriever searched the papers" (before the first draft) or "Retriever ran the Critic's searches", "Writer drafted the brief" (round 1) or "Writer revised the brief", "Checks found no problems" or "found 2 problems", "Critic accepted the draft", "Critic asked for a revision and 2 more searches", "Critic accepted the draft, but the checks overruled it". A failure says so in words: "Writer failed", "Writer's model refused", "Writer's answer could not be used", with the short error beneath.
+- Beneath the sentence, one line of what it produced or found: the plan's size; the searches and passages; the options and claims, and how many came from sources; the first problem the checks found; the Critic's first issue. Its time sits on the right when it took a second or more.
+- **Details**, beside the time, opens the step in place beneath it: the plan, the queries, the Critic's scores, issues and requests, the checks' problems, the model, prompt version, tokens and time. It is hidden when there is nothing more to show.
+- A marker on a thin line holds each agent's icon (Planner `ListTree`, Retriever `Search`, Writer `PenLine`, Checks `ShieldCheck`, Critic `Scale`); a failed step's marker is a cross. The line and markers are decoration: the sentence carries the state, never colour or icon alone.
+- While the brief is written, the step being run is the last entry, a spinner in its marker (it stops turning under reduced motion and in low data mode) and a sentence such as "Critic is reviewing the draft". Steps not reached yet are not listed: the timeline is a record, not a plan.
+- It reflows to any width: the sentence and its time wrap, nothing scrolls sideways.
 - Totals at the bottom. Tokens are shown here only, never in the chat.
-- The loop is sequential, so one row of agents is enough. If parallel agents come later, group them in lanes.
+- The loop is sequential, so one line of steps is enough. If parallel agents come later, a round lists them side by side under one marker.
 
 Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 
@@ -1028,6 +1031,7 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 - Each answer: card per [5.3.9](#539-follow-up-answer-ask), privacy receipt per [5.3.2](#532-privacy-receipt).
 - **Answers only from this project.** The composer hint says so: "Answers use only the papers and documents in this project."
 - When nothing relevant is found, the answer card says "Nothing in this project answers that" and offers "Start a new search".
+- **A request to change the search is not answered.** "Get more papers", "update the booleans", "add Kenya": before answering, the Planner decides whether the message asks about the evidence at all. If it asks for more or different papers, the card says "That asks to change the search, not about the papers found so far. Change the search to look for more or different papers." and offers **Change the search**, which switches the box and carries the words over. Nothing runs until the new draft is accepted.
 
 **Built so far (Wave 2):** once the latest run has a decision brief, two pressed-or-not buttons sit above the box: **Ask about the evidence** (chosen at first) and **Change the search**. Without a brief the box only changes the search. A question continues the latest thread, or starts one when there is none (`POST /reviews/{id}/questions`). Once a thread exists, an outlined **New thread** button sits beside the choice while asking is chosen; pressed (it shows as pressed, and the box's placeholder says "Ask a question to start a new thread"), the next question starts a thread, and the one after continues it. Pressed again, it goes back to continuing the latest thread. A new thread need not wait for the last answer, since the API answers one question at a time per thread. In the chat, every thread but the oldest opens with a quiet "New thread" divider. Under the conversation, a disclosure ("2 threads") lists the threads, newest first, each with its first question, how many questions it has and when it started; choosing one scrolls to its first question and moves focus there, and its **Open** link goes to the thread's own page (`/p/:project/ask/:thread`, from `GET /threads/{id}`): its questions and answers in order, a link back to the review, and, for owners and reviewers, a box that asks in that thread, so an older thread can be continued there. Viewers see the list, the dividers and the thread page too. An answer longer than 60 words shows its first 60 and **Read all**, which expands it in place. Your question shows at once with "Sending your question…", then as the API stored it (masked words as tags) with "Searching the evidence…" while the browser polls `GET /questions/{id}` every 2 seconds. The box waits until the last question is answered, unless New thread is pressed. Questions and answers sit in the chat by the time they were asked, so they come after the brief they follow. Viewers read them; their box says "You can read the answers. Only owners and reviewers can ask." When nothing in the project answers, the answer card offers **Change the search** rather than "Start a new search": it switches the box to changing the search and fills it with the question as a starting point, unless something is already typed there, which is kept. A new search is a new review; most often the question shows the current search missed something, which a change fixes. Not built yet: "Add to brief notes" and the full privacy receipt.
 
@@ -1073,12 +1077,6 @@ Source: `GET /projects/{id}/brief/trace`; streamed live as `agent.step`.
 ### 6.15 Admin
 
 - **Users and invitations:** invite (email, instance role), resend, revoke; list users with status, last sign-in, MFA set up or not; disable a user.
-- **Evaluations** (CHITCHAT reference §7):
-  - "New evaluation": pick a project (its index), upload a question file, optionally upload other systems' answers (one file per question), pick the judge model.
-  - Results: a table per system pair with the six metrics (mean, difference), and wins, ties and losses.
-  - Each judgement: the question, the two answers side by side as A and B in the order the judge saw them, the scores and the reason, then a "Reveal systems" toggle.
-  - A note on fairness: "The judge should be from a different model family than the writer."
-  - **Built (P4, ADR 0022):** `/admin/evaluations` lists the evaluations of projects the administrator belongs to; **New evaluation** takes a project, a question file (plain text, one question per line), up to 2 other systems' answers (one JSON Lines file per system, `{"answer": "…"}` per question, in order) and a judge from the models the operator configured. Each evaluation page has a table per pair, the judgements as A and B with **Reveal systems**, and the line "Made by … Judged by …". The rail shows **Evaluations** to administrators only; the API refuses everyone else.
 
 ### 6.16 Account
 
@@ -1306,7 +1304,7 @@ The legend sits at the top of the options section: "+ benefit · − risk · [P0
 
 ### 8.6 Model disclosure
 
-- Every brief, run and evaluation names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b"
+- Every brief and run names the model and version. Screens with model output have a footer line: "Made by qwen3.5:9b"
 - If a deployment uses a hosted provider, the line says so: "Made by … at Infomaniak (no training, no retention)".
 
 ### 8.7 The caveat
@@ -1364,6 +1362,7 @@ The brand defines no dark theme. The dark one here is derived: deep blue-black s
 | `focusRing`, `link`, `brand.solid` | `#0C43A0` Dark Blue | `#68AFE7` Light Blue | Focus outline, links, primary buttons |
 | `brand.contrast` | `#FEFFF7` | `#06102A` derived | Text on a primary button |
 | `marker` | `#000000` | `#FEFFF7` | The section dot |
+| `neutral.fg` / `neutral.muted` / `neutral.subtle` | `#0A1633` / `#D9DEEA` / `#E6EAF5` | `#FEFFF7` / `#24325A` / `#1A2B5C` | Quiet tags (a project's status, "This device", a role): the same text as `fg`, never Chakra's own gray, whose dark text is ash |
 | `fg.error`, `danger.solid` | `#AE3156` Light Purple | `#F08BA8` derived | Error text and icons, destructive actions |
 | `danger.subtle` | `#F8E9EE` derived | `#2A0E1A` derived | Error notice background |
 | `caveat.fg` | `#5C3D00` derived | `#F6D54D` Light Yellow | Caveat and "not available yet" text |
@@ -1747,7 +1746,7 @@ Budgets are checked in CI with Lighthouse on a throttled profile.
 ### 13.2 How
 
 - **Text first.** The brief endpoint returns the whole brief as JSON; the screen renders the header and bottom line first, then the rest. Passages load when a chip is opened, not before.
-- **Split code by route.** The masking review, evaluation, compare and PRISMA code load only when used.
+- **Split code by route.** The masking review, compare and PRISMA code load only when used.
 - **SSE, not polling.** One small event at a time.
 - **Low data mode** (Account preferences, and offered automatically when the browser reports `Save-Data` or a slow connection): system fonts, no animations, no avatars, paper rows without abstracts, and live progress updated every 10 seconds instead of every event. Built in P4: kept per browser; the offer appears once, at the top of the signed-in app, when `navigator.connection` reports `saveData` or an `effectiveType` of `slow-2g`, `2g` or `3g`, and either answer ends it. Avatars and abstracts in paper rows do not exist in the app yet, so there is nothing to hide. Gates and the end of a run still show at once.
 - **Resume after a drop.** Unsent composer text is kept in memory (and in `sessionStorage` if the user allows it, never question text in `localStorage` for privacy). The event stream resumes from the last id.
@@ -1809,7 +1808,7 @@ Each phase is usable on its own. Endpoints marked **new** are not in the API yet
 | **P1: read a brief** | App shell, sign-in and MFA, re-auth, Home (pinned, recent), project list (no grouping), workspace with chat (question, receipt, draft, run strip, screening, brief cards), brief canvas read-only, source panel, how this was made, light and dark | Auth endpoints; `POST /projects`; `…/plan`, `/plan/answers`, `/plan/changes`, `/plan/accept`; runs and their events (`POST /reviews/{id}/runs`, `GET /runs/{run_id}/events`, `POST /runs/{run_id}/cancel`); `…/brief`, `/brief/evidence/{tag}`, `/brief/trace`; `…/status` |
 | **P2: run a review well** | Search draft canvas with diff and origin, gates (vocabulary, privacy review), documents, screening table with expanded rows, rules editor, PRISMA, downloads, ask with threads, project settings and members | `…/documents`; `…/papers`; `PUT …/rules`; `…/exports/{name}`; `…/questions` (+ **new** thread id); `gate.*` events and `POST /gates/{gate_id}`; members endpoints |
 | **P3: find and compare** | Needs you, collections and tags, grouping and filters, project timeline, compare runs, search and command palette, seen and saved marks, trade-off priorities, brief versions and compare, your view first | **new**: collections, tags, pins, seen and saved, `GET /search`, run manifests endpoint, brief versions, "your view" storage |
-| **P4: field and admin** | Low data mode, offline brief download, evaluation admin, retention notices, coverage estimate | `/admin/evaluations`; **new**: retention settings, coverage estimate |
+| **P4: field and admin** | Low data mode, offline brief download, retention notices, coverage estimate | **new**: retention settings, coverage estimate |
 
 ---
 

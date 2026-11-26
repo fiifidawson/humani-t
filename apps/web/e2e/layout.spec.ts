@@ -131,54 +131,115 @@ test("a delete pop-up wraps a long name rather than letting it run out", async (
 	expect(await spillingOut(deleteProject)).toEqual([]);
 });
 
-/** How many of the element's pixels differ clearly from its top-left one. */
-async function inkedPixels(page: Page, element: Locator): Promise<number> {
-	const shot = (await element.screenshot()).toString("base64");
-	// A blank page: the app's CSP refuses the data: URL the screenshot comes in.
-	const blank = await page.context().newPage();
-	const count = await blank.evaluate(async (src) => {
-		const image = new Image();
-		image.src = src;
-		await image.decode();
-		const canvas = document.createElement("canvas");
-		canvas.width = image.width;
-		canvas.height = image.height;
-		const context = canvas.getContext("2d");
-		if (context === null) {
-			return 0;
-		}
-		context.drawImage(image, 0, 0);
-		const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-		let count = 0;
-		for (let i = 0; i < data.length; i += 4) {
-			const difference =
-				Math.abs((data[i] ?? 0) - (data[0] ?? 0)) +
-				Math.abs((data[i + 1] ?? 0) - (data[1] ?? 0)) +
-				Math.abs((data[i + 2] ?? 0) - (data[2] ?? 0));
-			if (difference > 90) {
-				count += 1;
+/** How many of the shot's pixels differ clearly from `background`, an `rgb(…)` colour. */
+function inkedPixels(
+	blank: Page,
+	shot: Buffer,
+	background: string,
+): Promise<number> {
+	return blank.evaluate(
+		async ([src, rgb]) => {
+			const [r = 0, g = 0, b = 0] = (rgb.match(/\d+/g) ?? []).map(Number);
+			const image = new Image();
+			image.src = src;
+			await image.decode();
+			const canvas = document.createElement("canvas");
+			canvas.width = image.width;
+			canvas.height = image.height;
+			const context = canvas.getContext("2d");
+			if (context === null) {
+				return 0;
 			}
-		}
-		return count;
-	}, `data:image/png;base64,${shot}`);
-	await blank.close();
-	return count;
+			context.drawImage(image, 0, 0);
+			const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+			let count = 0;
+			for (let i = 0; i < data.length; i += 4) {
+				const difference =
+					Math.abs((data[i] ?? 0) - r) +
+					Math.abs((data[i + 1] ?? 0) - g) +
+					Math.abs((data[i + 2] ?? 0) - b);
+				if (difference > 90) {
+					count += 1;
+				}
+			}
+			return count;
+		},
+		[`data:image/png;base64,${shot.toString("base64")}`, background] as const,
+	);
 }
 
 /** The header's visible LiGHT wordmark, once the browser has drawn it: loaded is not enough. */
-async function drawnLogo(page: Page): Promise<string | null> {
-	const logo = page.getByRole("banner").getByRole("img", { name: "LiGHT" });
-	await expect.poll(() => inkedPixels(page, logo)).toBeGreaterThan(100);
+async function drawnLogo(page: Page, blank: Page): Promise<string | null> {
+	const header = page.getByRole("banner");
+	const logo = header.getByRole("img", { name: "LiGHT" });
+	// The variant a theme hides is lazy, so it only starts loading once shown.
+	await expect
+		.poll(
+			() =>
+				logo.evaluate(
+					(img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
+				),
+			{
+				timeout: 15_000,
+			},
+		)
+		.toBe(true);
+	// Measured against the header itself: a corner of the logo may be ink, not background.
+	const background = await header.evaluate(
+		(element) => getComputedStyle(element).backgroundColor,
+	);
+	await expect(async () => {
+		expect(
+			await inkedPixels(blank, await logo.screenshot(), background),
+		).toBeGreaterThan(100);
+	}).toPass({ timeout: 15_000 });
 	return logo.getAttribute("src");
 }
 
 test("LiGHT's wordmark is drawn in its blues, and in white on the dark theme", async ({
 	page,
 }) => {
+	// A blank page counts the pixels: the app's CSP refuses the screenshot's data: URL.
+	const blank = await page.context().newPage();
+	await page.bringToFront();
 	await page.emulateMedia({ colorScheme: "light" });
 	await page.goto("/");
-	expect(await drawnLogo(page)).toMatch(/light-logo\.svg$/);
+	expect(await drawnLogo(page, blank)).toMatch(/light-logo\.svg$/);
 
 	await page.emulateMedia({ colorScheme: "dark" });
-	expect(await drawnLogo(page)).toMatch(/light-logo-white\.svg$/);
+	expect(await drawnLogo(page, blank)).toMatch(/light-logo-white\.svg$/);
+	await blank.close();
+});
+
+test("your own words stand out from the chat column in both themes", async ({
+	page,
+}) => {
+	await page.goto("/projects/new");
+	await page.getByLabel("Project name").fill("Your words");
+	await page.getByRole("button", { name: "Create project" }).click();
+	await page.waitForURL(/\/p\/[^/]+$/);
+	await page
+		.getByRole("textbox", { name: "Start a review" })
+		.fill("Do cash transfers improve food security?");
+	await page.keyboard.press("Enter");
+	const yours = page.locator("[data-role='person']").first();
+	await expect(yours).toBeVisible({ timeout: 30_000 });
+
+	for (const scheme of ["light", "dark"] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		const colours = await yours.evaluate((card) => {
+			let column = card.parentElement;
+			while (
+				column !== null &&
+				getComputedStyle(column).backgroundColor === "rgba(0, 0, 0, 0)"
+			) {
+				column = column.parentElement;
+			}
+			return {
+				card: getComputedStyle(card).backgroundColor,
+				column: column === null ? "" : getComputedStyle(column).backgroundColor,
+			};
+		});
+		expect(colours.card, `${scheme} theme`).not.toBe(colours.column);
+	}
 });

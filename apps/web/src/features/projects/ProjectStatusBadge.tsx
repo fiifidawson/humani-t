@@ -23,7 +23,7 @@ export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
 	return (
 		<Badge
 			variant="outline"
-			colorPalette={status === "failed" ? "danger" : "gray"}
+			colorPalette={status === "failed" ? "danger" : "neutral"}
 			alignSelf="flex-start"
 		>
 			{STATUS_LABELS[status]}

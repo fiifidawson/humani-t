@@ -1,6 +1,6 @@
 # ADR-0022: Evaluations are judged blind, by an operator's model, inside their project
 
-- **Status:** Accepted
+- **Status:** Withdrawn (2026-11-26). Evaluation admin was removed; migration 0024 drops its table. What it was and how to bring it back: [docs/archive/evaluations.md](../archive/evaluations.md).
 - **Date:** 2026-11-21
 
 ## Context

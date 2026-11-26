@@ -22,7 +22,7 @@ const WHAT_IT_DOES =
 function ArchivedNote({ archivedAt }: { archivedAt: string }) {
 	return (
 		<Flex as="span" gap="2" align="center" wrap="wrap">
-			<Badge variant="outline" colorPalette="gray">
+			<Badge variant="outline" colorPalette="neutral">
 				Archived
 			</Badge>
 			<span>

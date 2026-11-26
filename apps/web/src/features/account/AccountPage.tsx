@@ -141,7 +141,7 @@ function DevicesSection() {
 								{device.current ? (
 									<Badge
 										variant="outline"
-										colorPalette="gray"
+										colorPalette="neutral"
 										alignSelf="flex-start"
 									>
 										This device

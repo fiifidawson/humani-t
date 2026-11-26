@@ -45,7 +45,7 @@ A reviewer states a research question. humani-t searches academic repositories, 
 
 humani-t is a **self-hosted web application**. An organisation runs it on infrastructure it controls, so questions, documents and results stay within that deployment. Personal data is masked before any text reaches a language model, and by default that model runs inside the deployment as well.
 
-> **Status: feature-complete, not yet reviewed.** The security core (accounts, MFA, projects, encryption at rest, a tamper-evident audit log) and the whole review workflow, from question to decision brief, are built and tested. **Do not use it with real data yet:** it has not had an independent security review.
+> **Status: under review and testing.** The security core (accounts, MFA, projects, encryption at rest, a tamper-evident audit log) and the whole review workflow, from question to decision brief, are built and are now being reviewed and tested. **Do not use it with real data yet:** wait until the independent security review is complete.
 
 ## How it works
 

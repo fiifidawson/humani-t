@@ -282,7 +282,7 @@ export function WorkspacePage() {
 				<CollectionBadge collectionId={project.data.collection_id} />
 				<Badge
 					variant="outline"
-					colorPalette="gray"
+					colorPalette="neutral"
 					color="fg"
 					borderColor="border.emphasized"
 					flex="none"

@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { loopAgent, loopDiagram } from "../../test/agentLoop";
+import { anyTime, roundEntries } from "../../test/agentTimeline";
 import { expectNoAccessibilityViolations } from "../../test/axe";
 import { FakeEventSource } from "../../test/fakeEventSource";
 import { currentPath, renderApp } from "../../test/render";
@@ -70,126 +70,100 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		);
 	});
 
-	it("opens the loop on the latest round, with a picker for the others", async () => {
+	it("lists every round, oldest first, under its heading, with no picker and no diagram", async () => {
 		const { path } = briefed();
 		const { canvas } = await openTrace(path);
 
-		const picker = within(canvas).getByRole("group", { name: "Round" });
 		expect(
-			within(picker)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
+			within(canvas)
+				.getAllByRole("heading", { level: 4 })
+				.map((heading) => heading.textContent),
 		).toEqual(["Before the first draft", "Round 1", "Round 2"]);
+		expect(roundEntries(canvas, "Round 1")).toHaveLength(3);
 		expect(
-			within(picker).getByRole("button", { name: "Round 2" }),
-		).toHaveAttribute("aria-pressed", "true");
-		expect(
-			within(canvas).queryByRole("list", { name: "Round 1" }),
+			within(canvas).queryByRole("group", { name: "Round" }),
 		).not.toBeInTheDocument();
-		const rows = within(
-			within(canvas).getByRole("list", { name: "Round 2" }),
-		).getAllByRole("listitem");
-		expect(rows[0]).toHaveTextContent(
-			"Writer · failed · The model server isn't answering.",
-		);
-		expect(rows[1]).toHaveTextContent("Critic · accept");
+		expect(canvas.querySelector("[data-node]")).toBeNull();
 	});
 
-	it("switches rounds from the picker, one row per step", async () => {
-		const { path } = briefed();
-		const { canvas, user } = await openTrace(path);
-
-		await user.click(
-			within(canvas).getByRole("button", { name: "Before the first draft" }),
-		);
-		const before = within(canvas).getByRole("list", {
-			name: "Before the first draft",
-		});
-		expect(
-			within(before)
-				.getAllByRole("listitem")
-				.map((row) => row.textContent),
-		).toEqual([
-			expect.stringContaining("Planner · 1 call · 41 s"),
-			expect.stringContaining(
-				"Retriever · 2 searches · 5 new passages (5 in all)",
-			),
-		]);
-
-		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
-		expect(
-			within(canvas).getByRole("button", { name: "Round 1" }),
-		).toHaveAttribute("aria-pressed", "true");
-		const rows = within(
-			within(canvas).getByRole("list", { name: "Round 1" }),
-		).getAllByRole("listitem");
-		expect(rows[0]).toHaveTextContent("Writer · 3 options · 14 claims · 2 min");
-		expect(rows[1]).toHaveTextContent("Checks · 1 problem");
-		expect(rows[2]).toHaveTextContent("Critic · revise");
-	});
-
-	it("draws each agent with an icon, its state in words and the round's result", async () => {
-		const { path } = briefed();
-		const { canvas, user } = await openTrace(path);
-		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
-
-		const planner = loopAgent(canvas, "Planner");
-		expect(planner).toHaveTextContent("done");
-		expect(planner).toHaveTextContent("1 call · 41 s");
-		expect(planner.querySelector("svg")).not.toBeNull();
-		const writer = loopAgent(canvas, "Writer");
-		expect(writer).toHaveTextContent("done");
-		expect(writer).toHaveTextContent("3 options · 14 claims · 2 min");
-		expect(loopAgent(canvas, "Critic")).toHaveTextContent("revise");
-	});
-
-	it("marks a failed agent with a word and its short error, not colour alone", async () => {
+	it("says in a sentence what each agent did, what it found and how long it took", async () => {
 		const { path } = briefed();
 		const { canvas } = await openTrace(path);
 
-		const writer = loopAgent(canvas, "Writer");
-		expect(writer).toHaveTextContent("failed");
+		const [planner, retriever] = roundEntries(canvas, "Before the first draft");
+		expect(planner).toHaveTextContent("Planner set the plan");
+		expect(planner).toHaveTextContent(
+			"3 options · 2 criteria · 2 sub-questions",
+		);
+		expect(planner).toHaveTextContent("41 s");
+		expect(retriever).toHaveTextContent("Retriever searched the papers");
+		expect(retriever).toHaveTextContent(
+			"2 searches · 5 new passages (5 in all)",
+		);
+
+		const [writer, checks, critic] = roundEntries(canvas, "Round 1");
+		expect(writer).toHaveTextContent("Writer drafted the brief");
+		expect(writer).toHaveTextContent("3 options · 14 claims, 10 from sources");
+		expect(writer).toHaveTextContent("2 min");
+		expect(checks).toHaveTextContent("Checks found 1 problem");
+		expect(checks).toHaveTextContent("In-kind food has no sourced benefit.");
+		expect(critic).toHaveTextContent(
+			"Critic asked for a revision and 1 more search",
+		);
+		expect(critic).toHaveTextContent(
+			"Price effects in small markets are thin.",
+		);
+		expect(critic).toHaveTextContent("30 s");
+	});
+
+	it("leaves out a time under a second rather than showing 0 s", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		const checks = roundEntries(canvas, "Round 1")[1];
+		expect(checks?.textContent).not.toMatch(anyTime);
+	});
+
+	it("says a failure in words, with its short error, not colour alone", async () => {
+		const { path } = briefed();
+		const { canvas } = await openTrace(path);
+
+		const writer = roundEntries(canvas, "Round 2")[0];
+		expect(writer).toHaveTextContent("Writer failed");
 		expect(writer).toHaveTextContent("The model server isn't answering.");
 	});
 
-	it("mutes an agent that did not run in the round", async () => {
-		const { path } = briefed();
-		const { canvas, user } = await openTrace(path);
-		await user.click(
-			within(canvas).getByRole("button", { name: "Before the first draft" }),
-		);
-
-		expect(loopAgent(canvas, "Retriever")).toHaveTextContent(
-			"2 searches · 5 new passages (5 in all)",
-		);
-		expect(loopAgent(canvas, "Writer")).toHaveTextContent("not run");
-		expect(loopAgent(canvas, "Critic")).toHaveTextContent("not run");
-	});
-
-	it("shows the checks as a badge on the way from the Writer to the Critic", async () => {
+	it("names a revision, the Critic's searches and an acceptance for what they are", async () => {
 		const { api, path } = briefed();
-		api.reviews.briefs[0]?.trace.steps.push({
-			round: 2,
-			role: "checks",
-			status: "ok",
-			seconds: 0,
-			problems: [],
-		});
-		const { canvas, user } = await openTrace(path);
+		const steps = api.reviews.briefs[0]?.trace.steps ?? [];
+		steps.splice(
+			5,
+			1,
+			{
+				round: 1,
+				role: "retriever",
+				status: "ok",
+				seconds: 2,
+				queries: ["price effects of cash in small markets"],
+				passages_new: 3,
+				passages_total: 8,
+			},
+			{
+				round: 2,
+				role: "writer",
+				status: "ok",
+				seconds: 100,
+				output: { options: ["Cash transfers", "Vouchers"], claims: 12 },
+			},
+		);
+		const { canvas } = await openTrace(path);
 
-		expect(loopAgent(canvas, "Checks")).toHaveTextContent("no problems");
-		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
-		expect(loopAgent(canvas, "Checks")).toHaveTextContent("1 problem");
-	});
-
-	it("labels the way back with what the Critic decided", async () => {
-		const { path } = briefed();
-		const { canvas, user } = await openTrace(path);
-
-		expect(loopDiagram(canvas)).toHaveTextContent("accepted ✓");
-		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
-		expect(loopDiagram(canvas)).toHaveTextContent("asked for 1 search");
-		expect(loopDiagram(canvas)).not.toHaveTextContent("accepted");
+		expect(roundEntries(canvas, "Round 1")[3]).toHaveTextContent(
+			"Retriever ran the Critic's searches",
+		);
+		const [writer, critic] = roundEntries(canvas, "Round 2");
+		expect(writer).toHaveTextContent("Writer revised the brief");
+		expect(critic).toHaveTextContent("Critic accepted the draft");
 	});
 
 	it("says when the checks overruled the Critic's acceptance", async () => {
@@ -200,22 +174,21 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		}
 		const { canvas } = await openTrace(path);
 
-		expect(loopDiagram(canvas)).toHaveTextContent(
-			"accepted · overruled by the checks",
+		expect(roundEntries(canvas, "Round 2")[1]).toHaveTextContent(
+			"Critic accepted the draft, but the checks overruled it",
 		);
-		expect(loopDiagram(canvas)).not.toHaveTextContent("✓");
 	});
 
-	it("opens a step to its detail: the plan, the searches, the checks' problems, the Critic's requests", async () => {
+	it("opens a step's details in place: the plan, the Critic's requests, the tokens", async () => {
 		const { path } = briefed();
 		const { canvas, user } = await openTrace(path);
 
-		await user.click(
-			within(canvas).getByRole("button", { name: "Before the first draft" }),
-		);
-		await user.click(
-			within(canvas).getByRole("button", { name: "Planner · 1 call · 41 s" }),
-		);
+		const planner = within(canvas).getByRole("button", {
+			name: "Details: Planner set the plan",
+		});
+		expect(planner).toHaveAttribute("aria-expanded", "false");
+		await user.click(planner);
+		expect(planner).toHaveAttribute("aria-expanded", "true");
 		expect(canvas).toHaveTextContent(
 			"Decision: Choose between cash, vouchers or in-kind food",
 		);
@@ -223,19 +196,31 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 			"Options: Cash transfers · Vouchers · In-kind food",
 		);
 
-		await user.click(within(canvas).getByRole("button", { name: "Round 1" }));
 		await user.click(
-			within(canvas).getByRole("button", { name: "Checks · 1 problem" }),
-		);
-		expect(canvas).toHaveTextContent("In-kind food has no sourced benefit.");
-
-		await user.click(
-			within(canvas).getByRole("button", { name: "Critic · revise" }),
+			within(canvas).getByRole("button", {
+				name: "Details: Critic asked for a revision and 1 more search",
+			}),
 		);
 		expect(canvas).toHaveTextContent(
 			"Asked for: price effects of cash in small markets",
 		);
 		expect(canvas).toHaveTextContent("20,000 tokens in, 2,000 out");
+	});
+
+	it("offers no details where there is nothing more to show", async () => {
+		const { api, path } = briefed();
+		api.reviews.briefs[0]?.trace.steps.push({
+			round: 2,
+			role: "checks",
+			status: "ok",
+			seconds: 0,
+			problems: [],
+		});
+		const { canvas } = await openTrace(path);
+
+		const checks = roundEntries(canvas, "Round 2")[2] as HTMLElement;
+		expect(checks).toHaveTextContent("Checks found no problems");
+		expect(within(checks).queryByRole("button")).not.toBeInTheDocument();
 	});
 
 	it("ends with the totals and what the run used", async () => {
@@ -322,7 +307,7 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 		).toHaveTextContent("None. The Writer had only the built-in instructions.");
 	});
 
-	it("draws the loop live while the brief is still being written", async () => {
+	it("adds each step live, the one being run last, and nothing not reached yet", async () => {
 		const { path, run } = briefed(false, "running");
 		const { user } = renderApp(`${path}/trace`);
 		const source = await waitFor(() => {
@@ -364,20 +349,14 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 			name: "How this brief was made",
 		});
 		expect(
-			within(canvas).getByRole("button", { name: "Round 1" }),
-		).toHaveAttribute("aria-pressed", "true");
-		expect(loopAgent(canvas, "Writer")).toHaveTextContent(
-			"2 options · 6 claims · 2 min",
-		);
-		expect(loopAgent(canvas, "Checks")).toHaveTextContent("running");
-		expect(loopAgent(canvas, "Critic")).toHaveTextContent("not reached yet");
-		const rows = within(
-			within(canvas).getByRole("list", { name: "Round 1" }),
-		).getAllByRole("listitem");
-		expect(rows.map((row) => row.textContent)).toEqual([
-			expect.stringContaining("Writer · 2 options · 6 claims · 2 min"),
-			expect.stringContaining("Checks · running"),
+			roundEntries(canvas, "Round 1").map((entry) => entry.textContent),
+		).toEqual([
+			expect.stringContaining("Writer drafted the brief"),
+			expect.stringContaining("Checks are running"),
 		]);
+		expect(roundEntries(canvas, "Round 1")[0]).toHaveTextContent(
+			"2 options · 6 claims",
+		);
 
 		act(() => {
 			source.emit("agent.step", 5, {
@@ -388,18 +367,17 @@ describe("how the brief was made (UI_UX_SPEC §6.11)", () => {
 				problems: [],
 			});
 		});
-		expect(loopAgent(canvas, "Checks")).toHaveTextContent("no problems");
-		expect(loopAgent(canvas, "Critic")).toHaveTextContent("running");
+		expect(
+			roundEntries(canvas, "Round 1").map((entry) => entry.textContent),
+		).toEqual([
+			expect.stringContaining("Writer drafted the brief"),
+			expect.stringContaining("Checks found no problems"),
+			expect.stringContaining("Critic is reviewing the draft"),
+		]);
 
 		await user.click(
-			within(canvas).getByRole("button", { name: "Before the first draft" }),
-		);
-		expect(loopAgent(canvas, "Retriever")).toHaveTextContent(
-			"1 search · 4 new passages (4 in all)",
-		);
-		await user.click(
 			within(canvas).getByRole("button", {
-				name: "Retriever · 1 search · 4 new passages (4 in all)",
+				name: "Details: Retriever searched the papers",
 			}),
 		);
 		expect(canvas).toHaveTextContent("Searches: cash transfers prices");

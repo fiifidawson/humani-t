@@ -904,139 +904,6 @@
         }
       }
     },
-    "/api/v1/admin/evaluations/judges": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "The models an evaluation may be judged by",
-        "description": "Only models the operator configured. The judge should be from another model family.",
-        "operationId": "judge_models_api_v1_admin_evaluations_judges_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JudgeModelsOut"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/evaluations": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Evaluations of the projects you are a member of, newest first",
-        "operationId": "list_evaluations_api_v1_admin_evaluations_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/EvaluationSummaryOut"
-                  },
-                  "type": "array",
-                  "title": "Response List Evaluations Api V1 Admin Evaluations Get"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Start an evaluation; it is answered and judged in the background",
-        "description": "The files are masked as the project chooses before they are stored or sent.",
-        "operationId": "start_evaluation_api_v1_admin_evaluations_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EvaluationIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EvaluationOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such project, or you are not a member of it"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/evaluations/{evaluation_id}": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "One evaluation: poll it until it has finished",
-        "operationId": "read_evaluation_api_v1_admin_evaluations__evaluation_id__get",
-        "parameters": [
-          {
-            "name": "evaluation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Evaluation Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EvaluationOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/projects": {
       "post": {
         "tags": [
@@ -6058,6 +5925,110 @@
         ],
         "title": "AnswerIn"
       },
+      "AnswerOut": {
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimOut"
+            },
+            "type": "array",
+            "title": "Claims",
+            "description": "Up to 6; empty when nothing answers it."
+          },
+          "nothing_found": {
+            "type": "boolean",
+            "title": "Nothing Found"
+          },
+          "asks_to_change_search": {
+            "type": "boolean",
+            "title": "Asks To Change Search",
+            "description": "The message asked for more or different papers, so it was not answered."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "\"Nothing in this project answers that.\" when nothing answers it; \"That asks to change the search, not about the papers found so far. Change the search to look for more or different papers.\" when it asks to change the search."
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The run whose evidence was searched."
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerSourceOut"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "Every cited tag, by first appearance."
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStepOut"
+            },
+            "type": "array",
+            "title": "Steps",
+            "description": "How the answer was made, in order."
+          },
+          "rounds": {
+            "type": "integer",
+            "title": "Rounds"
+          },
+          "kept_round": {
+            "type": "integer",
+            "title": "Kept Round"
+          },
+          "stopped_because": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped Because",
+            "description": "Null when no model was asked."
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemOut"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claims",
+          "nothing_found",
+          "asks_to_change_search",
+          "message",
+          "run_id",
+          "sources",
+          "steps",
+          "rounds",
+          "kept_round",
+          "stopped_because",
+          "warnings"
+        ],
+        "title": "AnswerOut"
+      },
       "AnswerSourceOut": {
         "properties": {
           "tag": {
@@ -7303,19 +7274,13 @@
           "mfa_enrolment_required": {
             "type": "boolean",
             "title": "Mfa Enrolment Required"
-          },
-          "can_evaluate": {
-            "type": "boolean",
-            "title": "Can Evaluate",
-            "description": "An instance admin on a deployment with evaluations turned on (ADR 0022)."
           }
         },
         "type": "object",
         "required": [
           "user",
           "session",
-          "mfa_enrolment_required",
-          "can_evaluate"
+          "mfa_enrolment_required"
         ],
         "title": "CurrentSessionOut"
       },
@@ -8020,287 +7985,6 @@
         "title": "EntityType",
         "description": "What a span hides. The value is the placeholder's prefix: `[PERSON_1]`."
       },
-      "EvaluationIn": {
-        "properties": {
-          "project_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Project Id",
-            "description": "A project the administrator is a member of."
-          },
-          "judge_model": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Judge Model"
-          },
-          "question_file": {
-            "type": "string",
-            "maxLength": 200000,
-            "title": "Question File",
-            "description": "Plain text: one question per line."
-          },
-          "other_systems": {
-            "items": {
-              "$ref": "#/components/schemas/OtherSystemIn"
-            },
-            "type": "array",
-            "maxItems": 2,
-            "title": "Other Systems",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "project_id",
-          "judge_model",
-          "question_file"
-        ],
-        "title": "EvaluationIn"
-      },
-      "EvaluationOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "project_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Project Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/EvaluationStatus"
-          },
-          "judge_model": {
-            "type": "string",
-            "title": "Judge Model"
-          },
-          "writer_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Writer Model",
-            "description": "Known once the first question is answered."
-          },
-          "question_count": {
-            "type": "integer",
-            "title": "Question Count"
-          },
-          "answered_count": {
-            "type": "integer",
-            "title": "Answered Count",
-            "description": "Questions answered and judged so far."
-          },
-          "system_count": {
-            "type": "integer",
-            "title": "System Count",
-            "description": "Other systems compared with humani-t."
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "systems": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Systems",
-            "description": "humani-t first, then the other systems."
-          },
-          "is_masked": {
-            "type": "boolean",
-            "title": "Is Masked",
-            "description": "Whether the upload was masked before it was stored."
-          },
-          "masked": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object",
-            "title": "Masked",
-            "description": "Masked values by type, over the whole upload."
-          },
-          "judge_prompt_version": {
-            "type": "string",
-            "title": "Judge Prompt Version"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/PairResultOut"
-            },
-            "type": "array",
-            "title": "Results"
-          },
-          "answers": {
-            "items": {
-              "$ref": "#/components/schemas/app__api__schemas__evaluations__AnswerOut"
-            },
-            "type": "array",
-            "title": "Answers"
-          },
-          "judgements": {
-            "items": {
-              "$ref": "#/components/schemas/JudgementOut"
-            },
-            "type": "array",
-            "title": "Judgements"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "project_id",
-          "status",
-          "judge_model",
-          "writer_model",
-          "question_count",
-          "answered_count",
-          "system_count",
-          "created_at",
-          "finished_at",
-          "error",
-          "systems",
-          "is_masked",
-          "masked",
-          "judge_prompt_version",
-          "results",
-          "answers",
-          "judgements"
-        ],
-        "title": "EvaluationOut"
-      },
-      "EvaluationStatus": {
-        "type": "string",
-        "enum": [
-          "queued",
-          "running",
-          "finished",
-          "failed"
-        ],
-        "title": "EvaluationStatus"
-      },
-      "EvaluationSummaryOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "project_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Project Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/EvaluationStatus"
-          },
-          "judge_model": {
-            "type": "string",
-            "title": "Judge Model"
-          },
-          "writer_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Writer Model",
-            "description": "Known once the first question is answered."
-          },
-          "question_count": {
-            "type": "integer",
-            "title": "Question Count"
-          },
-          "answered_count": {
-            "type": "integer",
-            "title": "Answered Count",
-            "description": "Questions answered and judged so far."
-          },
-          "system_count": {
-            "type": "integer",
-            "title": "System Count",
-            "description": "Other systems compared with humani-t."
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "project_id",
-          "status",
-          "judge_model",
-          "writer_model",
-          "question_count",
-          "answered_count",
-          "system_count",
-          "created_at",
-          "finished_at",
-          "error"
-        ],
-        "title": "EvaluationSummaryOut"
-      },
       "EvidenceOut": {
         "properties": {
           "tag": {
@@ -8853,86 +8537,6 @@
           "data"
         ],
         "title": "JobFinishedEvent"
-      },
-      "JudgeModelsOut": {
-        "properties": {
-          "writer_model": {
-            "type": "string",
-            "title": "Writer Model",
-            "description": "The model that writes humani-t's answers."
-          },
-          "judge_models": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Judge Models",
-            "description": "Only models the operator configured; the writer's own is first."
-          }
-        },
-        "type": "object",
-        "required": [
-          "writer_model",
-          "judge_models"
-        ],
-        "title": "JudgeModelsOut"
-      },
-      "JudgementOut": {
-        "properties": {
-          "position": {
-            "type": "integer",
-            "title": "Position"
-          },
-          "question": {
-            "type": "string",
-            "title": "Question"
-          },
-          "system_a": {
-            "type": "string",
-            "title": "System A",
-            "description": "Which system wrote answer A. The judge never saw it."
-          },
-          "system_b": {
-            "type": "string",
-            "title": "System B"
-          },
-          "answer_a": {
-            "type": "string",
-            "title": "Answer A"
-          },
-          "answer_b": {
-            "type": "string",
-            "title": "Answer B"
-          },
-          "scores_a": {
-            "$ref": "#/components/schemas/QualityOut"
-          },
-          "scores_b": {
-            "$ref": "#/components/schemas/QualityOut"
-          },
-          "winner": {
-            "$ref": "#/components/schemas/Verdict",
-            "description": "a, b or tie, as the judge said it."
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "position",
-          "question",
-          "system_a",
-          "system_b",
-          "answer_a",
-          "answer_b",
-          "scores_a",
-          "scores_b",
-          "winner",
-          "reason"
-        ],
-        "title": "JudgementOut"
       },
       "LabelChangeOut": {
         "properties": {
@@ -9670,35 +9274,6 @@
         ],
         "title": "MemberRoleIn"
       },
-      "MetricOut": {
-        "properties": {
-          "metric": {
-            "type": "string",
-            "title": "Metric"
-          },
-          "first_mean": {
-            "type": "number",
-            "title": "First Mean"
-          },
-          "second_mean": {
-            "type": "number",
-            "title": "Second Mean"
-          },
-          "difference": {
-            "type": "number",
-            "title": "Difference",
-            "description": "first_mean minus second_mean."
-          }
-        },
-        "type": "object",
-        "required": [
-          "metric",
-          "first_mean",
-          "second_mean",
-          "difference"
-        ],
-        "title": "MetricOut"
-      },
       "MfaStatusOut": {
         "properties": {
           "is_enrolled": {
@@ -10152,75 +9727,6 @@
           "risks"
         ],
         "title": "OptionOut"
-      },
-      "OtherSystemIn": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 60,
-            "minLength": 1,
-            "title": "Name"
-          },
-          "answers_file": {
-            "type": "string",
-            "maxLength": 500000,
-            "title": "Answers File",
-            "description": "JSON Lines: one {\"answer\": \"…\"} per line, in the questions' order."
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "answers_file"
-        ],
-        "title": "OtherSystemIn"
-      },
-      "PairResultOut": {
-        "properties": {
-          "first": {
-            "type": "string",
-            "title": "First"
-          },
-          "second": {
-            "type": "string",
-            "title": "Second"
-          },
-          "judged": {
-            "type": "integer",
-            "title": "Judged"
-          },
-          "metrics": {
-            "items": {
-              "$ref": "#/components/schemas/MetricOut"
-            },
-            "type": "array",
-            "title": "Metrics"
-          },
-          "wins": {
-            "type": "integer",
-            "title": "Wins"
-          },
-          "ties": {
-            "type": "integer",
-            "title": "Ties"
-          },
-          "losses": {
-            "type": "integer",
-            "title": "Losses"
-          }
-        },
-        "type": "object",
-        "required": [
-          "first",
-          "second",
-          "judged",
-          "metrics",
-          "wins",
-          "ties",
-          "losses"
-        ],
-        "title": "PairResultOut",
-        "description": "Two systems over every question judged so far, from the first system's side."
       },
       "PaperDetailOut": {
         "properties": {
@@ -14145,16 +13651,6 @@
         ],
         "title": "ValidationError"
       },
-      "Verdict": {
-        "type": "string",
-        "enum": [
-          "a",
-          "b",
-          "tie"
-        ],
-        "title": "Verdict",
-        "description": "Which answer the judge preferred, by the letter it saw."
-      },
       "VersionOut": {
         "properties": {
           "version": {
@@ -14450,31 +13946,6 @@
         "title": "WebAuthnOptionsOut",
         "description": "Pass `options` to `PublicKeyCredential.parse…OptionsFromJSON` in the browser."
       },
-      "app__api__schemas__evaluations__AnswerOut": {
-        "properties": {
-          "position": {
-            "type": "integer",
-            "title": "Position"
-          },
-          "question": {
-            "type": "string",
-            "title": "Question",
-            "description": "As stored and sent: masked when masking is on."
-          },
-          "answer": {
-            "type": "string",
-            "title": "Answer",
-            "description": "humani-t's answer, as the judge read it."
-          }
-        },
-        "type": "object",
-        "required": [
-          "position",
-          "question",
-          "answer"
-        ],
-        "title": "AnswerOut"
-      },
       "app__api__schemas__plans__QuestionOut": {
         "properties": {
           "id": {
@@ -14517,104 +13988,6 @@
           "skipped"
         ],
         "title": "QuestionOut"
-      },
-      "app__api__schemas__questions__AnswerOut": {
-        "properties": {
-          "claims": {
-            "items": {
-              "$ref": "#/components/schemas/ClaimOut"
-            },
-            "type": "array",
-            "title": "Claims",
-            "description": "Up to 6; empty when nothing answers it."
-          },
-          "nothing_found": {
-            "type": "boolean",
-            "title": "Nothing Found"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message",
-            "description": "\"Nothing in this project answers that.\" when nothing answers it."
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id",
-            "description": "The run whose evidence was searched."
-          },
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/AnswerSourceOut"
-            },
-            "type": "array",
-            "title": "Sources",
-            "description": "Every cited tag, by first appearance."
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/AgentStepOut"
-            },
-            "type": "array",
-            "title": "Steps",
-            "description": "How the answer was made, in order."
-          },
-          "rounds": {
-            "type": "integer",
-            "title": "Rounds"
-          },
-          "kept_round": {
-            "type": "integer",
-            "title": "Kept Round"
-          },
-          "stopped_because": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stopped Because",
-            "description": "Null when no model was asked."
-          },
-          "warnings": {
-            "items": {
-              "$ref": "#/components/schemas/ProblemOut"
-            },
-            "type": "array",
-            "title": "Warnings"
-          }
-        },
-        "type": "object",
-        "required": [
-          "claims",
-          "nothing_found",
-          "message",
-          "run_id",
-          "sources",
-          "steps",
-          "rounds",
-          "kept_round",
-          "stopped_because",
-          "warnings"
-        ],
-        "title": "AnswerOut"
       },
       "app__api__schemas__questions__QuestionOut": {
         "properties": {
@@ -14708,7 +14081,7 @@
           "answer": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/app__api__schemas__questions__AnswerOut"
+                "$ref": "#/components/schemas/AnswerOut"
               },
               {
                 "type": "null"
@@ -14752,7 +14125,7 @@
     },
     {
       "name": "admin",
-      "description": "Invitations, account administration and evaluations. Administrators only; an evaluation also needs membership of its project."
+      "description": "Invitations and account administration. Administrators only."
     },
     {
       "name": "projects",
